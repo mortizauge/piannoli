@@ -37,6 +37,8 @@ class SaveIdentityMigratorTest {
         val assets = mockk<AssetManager>()
         every { assets.open(any()) } throws FileNotFoundException()
         val paths = mockk<CannoliPathsProvider>()
+        every { paths.filteredExtensions(any()) } returns emptySet()
+        every { paths.showHiddenFiles } returns false
         every { paths.root } returns root
         every { paths.romDir } returns romsDir
         val arcade = mockk<ArcadeTitleLookup>()

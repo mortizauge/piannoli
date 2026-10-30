@@ -293,6 +293,8 @@ class GamesResponseTest {
         val assets = mockk<AssetManager>()
         every { assets.open(any()) } throws FileNotFoundException()
         val paths = mockk<CannoliPathsProvider>()
+        every { paths.filteredExtensions(any()) } returns emptySet()
+        every { paths.showHiddenFiles } returns false
         every { paths.root } returns tmp.root
         every { paths.romDir } returns File(tmp.root, "Roms")
         val arcade = mockk<ArcadeTitleLookup>()

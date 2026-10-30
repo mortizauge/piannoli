@@ -192,8 +192,7 @@ class RomsRepository(
 
     private fun Rom.relativeAfterPlatform(): String {
         val rel = path.absolutePath.removePrefix(romDirectory.absolutePath).removePrefix(File.separator)
-        val platformPrefix = "$platformTag${File.separator}"
-        return if (rel.startsWith(platformPrefix, ignoreCase = true)) rel.substring(platformPrefix.length) else rel
+        return rel.substringAfter(File.separator, rel)
     }
 
     private fun relativizePath(absolutePath: String): String? {

@@ -88,9 +88,9 @@ class PlatformConfig(
     private val coresFile get() = paths.coresJson
 
     private fun romsTagDir(tag: String, romsDir: File = paths.romsDir): File {
-        val direct = File(romsDir, tag)
-        if (direct.exists()) return direct
-        return romsDir.listFiles()?.firstOrNull { it.isDirectory && it.name.equals(tag, ignoreCase = true) } ?: direct
+        val dirs = PlatformFolders.directories(romsDir, tag)
+        return dirs.firstOrNull { File(it, ".emu_launch").isFile }
+            ?: dirs.firstOrNull() ?: File(romsDir, PlatformFolders.canonicalTag(tag))
     }
 
     fun load() {
@@ -350,11 +350,11 @@ class PlatformConfig(
     fun hasUserMapping(tag: String): Boolean = userChoices.containsKey(tag)
 
     fun isKnownTag(tag: String): Boolean {
-        val upper = tag.uppercase()
+        val upper = PlatformFolders.canonicalTag(tag)
         return upper in defaultPlatformNames || upper in ini.getSection("platforms")
     }
 
-    fun isArcade(tag: String): Boolean = tag.uppercase() in arcadePlatforms
+    fun isArcade(tag: String): Boolean = PlatformFolders.canonicalTag(tag) in arcadePlatforms
 
     fun getAllTags(): Set<String> = defaultPlatformNames.keys + ini.getSection("platforms").keys
 
@@ -668,20 +668,20 @@ class PlatformConfig(
     )
 
     fun getDisplayName(tag: String): String {
-        val upper = tag.uppercase()
+        val upper = PlatformFolders.canonicalTag(tag)
         return ini.get("platforms", upper)
             ?: defaultPlatformNames[upper]
             ?: tag
     }
 
     fun setDisplayName(tag: String, name: String) {
+        val upper = tag.uppercase(java.util.Locale.ROOT)
         val configFile = paths.platformsIni
         val currentNames = ini.getSection("platforms").toMutableMap()
-        val naturalName = defaultPlatformNames[tag.uppercase()] ?: tag
-        if (name.isBlank() || name == naturalName) {
-            currentNames.remove(tag)
-        } else {
-            currentNames[tag] = name
+        val naturalName = defaultPlatformNames[upper] ?: tag
+        currentNames.keys.removeAll { it.equals(upper, ignoreCase = true) }
+        if (name.isNotBlank() && name != naturalName) {
+            currentNames[upper] = name
         }
         val cores = ini.getSection("cores")
         val sb = StringBuilder()
@@ -717,11 +717,12 @@ class PlatformConfig(
     }
 
     fun resolvePlatform(tag: String, romsDir: File, gameCount: Int): Platform {
+        val canonical = PlatformFolders.canonicalTag(tag)
         val hasEmu = File(romsTagDir(tag, romsDir), ".emu_launch").exists()
         return Platform(
-            tag = tag,
+            tag = canonical,
             displayName = getDisplayName(tag),
-            coreName = getCoreName(tag),
+            coreName = getCoreName(canonical),
             hasEmuLaunch = hasEmu,
             gameCount = gameCount
         )

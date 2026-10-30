@@ -5,6 +5,7 @@ import dev.cannoli.scorza.util.NaturalSort
 import dev.cannoli.scorza.util.RomDirectoryWalker
 import dev.cannoli.scorza.util.ScanLog
 import dev.cannoli.scorza.util.TextNormalizer
+import dev.cannoli.scorza.config.PlatformFolders
 
 /**
  * Bridges the file-system view of a platform (via [RomDirectoryWalker]) into the roms table.
@@ -24,15 +25,18 @@ class RomScanner(
     private val launcherMutatedTags = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
     fun markLauncherMutation(platformTag: String) {
-        launcherMutatedTags.add(platformTag.uppercase())
+        launcherMutatedTags.add(PlatformFolders.canonicalTag(platformTag))
     }
 
     fun consumeLauncherMutation(platformTag: String): Boolean =
-        launcherMutatedTags.remove(platformTag.uppercase())
+        launcherMutatedTags.remove(PlatformFolders.canonicalTag(platformTag))
 
     fun scanPlatform(platformTag: String, isArcade: Boolean = false): SyncCounts {
-        val tag = platformTag.uppercase()
+        val tag = PlatformFolders.canonicalTag(platformTag)
         ensurePlatformRow(tag)
+        val aliases = db.queryAll("SELECT DISTINCT platform_tag FROM roms") { it.getText(0) }
+            .filter { it != tag && PlatformFolders.canonicalTag(it) == tag }
+        for (alias in aliases) db.execute("UPDATE roms SET platform_tag = ? WHERE platform_tag = ?", tag, alias)
         // Every path that adds, moves or removes a folder ends up here, so this is the one place
         // that has to drop the cached folder list.
         walker.invalidateCategoryFolders(tag)
@@ -41,7 +45,7 @@ class RomScanner(
         }
         applyRekeys(tag, result.rekeys)
         artwork.invalidate(tag)
-        walker.invalidateNameMap(result.tagDir)
+        result.tagDirs.forEach(walker::invalidateNameMap)
         val counts = sync(tag, result.roms)
         ScanLog.write("scanPlatform $tag: +${counts.inserted} -${counts.removed} ~${counts.updated}")
         return counts
@@ -77,16 +81,24 @@ class RomScanner(
         }.toMap()
 
         val scannedByPath = scanned.associateBy { it.relativePath }
+        val scannedByCase = scanned.groupBy { it.relativePath.lowercase(java.util.Locale.ROOT) }
+        val existingByCase = existing.entries.groupBy { it.key.lowercase(java.util.Locale.ROOT) }
+        val retainedPaths = mutableSetOf<String>()
         var inserted = 0
         var updated = 0
         var removed = 0
 
         db.transaction { conn ->
             conn.prepare("INSERT INTO roms (path, platform_tag, display_name, sort_key, tags, name_normalized) VALUES (?, ?, ?, ?, ?, ?)").use { insertStmt ->
-                conn.prepare("UPDATE roms SET display_name = ?, sort_key = ?, tags = ?, name_normalized = ? WHERE id = ?").use { updateStmt ->
+                conn.prepare("UPDATE roms SET display_name = ?, sort_key = ?, tags = ?, name_normalized = ?, path = ? WHERE id = ?").use { updateStmt ->
                     conn.prepare("DELETE FROM roms WHERE id = ?").use { deleteStmt ->
                         for (rom in scannedByPath.values) {
-                            val current = existing[rom.relativePath]
+                            val caseKey = rom.relativePath.lowercase(java.util.Locale.ROOT)
+                            val oldPath = if (rom.relativePath in existing) rom.relativePath
+                            else if (scannedByCase[caseKey]?.size == 1) existingByCase[caseKey]?.singleOrNull()?.key
+                            else null
+                            val current = existing[oldPath]
+                            if (oldPath != null) retainedPaths.add(oldPath)
                             if (current == null) {
                                 insertStmt.reset()
                                 insertStmt.bindText(1, rom.relativePath)
@@ -97,19 +109,20 @@ class RomScanner(
                                 insertStmt.bindText(6, TextNormalizer.normalize(rom.displayName))
                                 insertStmt.step()
                                 inserted++
-                            } else if (current.displayName != rom.displayName || current.tags != rom.tags) {
+                            } else if (current.displayName != rom.displayName || current.tags != rom.tags || oldPath != rom.relativePath) {
                                 updateStmt.reset()
                                 updateStmt.bindText(1, rom.displayName)
                                 updateStmt.bindText(2, NaturalSort.toSortKey(rom.displayName))
                                 if (rom.tags != null) updateStmt.bindText(3, rom.tags) else updateStmt.bindNull(3)
                                 updateStmt.bindText(4, TextNormalizer.normalize(rom.displayName))
-                                updateStmt.bindLong(5, current.id)
+                                updateStmt.bindText(5, rom.relativePath)
+                                updateStmt.bindLong(6, current.id)
                                 updateStmt.step()
                                 updated++
                             }
                         }
                         for ((path, row) in existing) {
-                            if (path in scannedByPath) continue
+                            if (path in retainedPaths) continue
                             deleteStmt.reset()
                             deleteStmt.bindLong(1, row.id)
                             deleteStmt.step()

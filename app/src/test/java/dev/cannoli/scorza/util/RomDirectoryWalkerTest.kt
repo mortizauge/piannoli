@@ -24,6 +24,8 @@ class RomDirectoryWalkerTest {
     private lateinit var root: File
     private lateinit var romsDir: File
     private lateinit var walker: RomDirectoryWalker
+    private val filters = mutableMapOf<String, Set<String>>()
+    private var showHiddenFiles = false
 
     @Before
     fun setUp() {
@@ -36,6 +38,8 @@ class RomDirectoryWalkerTest {
         val paths = mockk<CannoliPathsProvider>()
         every { paths.root } returns root
         every { paths.romDir } returns romsDir
+        every { paths.filteredExtensions(any()) } answers { filters[firstArg()] ?: emptySet() }
+        every { paths.showHiddenFiles } answers { showHiddenFiles }
 
         val arcade = mockk<ArcadeTitleLookup>()
         every { arcade.mapFor(any(), any()) } returns emptyMap()
@@ -51,6 +55,168 @@ class RomDirectoryWalkerTest {
     }
 
     private fun m3uName(base: String) = "PS${File.separator}$base${File.separator}$base.m3u"
+
+    @Test fun `all PlayStation aliases are scanned even when canonical folder exists preserving real paths`() {
+        write("PS/Canonical.chd")
+        write("Ps1/One.chd")
+        write("psx/Two.chd")
+        write("PlayStation/Three.chd")
+        write("Sony - PlayStation/Four.chd")
+        write("psx/Wrong.nes")
+        write("psx/.Hidden.chd")
+        write("PS2/Other.chd")
+        val result = walker.walk("PS", false)!!
+        assertEquals(setOf("PS/Canonical.chd", "Ps1/One.chd", "psx/Two.chd", "PlayStation/Three.chd",
+            "Sony - PlayStation/Four.chd").map { it.replace('/', File.separatorChar) }.toSet(),
+            result.roms.map { it.relativePath }.toSet())
+        assertTrue(result.roms.all { File(romsDir, it.relativePath).isFile })
+        assertEquals(result.roms, walker.walk("psx", false)!!.roms)
+        assertEquals(listOf("chd", "nes"), walker.presentExtensions("PS"))
+        filters["PS"] = setOf("chd")
+        assertTrue(walker.walk("PS", false)!!.roms.isEmpty())
+    }
+
+    @Test fun `category folders merge across aliases and renaming preserves each physical root`() {
+        write("Ps1/RPG/First.chd")
+        write("psx/RPG/Second.chd")
+        write("PlayStation/Action/Third.chd")
+        assertEquals(listOf("Action", "RPG"), walker.categoryFolders("PS", false))
+        val moves = walker.renameCategory("PS", "RPG", "Adventure")!!
+        assertEquals(2, moves.size)
+        assertTrue(File(romsDir, "Ps1/Adventure/First.chd").isFile)
+        assertTrue(File(romsDir, "psx/Adventure/Second.chd").isFile)
+        assertTrue(File(romsDir, "PlayStation/Action/Third.chd").isFile)
+        assertEquals(2, walker.categoryDirectories("PS", "Adventure").size)
+        assertTrue(walker.categoryDirectories("PS", "..").isEmpty())
+        assertEquals(null, walker.renameCategory("PS", "Adventure", "../bad"))
+    }
+
+    @Test fun `category rename refuses conflicts before changing any alias folder`() {
+        write("Ps1/RPG/First.chd")
+        write("psx/RPG/Second.chd")
+        write("psx/Adventure/Existing.chd")
+        assertEquals(null, walker.renameCategory("PS", "RPG", "Adventure"))
+        assertTrue(File(romsDir, "Ps1/RPG/First.chd").isFile)
+        assertTrue(File(romsDir, "psx/RPG/Second.chd").isFile)
+    }
+
+    @Test fun `hidden files and nested hidden folders obey toggle and category cache follows changes`() {
+        write("GB/Visible.gb")
+        write("GB/.Secret.gb")
+        write("GB/.Hidden/Inside.gb")
+        write("GB/.Hidden/.Deeper/More.gb")
+        write("GB/.Hidden/Wrong.gba")
+        assertEquals(1, walker.walk("GB", false)!!.roms.size)
+        assertTrue(walker.categoryFolders("GB", false).isEmpty())
+        assertEquals(listOf("gb"), walker.presentExtensions("GB"))
+        showHiddenFiles = true
+        assertEquals(4, walker.walk("GB", false)!!.roms.size)
+        assertEquals(listOf(".Hidden", ".Hidden/.Deeper"), walker.categoryFolders("GB", false))
+        assertEquals(listOf("gb", "gba"), walker.presentExtensions("GB"))
+        filters["GB"] = setOf("gb")
+        assertTrue(walker.walk("GB", false)!!.roms.isEmpty())
+        filters.clear()
+        showHiddenFiles = false
+        assertEquals(1, walker.walk("GB", false)!!.roms.size)
+        assertTrue(walker.categoryFolders("GB", false).isEmpty())
+        assertTrue(File(romsDir, "GB/.Secret.gb").exists())
+    }
+
+    @Test fun `extension discovery includes nested unsupported files and filtering is reversible without deleting files`() {
+        write("GB/Game.GB")
+        write("GB/Other.zip")
+        write("GB/Sub/Notes.txt")
+        write("GB/WithoutExtension")
+        write("GB/.hidden.pdf")
+        assertEquals(listOf("", "gb", "txt", "zip"), walker.presentExtensions("GB"))
+        filters["GB"] = setOf("zip")
+        assertEquals(listOf("GB${File.separator}Game.GB"), walker.walk("GB", false)!!.roms.map { it.relativePath })
+        assertTrue(File(romsDir, "GB/Other.zip").exists())
+        filters.clear()
+        assertEquals(2, walker.walk("GB", false)!!.roms.size)
+    }
+
+    @Test fun `excluded extension cannot bypass filtering through folder launch detection`() {
+        write("GB/Folder/Folder.zip")
+        filters["GB"] = setOf("zip")
+        assertTrue(walker.walk("GB", false)!!.roms.isEmpty())
+    }
+
+    @Test fun `Game Boy scans only gb and zip files at every folder depth ignoring case`() {
+        write("GB/Mario.GB")
+        write("GB/Tetris.ZIP")
+        write("GB/Color.gbc")
+        write("GB/Wrong.gba")
+        write("GB/manual.pdf")
+        write("GB/cover.png")
+        write("GB/game.sav")
+        write("GB/unpacked")
+        write("GB/Adventure/Metroid.gb")
+        write("GB/Adventure/Metroid.txt")
+        write("GB/Not a game/Not a game.txt")
+        write("GB/Fake/Fake.cue")
+        write("GB/Fake/Fake.bin")
+        write("GB/Bundle/Bundle.m3u")
+        write("GB/Bundle/Bundle.gb")
+        val result = walker.walk("GB", false)!!
+        assertEquals(
+            setOf("Mario.GB", "Tetris.ZIP", "Metroid.gb", "Bundle.gb"),
+            result.roms.map { File(it.relativePath).name }.toSet(),
+        )
+        assertEquals(4, result.roms.size)
+        assertEquals(null, walker.gameDirectory(File(romsDir, "GB/Not a game/Not a game.txt")))
+        assertEquals(File(romsDir, "GB/Bundle"), walker.gameDirectory(File(romsDir, "GB/Bundle/Bundle.gb")))
+        assertTrue("Adventure" in walker.categoryFolders("GB", false))
+    }
+
+    @Test fun `GameCube accepts Dolphin disc formats and excludes Wii only and unrelated files`() {
+        val extensions = listOf("iso", "RVZ", "gcm", "gcz", "ciso", "wia", "dol", "elf", "tgc")
+        extensions.forEachIndexed { index, extension -> write("GC/Game $index.$extension") }
+        write("GC/Wii.wbfs")
+        write("GC/Channel.wad")
+        write("GC/Archive.zip")
+        write("GC/Readme.txt")
+        write("GC/PlayStation.chd")
+        write("GC/Extras/Other.rvz")
+        assertEquals(
+            (extensions.indices.map { "Game $it" } + "Other").toSet(),
+            walker.walk("GC", false)!!.roms.map { it.displayName }.toSet(),
+        )
+        write("WII/Game.wbfs")
+        write("WII/Channel.wad")
+        assertEquals(2, walker.walk("WII", false)!!.roms.size)
+    }
+
+    @Test fun `unsupported disc named files are not moved or turned into playlists`() {
+        write("GB/Notes (Disc 1).txt")
+        write("GB/Notes (Disc 2).txt")
+        write("GB/Game (Disc 1).gb")
+        write("GB/Game (Disc 2).gb")
+        val result = walker.walk("GB", false)!!
+        assertEquals(2, result.roms.size)
+        assertTrue(result.rekeys.isEmpty())
+        assertTrue(File(romsDir, "GB/Notes (Disc 1).txt").exists())
+        assertTrue(File(romsDir, "GB/Game (Disc 1).gb").exists())
+        assertFalse(File(romsDir, "GB/Game").exists())
+    }
+
+    @Test fun `cue track companions remain available when excluded as standalone game formats`() {
+        write("SEGACD/Game.cue", """FILE "Track 01.bin" BINARY""")
+        write("SEGACD/Track 01.bin", "disc data")
+        write("SEGACD/Readme.txt")
+        val result = walker.walk("SEGACD", false)!!
+        assertEquals(1, result.roms.size)
+        assertEquals("Game.cue", File(result.roms.single().relativePath).name)
+        assertEquals("disc data", File(romsDir, "SEGACD/Game/Track 01.bin").readText())
+    }
+
+    @Test fun `PICO8 accepts embedded cartridges but excludes ordinary images`() {
+        write("PICO8/Game.p8")
+        write("PICO8/Other.P8.PNG")
+        write("PICO8/Artwork.png")
+        write("PICO8/Screenshot.jpg")
+        assertEquals(setOf("Game", "Other"), walker.walk("PICO8", false)!!.roms.map { it.displayName }.toSet())
+    }
 
     @Test
     fun `bundles three loose discs into one game`() {
@@ -433,12 +599,12 @@ class RomDirectoryWalkerTest {
     }
 
     @Test
-    fun `non-arcade folder beside a same-named archive is still a game`() {
+    fun `unsupported Switch archive is skipped without hiding same-named game folder`() {
         write("NSW/Cool Game.zip")
         write("NSW/Cool Game/Cool Game.nsp")
         val result = walker.walk("NSW", isArcade = false)!!
         assertEquals(
-            listOf("NSW${File.separator}Cool Game.zip", "NSW${File.separator}Cool Game${File.separator}Cool Game.nsp"),
+            listOf("NSW${File.separator}Cool Game${File.separator}Cool Game.nsp"),
             result.roms.map { it.relativePath }.sorted(),
         )
     }

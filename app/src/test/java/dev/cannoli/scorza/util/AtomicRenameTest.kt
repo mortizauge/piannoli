@@ -27,6 +27,8 @@ class AtomicRenameTest {
 
     private fun buildPaths(root: File): CannoliPathsProvider {
         val paths = mockk<CannoliPathsProvider>()
+        every { paths.filteredExtensions(any()) } returns emptySet()
+        every { paths.showHiddenFiles } returns false
         every { paths.root } returns root
         every { paths.romDir } returns File(root, "Roms")
         return paths

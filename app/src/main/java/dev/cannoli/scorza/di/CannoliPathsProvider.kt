@@ -16,6 +16,8 @@ class CannoliPathsProvider @Inject constructor(
     private val settings: SettingsRepository,
 ) {
     val root: File get() = File(settings.sdCardRoot)
+    val showHiddenFiles: Boolean get() = settings.showHiddenFiles
+    fun filteredExtensions(tag: String): Set<String> = settings.filteredExtensions(tag)
 
     val romDir: File
         get() = settings.romDirectory.takeIf { it.isNotEmpty() }?.let { File(it) } ?: File(root, "Roms")

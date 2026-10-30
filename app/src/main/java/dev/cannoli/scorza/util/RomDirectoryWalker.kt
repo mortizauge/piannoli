@@ -2,6 +2,7 @@ package dev.cannoli.scorza.util
 
 import android.content.res.AssetManager
 import dev.cannoli.scorza.config.CannoliPaths
+import dev.cannoli.scorza.config.PlatformFolders
 import dev.cannoli.scorza.di.CannoliPathsProvider
 import java.io.File
 
@@ -23,7 +24,7 @@ class RomDirectoryWalker(
     private val discRegex = Regex("""\s*\((Disc|Disk)\s*\d+\)|\s*\(CD\d+\)""", RegexOption.IGNORE_CASE)
     private val cueFileLineRegex = Regex("""^\s*FILE\s+(?:"([^"]+)"|(\S+))\s+\w+\s*$""", RegexOption.IGNORE_CASE)
 
-    private data class CachedFolders(val stamp: Long, val isArcade: Boolean, val folders: List<String>)
+    private data class CachedFolders(val stamp: List<Pair<String, Long>>, val isArcade: Boolean, val showHidden: Boolean, val folders: List<String>)
 
     private val categoryFolderCache = java.util.concurrent.ConcurrentHashMap<String, CachedFolders>()
 
@@ -54,20 +55,74 @@ class RomDirectoryWalker(
     /** Returns null when the platform directory does not exist. */
     fun walk(platformTag: String, isArcade: Boolean): WalkResult? {
         ensureIgnoreLists()
-        val tag = platformTag.uppercase()
-        val tagDir = resolveTagDir(tag) ?: return null
+        val tag = PlatformFolders.canonicalTag(platformTag)
+        val directories = resolveTagDirs(tag)
+        if (directories.isEmpty()) return null
         val rekeys = mutableListOf<RekeyMove>()
-        organizeDir(tagDir, "$tag${File.separator}", tag, rekeys, depth = 0)
         val out = mutableListOf<ScannedRom>()
-        scanDir(tagDir, "$tag${File.separator}", isArcade, out, depth = 0)
-        return WalkResult(tagDir = tagDir, roms = out, rekeys = rekeys)
+        for (dir in directories) {
+            val prefix = "${dir.name}${File.separator}"
+            organizeDir(dir, prefix, tag, rekeys, depth = 0)
+            scanDir(dir, prefix, tag, isArcade, out, depth = 0)
+        }
+        return WalkResult(tagDir = directories.first(), roms = out, rekeys = rekeys, tagDirs = directories)
     }
 
-    fun resolveTagDir(tag: String): File? {
-        val direct = File(romDirectory, tag)
-        if (direct.exists()) return direct
-        return romDirectory.listFiles()?.firstOrNull { it.isDirectory && it.name.equals(tag, ignoreCase = true) }
+    fun resolveTagDirs(tag: String): List<File> = PlatformFolders.directories(romDirectory, tag)
+
+    fun resolveTagDir(tag: String): File? = resolveTagDirs(tag).firstOrNull()
+
+    fun categoryDirectories(tag: String, path: String): List<File> =
+        resolveTagDirs(tag).mapNotNull { root ->
+            val directory = File(root, path)
+            directory.takeIf { it.isDirectory && it.canonicalPath.startsWith(root.canonicalPath + File.separator) }
+        }
+
+    fun renameCategory(tag: String, path: String, newName: String): List<RekeyMove>? {
+        if (newName.isBlank() || newName in listOf(".", "..") || newName.any { it == '/' || it == '\\' }) return null
+        val sources = categoryDirectories(tag, path)
+        if (sources.isEmpty()) return null
+        val moves = sources.map { it to File(it.parentFile, newName) }
+        if (moves.any { (_, target) -> target.exists() }) return null
+        val completed = mutableListOf<Pair<File, File>>()
+        for ((source, target) in moves) {
+            if (!source.renameTo(target)) {
+                for ((old, renamed) in completed.asReversed()) {
+                    if (!renamed.renameTo(old)) throw java.io.IOException("Cannot restore ${old.absolutePath}")
+                }
+                return null
+            }
+            completed.add(source to target)
+        }
+        return completed.map { (old, renamed) ->
+            RekeyMove(old.relativeTo(romDirectory).path, renamed.relativeTo(romDirectory).path)
+        }
     }
+
+    fun presentExtensions(tag: String): List<String> {
+        val extensions = sortedSetOf<String>()
+        fun visit(dir: File, depth: Int) {
+            if (depth > MAX_DEPTH) return
+            val entries = dir.listFiles() ?: throw java.io.IOException("Cannot read ${dir.absolutePath}")
+            for (file in entries) {
+                if (isHidden(file)) continue
+                if (file.isDirectory) visit(file, depth + 1)
+                else if (file.isFile) extensions.add(extensionOf(file))
+            }
+        }
+        resolveTagDirs(tag).forEach { visit(it, 0) }
+        return extensions.toList()
+    }
+
+    private fun extensionOf(file: File): String =
+        if (file.name.endsWith(".p8.png", ignoreCase = true)) "p8.png"
+        else file.extension.lowercase(java.util.Locale.ROOT)
+
+    private fun accepts(tag: String, file: File): Boolean =
+        !isHidden(file) && PlatformFileTypes.accepts(tag, file) &&
+            extensionOf(file) !in pathsProvider.filteredExtensions(tag)
+
+    private fun isHidden(file: File): Boolean = !pathsProvider.showHiddenFiles && file.name.startsWith(".")
 
     fun invalidateNameMap(tagDir: File) = arcadeTitleLookup.invalidate(tagDir)
 
@@ -75,32 +130,36 @@ class RomDirectoryWalker(
      *  changes a platform's contents, since a folder created below the top level does not move the
      *  tag directory's own timestamp. */
     fun invalidateCategoryFolders(platformTag: String) {
-        categoryFolderCache.remove(platformTag.uppercase())
+        categoryFolderCache.remove(PlatformFolders.canonicalTag(platformTag))
     }
 
     /** Every category (non-game) folder under the platform, as platform-relative slash paths. */
     fun categoryFolders(platformTag: String, isArcade: Boolean): List<String> {
-        val tag = platformTag.uppercase()
-        val tagDir = resolveTagDir(tag) ?: return emptyList()
+        val tag = PlatformFolders.canonicalTag(platformTag)
+        val directories = resolveTagDirs(tag)
         // Finding the subfolders means stat-ing every entry, so a platform holding a few thousand
         // loose ROMs pays for all of them to discover a handful of directories, or none at all.
         // The timestamp catches top-level edits; deeper ones arrive via invalidateCategoryFolders.
-        val stamp = tagDir.lastModified()
-        categoryFolderCache[tag]?.let { if (it.stamp == stamp && it.isArcade == isArcade) return it.folders }
-        val folders = walkCategoryFolders(tagDir, isArcade)
-        categoryFolderCache[tag] = CachedFolders(stamp, isArcade, folders)
+        val stamp = directories.map { it.name to it.lastModified() }
+        val showHidden = pathsProvider.showHiddenFiles
+        categoryFolderCache[tag]?.let {
+            if (it.stamp == stamp && it.isArcade == isArcade && it.showHidden == showHidden) return it.folders
+        }
+        val folders = directories.flatMap { walkCategoryFolders(it, tag, isArcade) }
+            .distinct().sortedWith(compareBy { it.lowercase() })
+        categoryFolderCache[tag] = CachedFolders(stamp, isArcade, showHidden, folders)
         return folders
     }
 
-    private fun walkCategoryFolders(tagDir: File, isArcade: Boolean): List<String> {
+    private fun walkCategoryFolders(tagDir: File, tag: String, isArcade: Boolean): List<String> {
         ensureIgnoreLists()
         val out = mutableListOf<String>()
         fun walk(dir: File, prefix: String, depth: Int) {
             if (depth > MAX_DEPTH) return
-            val subdirs = dir.listFiles { f -> f.isDirectory && !f.name.startsWith(".") } ?: return
+            val subdirs = dir.listFiles { f -> f.isDirectory && !isHidden(f) } ?: return
             for (sub in subdirs) {
                 if (isArcade && isArcadeSupportDir(sub)) continue
-                if (findDirLaunchFile(sub) != null) continue
+                if (findDirLaunchFile(sub, tag) != null) continue
                 val rel = if (prefix.isEmpty()) sub.name else "$prefix/${sub.name}"
                 out.add(rel)
                 walk(sub, rel, depth + 1)
@@ -224,6 +283,7 @@ class RomDirectoryWalker(
         val tagDir: File,
         val roms: List<ScannedRom>,
         val rekeys: List<RekeyMove> = emptyList(),
+        val tagDirs: List<File> = listOf(tagDir),
     )
 
     private data class DirLaunch(val file: File)
@@ -231,30 +291,33 @@ class RomDirectoryWalker(
     private fun scanDir(
         dir: File,
         relPrefix: String,
+        tag: String,
         isArcade: Boolean,
         out: MutableList<ScannedRom>,
         depth: Int,
     ) {
         if (depth > MAX_DEPTH) return
-        val entries = dir.listFiles()?.filter { !it.name.startsWith(".") && !isIgnored(it) } ?: return
+        val entries = dir.listFiles()?.filter { !isHidden(it) && !isIgnored(it) } ?: return
         val (subdirs, files) = entries.partition { it.isDirectory }
 
         for (subdir in subdirs) {
             if (isArcade && isArcadeSupportDir(subdir)) continue
-            val launch = findDirLaunchFile(subdir)
+            val launch = findDirLaunchFile(subdir, tag)
             if (launch != null) {
                 val launchRel = "$relPrefix${subdir.name}${File.separator}${launch.file.name}"
                 val (displayName, tags) = RomNaming.splitNameAndTags(subdir.name)
                 out.add(ScannedRom(launchRel, displayName, tags))
-            } else if (subdir.listFiles()?.any { !it.name.startsWith(".") } == true) {
-                scanDir(subdir, "$relPrefix${subdir.name}${File.separator}", isArcade, out, depth + 1)
+            } else if (subdir.listFiles()?.any { !isHidden(it) } == true) {
+                scanDir(subdir, "$relPrefix${subdir.name}${File.separator}", tag, isArcade, out, depth + 1)
             }
         }
 
         if (files.isEmpty()) return
 
-        val romFiles = files.filterNot { isIgnoredExtension(it) }
-        val discCandidates = romFiles.filter { discRegex.containsMatchIn(it.nameWithoutExtension) }
+        val romFiles = files.filter { accepts(tag, it) && !isIgnoredExtension(it) }
+        val discCandidates = romFiles.filter {
+            PlatformFileTypes.supports(tag, "m3u") && discRegex.containsMatchIn(it.nameWithoutExtension)
+        }
         val discGroups = discCandidates.groupBy { discRegex.replace(it.nameWithoutExtension, "").trim() }
         val m3uByBase = romFiles
             .filter { it.extension.equals("m3u", ignoreCase = true) }
@@ -287,12 +350,16 @@ class RomDirectoryWalker(
         return ARCADE_ROMSET_EXTENSIONS.any { File(parent, "${dir.name}.$it").isFile }
     }
 
-    private fun findDirLaunchFile(dir: File): DirLaunch? {
-        File(dir, "${dir.name}.m3u").takeIf { it.exists() && !isIgnored(it) }?.let { return DirLaunch(it) }
-        File(dir, "${dir.name}.cue").takeIf { it.exists() && !isIgnored(it) }?.let { return DirLaunch(it) }
-        dir.listFiles()?.firstOrNull { it.extension.equals("cue", ignoreCase = true) && !isIgnored(it) }?.let { return DirLaunch(it) }
-        val children = dir.listFiles()?.filter { it.isFile && !isIgnored(it) } ?: return null
-        val discs = children.filter { discRegex.containsMatchIn(it.nameWithoutExtension) }
+    private fun findDirLaunchFile(dir: File, tag: String = platformTagFor(dir)): DirLaunch? {
+        val children = dir.listFiles()?.filter {
+            it.isFile && !isHidden(it) && !isIgnored(it) && accepts(tag, it)
+        } ?: return null
+        children.firstOrNull { it.name.equals("${dir.name}.m3u", ignoreCase = true) }?.let { return DirLaunch(it) }
+        children.firstOrNull { it.name.equals("${dir.name}.cue", ignoreCase = true) }?.let { return DirLaunch(it) }
+        children.firstOrNull { it.extension.equals("cue", ignoreCase = true) }?.let { return DirLaunch(it) }
+        val discs = children.filter {
+            PlatformFileTypes.supports(tag, "m3u") && discRegex.containsMatchIn(it.nameWithoutExtension)
+        }
         if (discs.size > 1) {
             return DirLaunch(discs.sortedBy { it.name }.first())
         }
@@ -303,6 +370,9 @@ class RomDirectoryWalker(
         return null
     }
 
+    private fun platformTagFor(file: File): String =
+        PlatformFolders.canonicalTag(file.relativeToOrNull(romDirectory)?.path?.substringBefore(File.separatorChar).orEmpty())
+
     private fun organizeDir(
         dir: File,
         relPrefix: String,
@@ -311,25 +381,27 @@ class RomDirectoryWalker(
         depth: Int,
     ) {
         if (depth > MAX_DEPTH) return
-        val entries = dir.listFiles()?.filter { !it.name.startsWith(".") && !isIgnored(it) } ?: return
+        val entries = dir.listFiles()?.filter { !isHidden(it) && !isIgnored(it) } ?: return
         val (subdirs, files) = entries.partition { it.isDirectory }
 
         for (subdir in subdirs) {
             organizeDir(subdir, "$relPrefix${subdir.name}${File.separator}", tag, moves, depth + 1)
         }
 
-        val romFiles = files.filterNot { isIgnoredExtension(it) }
+        val romFiles = files.filter { accepts(tag, it) && !isIgnoredExtension(it) }
         val m3uByBase = romFiles.filter { it.extension.equals("m3u", ignoreCase = true) }
             .associateBy { it.nameWithoutExtension }
 
         val processed = mutableSetOf<File>()
-        val discCandidates = romFiles.filter { discRegex.containsMatchIn(it.nameWithoutExtension) }
+        val discCandidates = romFiles.filter {
+            PlatformFileTypes.supports(tag, "m3u") && discRegex.containsMatchIn(it.nameWithoutExtension)
+        }
         val discGroups = discCandidates.groupBy { discRegex.replace(it.nameWithoutExtension, "").trim() }
         for ((baseName, groupFiles) in discGroups) {
             val byStem = groupFiles.groupBy { it.nameWithoutExtension }
             val existingSubdir = File(dir, baseName)
             if (existingSubdir.isDirectory) {
-                if (mergeLooseDiscsIntoBundle(baseName, existingSubdir, groupFiles, romFiles, tag)) {
+                if (mergeLooseDiscsIntoBundle(baseName, existingSubdir, groupFiles, files, tag)) {
                     processed.addAll(groupFiles)
                 }
                 continue
@@ -337,7 +409,7 @@ class RomDirectoryWalker(
             if (byStem.size <= 1) continue
             val looseM3u = m3uByBase[baseName]
             if (looseM3u != null) {
-                if (relocateLooseM3uSet(dir, baseName, looseM3u, byStem, romFiles, relPrefix, tag, moves)) {
+                if (relocateLooseM3uSet(dir, baseName, looseM3u, byStem, files, relPrefix, tag, moves)) {
                     processed.addAll(groupFiles)
                     processed.add(looseM3u)
                 }
@@ -349,7 +421,7 @@ class RomDirectoryWalker(
                 }
                 continue
             }
-            if (organizeMultiDisc(dir, baseName, byStem, romFiles, relPrefix, tag, moves)) {
+            if (organizeMultiDisc(dir, baseName, byStem, files, relPrefix, tag, moves)) {
                 processed.addAll(groupFiles)
             }
         }
@@ -360,7 +432,7 @@ class RomDirectoryWalker(
                 !discRegex.containsMatchIn(it.nameWithoutExtension)
         }
         for (cue in looseCues) {
-            organizeSingleCue(dir, cue, remainingSiblings, relPrefix, tag, moves)
+            organizeSingleCue(dir, cue, files.filter { it !in processed }, relPrefix, tag, moves)
         }
     }
 
@@ -493,7 +565,7 @@ class RomDirectoryWalker(
     ): Boolean {
         val m3uFile = File(subdir, "$baseName.m3u")
         // Also merge into a folder that already holds this game's discs but has no m3u yet.
-        if (!m3uFile.exists() && !folderHoldsDiscsOf(subdir, baseName)) return false
+        if (!m3uFile.exists() && !folderHoldsDiscsOf(subdir, baseName, tag)) return false
 
         val toMove = linkedSetOf<File>().apply {
             addAll(looseDiscs)
@@ -508,7 +580,8 @@ class RomDirectoryWalker(
         if (!moveAll(toMove, subdir, moved, tag, baseName)) return false
 
         val discFiles = subdir.listFiles()?.filter {
-            it.isFile && discRegex.containsMatchIn(it.nameWithoutExtension)
+            it.isFile && !isIgnored(it) && accepts(tag, it) &&
+                discRegex.containsMatchIn(it.nameWithoutExtension)
         }.orEmpty()
         val primaries = discFiles.groupBy { it.nameWithoutExtension }
             .values.map { pickPrimary(it) }.sortedBy { it.name }
@@ -527,9 +600,10 @@ class RomDirectoryWalker(
         return true
     }
 
-    private fun folderHoldsDiscsOf(subdir: File, baseName: String): Boolean =
+    private fun folderHoldsDiscsOf(subdir: File, baseName: String, tag: String): Boolean =
         subdir.listFiles()?.any {
-            it.isFile && discRegex.containsMatchIn(it.nameWithoutExtension) &&
+            it.isFile && !isIgnored(it) && accepts(tag, it) &&
+                discRegex.containsMatchIn(it.nameWithoutExtension) &&
                 discRegex.replace(it.nameWithoutExtension, "").trim() == baseName
         } == true
 

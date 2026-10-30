@@ -1,6 +1,7 @@
 package dev.cannoli.scorza.db
 
 import dev.cannoli.scorza.config.PlatformConfig
+import dev.cannoli.scorza.config.PlatformFolders
 import dev.cannoli.scorza.util.ScanLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -40,7 +41,7 @@ class ScanScheduler @Inject constructor(
     }
 
     fun runNow(platformTag: String): RomScanner.SyncCounts {
-        val tag = platformTag.uppercase()
+        val tag = PlatformFolders.canonicalTag(platformTag)
         synchronized(mutex) {
             while (runningTag == tag || tag in queued) {
                 (mutex as java.lang.Object).wait()
@@ -74,7 +75,7 @@ class ScanScheduler @Inject constructor(
     fun markLauncherMutation(platformTag: String) = romScanner.markLauncherMutation(platformTag)
 
     fun enqueue(platformTag: String) {
-        val tag = platformTag.uppercase()
+        val tag = PlatformFolders.canonicalTag(platformTag)
         synchronized(mutex) {
             if (runningTag == tag) {
                 rerunNeeded.add(tag)

@@ -35,6 +35,8 @@ class ImporterPreservesMappingsTest {
             .also { File(it, "cores.json").writeText("""{"cores":{"NES":"fceumm_libretro"}}""") }
 
         val paths = mockk<CannoliPathsProvider>()
+        every { paths.filteredExtensions(any()) } returns emptySet()
+        every { paths.showHiddenFiles } returns false
         every { paths.root } returns root
         every { paths.romDir } returns romsDir
 
