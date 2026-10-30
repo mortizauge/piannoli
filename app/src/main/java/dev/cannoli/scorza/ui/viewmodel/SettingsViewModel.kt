@@ -17,6 +17,8 @@ import dev.cannoli.scorza.settings.ArtScale
 import dev.cannoli.scorza.settings.BatteryDisplay
 import dev.cannoli.scorza.settings.ContentMode
 import dev.cannoli.scorza.settings.SettingsRepository
+import dev.cannoli.scorza.settings.KeyboardType
+import dev.cannoli.scorza.settings.ScrapeFailBehavior
 import dev.cannoli.scorza.settings.TextSize
 import dev.cannoli.scorza.settings.TimeFormat
 import dev.cannoli.scorza.util.FontNameParser
@@ -108,14 +110,16 @@ class SettingsViewModel @Inject constructor(
             reloadCategories()
         }
 
+    data class CategoryParent(val key: String, @param:StringRes val label: Int?, val selectedIndex: Int)
+
     data class State(
         val categories: List<Category> = emptyList(),
         val categoryIndex: Int = 0,
         val activeCategory: String? = null,
-        val parentCategory: String? = null,
-        val parentSelectedIndex: Int = 0,
+        val categoryParents: List<CategoryParent> = emptyList(),
         @param:StringRes val activeCategoryLabel: Int? = null,
         val items: List<SettingsItem> = emptyList(),
+        val remappingAction: dev.cannoli.ui.MenuAction? = null,
         val selectedIndex: Int = 0
     ) {
         val inSubList: Boolean get() = activeCategory != null
@@ -147,7 +151,14 @@ class SettingsViewModel @Inject constructor(
         val showDownloads: Boolean = true,
         val swapPlayResume: Boolean = false,
         val mainMenuQuit: Boolean = false,
+        val keyboardType: KeyboardType = KeyboardType.PIANNOLI,
+        val piannoliBindings: Map<dev.cannoli.ui.MenuAction, dev.cannoli.ui.MenuAction> = emptyMap(),
         val artWidth: Int = 40,
+        val artRadius: Int = 25,
+        val systemArtScale: ArtScale = ArtScale.FIT,
+        val systemArtWidth: Int = 40,
+        val systemArtRadius: Int = 0,
+        val systemArtworkType: dev.cannoli.scorza.settings.SystemArtworkType = dev.cannoli.scorza.settings.SystemArtworkType.LOGO,
         val artScale: ArtScale = ArtScale.DEFAULT,
         val contentMode: ContentMode = ContentMode.PLATFORMS,
         val fghCollectionId: Long? = null,
@@ -190,7 +201,14 @@ class SettingsViewModel @Inject constructor(
         showDownloads = settings.showDownloads,
         swapPlayResume = settings.swapPlayResume,
         mainMenuQuit = settings.mainMenuQuit,
+        keyboardType = settings.keyboardType,
+        piannoliBindings = settings.piannoliBindings,
         artWidth = settings.artWidth,
+        artRadius = settings.artRadius,
+        systemArtScale = settings.systemArtScale,
+        systemArtWidth = settings.systemArtWidth,
+        systemArtRadius = settings.systemArtRadius,
+        systemArtworkType = settings.systemArtworkType,
         artScale = settings.artScale,
         contentMode = settings.contentMode,
         fghCollectionId = settings.fghCollectionId,
@@ -223,6 +241,12 @@ class SettingsViewModel @Inject constructor(
     }
 
     private data class SettingsSnapshot(
+        val keyboardType: KeyboardType,
+        val piannoliBindings: Map<dev.cannoli.ui.MenuAction, dev.cannoli.ui.MenuAction>,
+        val scrapeFailBehavior: ScrapeFailBehavior,
+        val navigationSound: Boolean,
+        val controllerNotifications: Boolean,
+        val showHiddenFiles: Boolean,
         val textSize: TextSize,
         val font: String,
         val title: String,
@@ -253,6 +277,11 @@ class SettingsViewModel @Inject constructor(
         val portsName: String,
         val releaseChannel: String,
         val artWidth: Int,
+        val artRadius: Int,
+        val systemArtScale: ArtScale,
+        val systemArtWidth: Int,
+        val systemArtRadius: Int,
+        val systemArtworkType: dev.cannoli.scorza.settings.SystemArtworkType,
         val artScale: ArtScale,
         val portraitMarginPx: Int,
         val screenGeometryWidth: Int,
@@ -388,7 +417,16 @@ class SettingsViewModel @Inject constructor(
         val items = buildItemsForCategory(key)
         val safeInitial = initialIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
         _state.update {
-            it.copy(activeCategory = key, parentCategory = current.activeCategory, parentSelectedIndex = current.selectedIndex, activeCategoryLabel = labelRes, items = items, selectedIndex = safeInitial)
+            val parent = current.activeCategory?.let { category ->
+                CategoryParent(category, current.activeCategoryLabel, current.selectedIndex)
+            }
+            it.copy(
+                activeCategory = key,
+                categoryParents = current.categoryParents + listOfNotNull(parent),
+                activeCategoryLabel = labelRes,
+                items = items,
+                selectedIndex = safeInitial,
+            )
         }
     }
 
@@ -410,8 +448,7 @@ class SettingsViewModel @Inject constructor(
         _state.update {
             it.copy(
                 activeCategory = null,
-                parentCategory = null,
-                parentSelectedIndex = 0,
+                categoryParents = emptyList(),
                 activeCategoryLabel = null,
                 items = emptyList(),
                 selectedIndex = 0,
@@ -422,12 +459,17 @@ class SettingsViewModel @Inject constructor(
     fun exitSubList(): Boolean {
         val current = _state.value
         if (!current.inSubList) return false
-        val parent = current.parentCategory
+        val parent = current.categoryParents.lastOrNull()
         if (parent != null) {
-            val parentLabel = current.categories.getOrNull(current.categoryIndex)?.labelRes
-            val items = buildItemsForCategory(parent)
+            val items = buildItemsForCategory(parent.key)
             _state.update {
-                it.copy(activeCategory = parent, parentCategory = null, parentSelectedIndex = 0, activeCategoryLabel = parentLabel, items = items, selectedIndex = current.parentSelectedIndex)
+                it.copy(
+                    activeCategory = parent.key,
+                    categoryParents = current.categoryParents.dropLast(1),
+                    activeCategoryLabel = parent.label,
+                    items = items,
+                    selectedIndex = parent.selectedIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0)),
+                )
             }
         } else {
             _state.update {
@@ -442,7 +484,18 @@ class SettingsViewModel @Inject constructor(
         if (!current.inSubList) return
         val item = current.items.getOrNull(current.selectedIndex) ?: return
 
+        if (item.key.startsWith("remap:") || current.remappingAction != null) return
         when (item.key) {
+            "remap_reset" -> settings.piannoliBindings = emptyMap()
+            "keyboard_type" -> settings.keyboardType =
+                if (settings.keyboardType == KeyboardType.PIANNOLI) KeyboardType.SYSTEM else KeyboardType.PIANNOLI
+            "scrape_fail_behavior" -> {
+                val entries = ScrapeFailBehavior.entries
+                val index = entries.indexOf(settings.scrapeFailBehavior)
+                settings.scrapeFailBehavior = entries[Math.floorMod(index + direction, entries.size)]
+            }
+            "navigation_sound" -> settings.navigationSound = !settings.navigationSound
+            "controller_notifications" -> settings.controllerNotifications = !settings.controllerNotifications
             "text_size" -> {
                 val entries = TextSize.entries
                 val cur = entries.indexOf(settings.textSize).coerceAtLeast(0)
@@ -469,15 +522,25 @@ class SettingsViewModel @Inject constructor(
                     settings.showClock = false
                 }
             }
-            "art_width" -> {
+            "art_width", "system_art_width" -> {
+                val system = item.key == "system_art_width"
                 val steps = (35..65 step 5) + 0
-                val cur = steps.indexOf(settings.artWidth).coerceAtLeast(0)
-                settings.artWidth = steps[((cur + direction) % steps.size + steps.size) % steps.size]
+                val cur = steps.indexOf(if (system) settings.systemArtWidth else settings.artWidth).coerceAtLeast(0)
+                val next = steps[Math.floorMod(cur + direction, steps.size)]
+                if (system) settings.systemArtWidth = next else settings.artWidth = next
             }
-            "art_scale" -> {
+            "art_radius" -> settings.artRadius = (settings.artRadius + direction).coerceIn(0, 100)
+            "system_art_radius" -> settings.systemArtRadius = (settings.systemArtRadius + direction).coerceIn(0, 100)
+            "system_artwork_type" -> {
+                val types = dev.cannoli.scorza.settings.SystemArtworkType.entries
+                settings.systemArtworkType = types[Math.floorMod(types.indexOf(settings.systemArtworkType) + direction, types.size)]
+            }
+            "art_scale", "system_art_scale" -> {
+                val system = item.key == "system_art_scale"
                 val entries = ArtScale.entries
-                val cur = entries.indexOf(settings.artScale).coerceAtLeast(0)
-                settings.artScale = entries[((cur + direction) % entries.size + entries.size) % entries.size]
+                val cur = entries.indexOf(if (system) settings.systemArtScale else settings.artScale).coerceAtLeast(0)
+                val next = entries[Math.floorMod(cur + direction, entries.size)]
+                if (system) settings.systemArtScale = next else settings.artScale = next
             }
             "bg_image" -> cycleBackgroundImage(direction)
             "bg_tint" -> {
@@ -506,6 +569,7 @@ class SettingsViewModel @Inject constructor(
             "show_recently_played" -> settings.showRecentlyPlayed = !settings.showRecentlyPlayed
             "show_favorites" -> settings.showFavorites = !settings.showFavorites
             "scan_library" -> settings.scanLibraryAutomatically = !settings.scanLibraryAutomatically
+            "hidden_files" -> settings.showHiddenFiles = !settings.showHiddenFiles
             "show_wifi" -> settings.showWifi = !settings.showWifi
             "show_bluetooth" -> settings.showBluetooth = !settings.showBluetooth
             "show_vpn" -> settings.showVpn = !settings.showVpn
@@ -585,6 +649,25 @@ class SettingsViewModel @Inject constructor(
         } else {
             null
         }
+
+    }
+
+    fun startRemapping() {
+        val item = getSelectedItem() ?: return
+        if (!item.key.startsWith("remap:")) return
+        _state.update { it.copy(remappingAction = dev.cannoli.ui.MenuAction.valueOf(item.key.removePrefix("remap:"))) }
+    }
+
+    fun cancelRemapping() {
+        _state.update { it.copy(remappingAction = null) }
+    }
+
+    fun assignRemapping(button: dev.cannoli.ui.MenuAction) {
+        val action = _state.value.remappingAction ?: return
+        if (button !in dev.cannoli.ui.MenuAction.remappable) return
+        settings.piannoliBindings = dev.cannoli.ui.MenuAction.swap(settings.piannoliBindings, action, button)
+        _state.update { it.copy(remappingAction = null, items = buildItemsForCategory("remap_piannoli")) }
+        _appSettings.value = readAppSettings()
     }
 
     fun getSelectedItem(): SettingsItem? {
@@ -679,6 +762,12 @@ class SettingsViewModel @Inject constructor(
     }
 
     private fun captureSettings() = SettingsSnapshot(
+        keyboardType = settings.keyboardType,
+        piannoliBindings = settings.piannoliBindings,
+        scrapeFailBehavior = settings.scrapeFailBehavior,
+        navigationSound = settings.navigationSound,
+        controllerNotifications = settings.controllerNotifications,
+        showHiddenFiles = settings.showHiddenFiles,
         textSize = settings.textSize,
         font = settings.font,
         title = settings.title,
@@ -709,6 +798,11 @@ class SettingsViewModel @Inject constructor(
         portsName = settings.portsName,
         releaseChannel = settings.releaseChannel,
         artWidth = settings.artWidth,
+        artRadius = settings.artRadius,
+        systemArtScale = settings.systemArtScale,
+        systemArtWidth = settings.systemArtWidth,
+        systemArtRadius = settings.systemArtRadius,
+        systemArtworkType = settings.systemArtworkType,
         artScale = settings.artScale,
         portraitMarginPx = settings.portraitMarginPx,
         screenGeometryWidth = settings.screenGeometryWidth,
@@ -718,6 +812,12 @@ class SettingsViewModel @Inject constructor(
     )
 
     private fun restoreSettings(snap: SettingsSnapshot) {
+        settings.keyboardType = snap.keyboardType
+        settings.piannoliBindings = snap.piannoliBindings
+        settings.scrapeFailBehavior = snap.scrapeFailBehavior
+        settings.navigationSound = snap.navigationSound
+        settings.controllerNotifications = snap.controllerNotifications
+        settings.showHiddenFiles = snap.showHiddenFiles
         settings.textSize = snap.textSize
         settings.font = snap.font
         settings.title = snap.title
@@ -748,6 +848,11 @@ class SettingsViewModel @Inject constructor(
         settings.portsName = snap.portsName
         settings.releaseChannel = snap.releaseChannel
         settings.artWidth = snap.artWidth
+        settings.artRadius = snap.artRadius
+        settings.systemArtScale = snap.systemArtScale
+        settings.systemArtWidth = snap.systemArtWidth
+        settings.systemArtRadius = snap.systemArtRadius
+        settings.systemArtworkType = snap.systemArtworkType
         settings.artScale = snap.artScale
         settings.portraitMarginPx = snap.portraitMarginPx
         settings.screenGeometryWidth = snap.screenGeometryWidth
@@ -781,6 +886,7 @@ class SettingsViewModel @Inject constructor(
             }
         }
         "display" -> buildList {
+            add(SettingsItem("artwork", R.string.settings_artwork, isEditable = true))
             add(SettingsItem("colors", R.string.setting_colors, isEditable = true))
             add(SettingsItem("bg_image", R.string.setting_bg_image, valueText = settings.backgroundImagePath?.let { java.io.File(it).name }, valueRes = if (settings.backgroundImagePath == null) R.string.value_none else null))
             if (settings.backgroundImagePath != null) {
@@ -790,15 +896,6 @@ class SettingsViewModel @Inject constructor(
             val currentFont = fontOptions.firstOrNull { it.key == settings.font } ?: fontOptions.first()
             add(SettingsItem("font", R.string.setting_font, valueText = currentFont.label))
             add(SettingsItem("text_size", R.string.setting_text_size, valueText = "${settings.textSize.sp}sp"))
-            val artScaleRes = when (settings.artScale) {
-                ArtScale.FIT -> R.string.value_fit
-                ArtScale.ORIGINAL -> R.string.value_original
-                ArtScale.FIT_WIDTH -> R.string.value_fit_width
-                ArtScale.FIT_HEIGHT -> R.string.value_fit_height
-            }
-            add(SettingsItem("art_scale", R.string.setting_art_scale, valueRes = artScaleRes))
-            val artW = settings.artWidth
-            add(SettingsItem("art_width", R.string.setting_art_width, valueText = if (artW == 0) null else "$artW%", valueRes = if (artW == 0) R.string.value_off else null))
             add(SettingsItem("status_bar", R.string.settings_status_bar, isEditable = true))
             val marginPx = settings.portraitMarginPx
             add(SettingsItem(
@@ -809,6 +906,8 @@ class SettingsViewModel @Inject constructor(
             ))
         }
         "library" -> buildList {
+            add(SettingsItem("hidden_files", R.string.setting_hidden_files,
+                valueRes = if (settings.showHiddenFiles) R.string.value_show else R.string.value_hide))
             val contentModeRes = when (settings.contentMode) {
                 ContentMode.PLATFORMS -> R.string.value_platforms
                 ContentMode.COLLECTIONS -> R.string.value_collections
@@ -889,10 +988,26 @@ class SettingsViewModel @Inject constructor(
             add(SettingsItem("screen_geo_y", R.string.setting_geo_vpos, valueText = (if (settings.screenGeometryY >= 0) "+" else "") + settings.screenGeometryY, disabled = settings.screenGeometryHeight >= 100))
         }
         "input" -> listOf(
+            SettingsItem("remap_piannoli", R.string.remap_piannoli, isEditable = true),
+            SettingsItem("keyboard_type", R.string.setting_keyboard, valueRes =
+                if (settings.keyboardType == KeyboardType.SYSTEM) R.string.keyboard_system else R.string.keyboard_piannoli),
+            SettingsItem("navigation_sound", R.string.setting_navigation_sound, valueRes = onOff(settings.navigationSound)),
+            SettingsItem("controller_notifications", R.string.setting_controller_notifications, valueRes = onOff(settings.controllerNotifications)),
             SettingsItem("controllers", R.string.setting_controllers, isEditable = true),
             SettingsItem("shortcuts", R.string.setting_shortcuts, isEditable = true),
             SettingsItem("input_tester", R.string.setting_input_tester, isEditable = true)
         )
+        "remap_piannoli" -> buildList {
+            val labels = listOf(
+                R.string.remap_confirm, R.string.remap_back, R.string.remap_north, R.string.remap_west,
+                R.string.remap_start, R.string.remap_select,
+            )
+            dev.cannoli.ui.MenuAction.remappable.forEachIndexed { index, action ->
+                add(SettingsItem("remap:${action.name}", labels[index],
+                    valueText = (settings.piannoliBindings[action] ?: action).name, isEditable = true, canCycle = false))
+            }
+            add(SettingsItem("remap_reset", R.string.remap_reset, isEditable = true))
+        }
         "emulation" -> buildList {
             add(SettingsItem("core_mapping", R.string.setting_emulator_mapping, isEditable = true))
             val pkgs = detectInstalledRaPackages()
@@ -917,6 +1032,43 @@ class SettingsViewModel @Inject constructor(
                 add(SettingsItem("ra_login", R.string.setting_ra_login, isEditable = true))
             }
         }
+        "artwork" -> buildList {
+            add(SettingsItem("game_artwork", R.string.settings_game_artwork, isEditable = true))
+            add(SettingsItem("system_artwork", R.string.setting_system_artwork, isEditable = true))
+            val failBehaviorRes = when (settings.scrapeFailBehavior) {
+                ScrapeFailBehavior.SKIP -> R.string.scrape_fail_skip
+                ScrapeFailBehavior.BEST_MATCH -> R.string.scrape_fail_best_match
+                ScrapeFailBehavior.RETRY_SKIP -> R.string.scrape_fail_retry_skip
+                ScrapeFailBehavior.RETRY_BEST_MATCH -> R.string.scrape_fail_retry_best_match
+            }
+            add(SettingsItem("scrape_fail_behavior", R.string.setting_scrape_fail_behavior, valueRes = failBehaviorRes))
+            add(SettingsItem("setup_scrapers", R.string.settings_setup_scrapers, isEditable = true))
+        }
+        "game_artwork", "system_artwork" -> buildList {
+            val system = categoryKey == "system_artwork"
+            val scale = if (system) settings.systemArtScale else settings.artScale
+            val width = if (system) settings.systemArtWidth else settings.artWidth
+            val radius = if (system) settings.systemArtRadius else settings.artRadius
+            val artScaleRes = when (scale) {
+                ArtScale.FIT -> R.string.value_fit
+                ArtScale.ORIGINAL -> R.string.value_original
+                ArtScale.FIT_WIDTH -> R.string.value_fit_width
+                ArtScale.FIT_HEIGHT -> R.string.value_fit_height
+            }
+            add(SettingsItem(if (system) "system_art_scale" else "art_scale", R.string.setting_art_scale, valueRes = artScaleRes))
+            add(SettingsItem(if (system) "system_art_width" else "art_width", R.string.setting_art_width,
+                valueText = if (width == 0) null else "$width%", valueRes = if (width == 0) R.string.value_off else null))
+            add(SettingsItem(if (system) "system_art_radius" else "art_radius", R.string.setting_art_radius, valueText = "$radius%"))
+            if (system) add(SettingsItem("system_artwork_type", R.string.setting_system_artwork_type, valueRes =
+                when (settings.systemArtworkType) {
+                    dev.cannoli.scorza.settings.SystemArtworkType.LOGO -> R.string.system_artwork_logo
+                    dev.cannoli.scorza.settings.SystemArtworkType.ICON -> R.string.system_artwork_icon
+                    dev.cannoli.scorza.settings.SystemArtworkType.GRID -> R.string.system_artwork_grid
+                }))
+        }
+        "setup_scrapers" -> listOf(
+            SettingsItem("steamgrid_setup", R.string.steamgrid_setup, isEditable = true),
+        )
         "romm" -> buildList {
             if (rommStore.token.isNullOrEmpty()) {
                 add(SettingsItem("romm_host", R.string.setting_romm_host, valueText = rommStore.host.ifEmpty { null }, valueRes = if (rommStore.host.isEmpty()) R.string.value_not_set else null, isEditable = true, canCycle = false))

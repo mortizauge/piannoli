@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -33,6 +34,9 @@ import dev.cannoli.ui.components.footerReservation
 import dev.cannoli.ui.components.listTitleSpacing
 import dev.cannoli.ui.components.pillItemHeight
 import dev.cannoli.ui.components.screenInsets
+import dev.cannoli.ui.components.screenBackground
+import androidx.compose.material3.Text
+import dev.cannoli.ui.theme.LocalCannoliColors
 
 @Composable
 fun SettingsScreen(
@@ -47,6 +51,9 @@ fun SettingsScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val itemHeight = pillItemHeight(listLineHeight, listVerticalPadding)
+    DisposableEffect(viewModel) {
+        onDispose { viewModel.cancelRemapping() }
+    }
 
     ScreenBackground(backgroundImagePath = backgroundImagePath, backgroundTint = backgroundTint) {
     Box(
@@ -82,7 +89,9 @@ fun SettingsScreen(
                     if (hasValue) {
                         PillRowKeyValue(
                             label = item.labelText ?: stringResource(item.labelRes),
-                            value = item.valueText ?: item.valueRes?.let { stringResource(it) } ?: "",
+                            value = if (item.key.startsWith("remap:") && item.valueText != null)
+                                buttonStyle.physicalLabel(dev.cannoli.ui.MenuAction.valueOf(item.valueText))
+                            else item.valueText ?: item.valueRes?.let { stringResource(it) } ?: "",
                             isSelected = isSelected,
                             fontSize = listFontSize,
                             lineHeight = listLineHeight,
@@ -120,7 +129,11 @@ fun SettingsScreen(
                 && selectedItem.valueRes == null
                 && selectedItem.swatchColor == null
                 && !isFghCollection
-            val rightItems = if (isColorItem) {
+            val rightItems = if (selectedItem?.key == "remap_reset") {
+                listOf(buttonStyle.confirm to stringResource(R.string.label_reset))
+            } else if (selectedItem?.key?.startsWith("remap:") == true) {
+                listOf(buttonStyle.confirm to stringResource(R.string.label_set))
+            } else if (isColorItem) {
                 listOf(buttonStyle.confirm to stringResource(R.string.label_select))
             } else if (isFghCollection) {
                 listOf(buttonStyle.confirm to stringResource(R.string.label_choose))
@@ -174,7 +187,24 @@ fun SettingsScreen(
                 leftItems = listOf(buttonStyle.back to stringResource(R.string.label_back)),
                 rightItems = listOf(buttonStyle.confirm to stringResource(R.string.label_select))
             )
+            if (state.remappingAction != null) {
+                val colors = LocalCannoliColors.current
+                Box(Modifier.fillMaxSize().screenBackground(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        val selected = state.items.getOrNull(state.selectedIndex)
+                        Text(
+                            text = selected?.let { stringResource(it.labelRes) }.orEmpty(),
+                            fontSize = listFontSize,
+                            color = colors.text,
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Text(stringResource(R.string.remap_press_button), color = colors.text)
+                        Spacer(Modifier.height(16.dp))
+                        Text(stringResource(R.string.remap_cancel_hint), color = colors.text.copy(alpha = 0.6f))
+                    }
+                }
+            }
         }
-    }
+        }
     }
 }

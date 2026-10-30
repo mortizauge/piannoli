@@ -296,13 +296,88 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         get() = jsonRead { if (has(KEY_FGH_COLLECTION)) optLong(KEY_FGH_COLLECTION).takeIf { it > 0 } else null }
         set(value) = jsonWrite { if (value == null) remove(KEY_FGH_COLLECTION) else put(KEY_FGH_COLLECTION, value) }
 
+    var scrapeFailBehavior: ScrapeFailBehavior
+        get() = ScrapeFailBehavior.fromString(jsonRead { optString(KEY_SCRAPE_FAIL_BEHAVIOR) })
+        set(value) = jsonWrite { put(KEY_SCRAPE_FAIL_BEHAVIOR, value.name) }
+
+    var keyboardType: KeyboardType
+        get() = KeyboardType.fromString(jsonRead { optString(KEY_KEYBOARD_TYPE) })
+        set(value) = jsonWrite { put(KEY_KEYBOARD_TYPE, value.name) }
+
+    var navigationSound: Boolean
+        get() = jsonRead { optBoolean(KEY_NAVIGATION_SOUND, false) }
+        set(value) = jsonWrite { put(KEY_NAVIGATION_SOUND, value) }
+
+    var controllerNotifications: Boolean
+        get() = jsonRead { optBoolean(KEY_CONTROLLER_NOTIFICATIONS, false) }
+        set(value) = jsonWrite { put(KEY_CONTROLLER_NOTIFICATIONS, value) }
+
     var artWidth: Int
         get() = jsonRead { optInt(KEY_ART_WIDTH, 40) }
         set(value) = jsonWrite { put(KEY_ART_WIDTH, value) }
 
+    var systemArtworkType: SystemArtworkType
+        get() = SystemArtworkType.fromString(jsonRead { optString(KEY_SYSTEM_ARTWORK_TYPE) })
+        set(value) = jsonWrite { put(KEY_SYSTEM_ARTWORK_TYPE, value.name) }
+
+    fun filteredExtensions(tag: String): Set<String> = jsonRead {
+        val values = optJSONObject("platform_extension_filters")?.optJSONArray(tag.uppercase(java.util.Locale.ROOT))
+        if (values == null) emptySet() else (0 until values.length()).map { values.getString(it) }.toSet()
+    }
+
+    var showHiddenFiles: Boolean
+        get() = jsonRead { optBoolean("show_hidden_files", false) }
+        set(value) = jsonWrite { put("show_hidden_files", value) }
+
+    var piannoliBindings: Map<dev.cannoli.ui.MenuAction, dev.cannoli.ui.MenuAction>
+        get() = jsonRead {
+            val saved = optJSONObject("piannoli_bindings") ?: return@jsonRead emptyMap()
+            val actions = dev.cannoli.ui.MenuAction.entries
+            val parsed = actions.associateWith { action ->
+                actions.firstOrNull { it.name == saved.optString(action.name) }
+            }
+            if (parsed.values.filterNotNull().toSet().size != actions.size) {
+                dev.cannoli.scorza.util.ErrorLog.write("Invalid Piannoli bindings; using defaults")
+                emptyMap()
+            } else dev.cannoli.ui.MenuAction.restrict(parsed.mapValues { requireNotNull(it.value) })
+        }
+        set(value) {
+            require(value.isEmpty() || (value.keys == dev.cannoli.ui.MenuAction.entries.toSet() &&
+                value.values.toSet() == dev.cannoli.ui.MenuAction.entries.toSet()))
+            val restricted = dev.cannoli.ui.MenuAction.restrict(value)
+            jsonWrite {
+                if (restricted.isEmpty()) remove("piannoli_bindings")
+                else put("piannoli_bindings", JSONObject().apply {
+                    restricted.forEach { (action, button) -> put(action.name, button.name) }
+                })
+            }
+        }
+
+    fun setFilteredExtensions(tag: String, extensions: Set<String>) = jsonWrite {
+        val filters = optJSONObject("platform_extension_filters") ?: JSONObject()
+        filters.put(tag.uppercase(java.util.Locale.ROOT), org.json.JSONArray(extensions.sorted()))
+        put("platform_extension_filters", filters)
+    }
+
+    var systemArtScale: ArtScale
+        get() = ArtScale.fromString(jsonRead { optString(KEY_SYSTEM_ART_SCALE) })
+        set(value) = jsonWrite { put(KEY_SYSTEM_ART_SCALE, value.name) }
+
+    var systemArtWidth: Int
+        get() = jsonRead { optInt(KEY_SYSTEM_ART_WIDTH, 40) }
+        set(value) = jsonWrite { put(KEY_SYSTEM_ART_WIDTH, value) }
+
+    var systemArtRadius: Int
+        get() = jsonRead { optInt(KEY_SYSTEM_ART_RADIUS, 0).coerceIn(0, 100) }
+        set(value) = jsonWrite { put(KEY_SYSTEM_ART_RADIUS, value.coerceIn(0, 100)) }
+
     var artScale: ArtScale
         get() = ArtScale.fromString(jsonRead { if (has(KEY_ART_SCALE)) optString(KEY_ART_SCALE) else null })
         set(value) = jsonWrite { put(KEY_ART_SCALE, value.name) }
+
+    var artRadius: Int
+        get() = jsonRead { optInt(KEY_ART_RADIUS, 25).coerceIn(0, 100) }
+        set(value) = jsonWrite { put(KEY_ART_RADIUS, value.coerceIn(0, 100)) }
 
     var backgroundTint: Int
         get() = jsonRead { optInt(KEY_BG_TINT, 0) }
@@ -345,6 +420,14 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         set(value) {
             val editor = credPrefs.edit()
             if (value.isEmpty()) editor.remove(KEY_RA_TOKEN) else editor.putString(KEY_RA_TOKEN, value)
+            editor.apply()
+        }
+
+    var steamGridApiKey: String
+        get() = credPrefs.getString(KEY_STEAMGRID_API_KEY, "") ?: ""
+        set(value) {
+            val editor = credPrefs.edit()
+            if (value.isEmpty()) editor.remove(KEY_STEAMGRID_API_KEY) else editor.putString(KEY_STEAMGRID_API_KEY, value)
             editor.apply()
         }
 
@@ -465,7 +548,16 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         private const val KEY_TITLE = "title"
         private const val KEY_TIME_FORMAT = "time_format"
         private const val KEY_BG_IMAGE = "bg_image"
+        private const val KEY_SCRAPE_FAIL_BEHAVIOR = "scrape_fail_behavior"
+        private const val KEY_KEYBOARD_TYPE = "keyboard_type"
+        private const val KEY_NAVIGATION_SOUND = "navigation_sound"
+        private const val KEY_CONTROLLER_NOTIFICATIONS = "controller_notifications"
         private const val KEY_ART_WIDTH = "art_width"
+        private const val KEY_SYSTEM_ARTWORK_TYPE = "system_artwork_type"
+        private const val KEY_SYSTEM_ART_SCALE = "system_art_scale"
+        private const val KEY_SYSTEM_ART_WIDTH = "system_art_width"
+        private const val KEY_SYSTEM_ART_RADIUS = "system_art_radius"
+        private const val KEY_ART_RADIUS = "art_radius"
         private const val KEY_ART_SCALE = "art_scale"
         private const val KEY_BG_TINT = "bg_tint"
         private const val KEY_COLOR_HIGHLIGHT = "color_highlight"
@@ -498,6 +590,7 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         private const val KEY_PORTS_NAME = "ports_name"
         private const val KEY_RA_USERNAME = "ra_username"
         private const val KEY_RA_TOKEN = "ra_token"
+        private const val KEY_STEAMGRID_API_KEY = "steamgrid_api_key"
         private const val KEY_RA_PASSWORD = "ra_password"
         private const val KEY_RELEASE_CHANNEL = "release_channel"
         private const val KEY_LAST_UPDATE_CHECK = "last_update_check"
