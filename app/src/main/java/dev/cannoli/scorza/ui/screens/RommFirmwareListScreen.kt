@@ -18,7 +18,6 @@ import androidx.compose.ui.unit.sp
 import dev.cannoli.scorza.ui.viewmodel.RommBrowseViewModel
 import dev.cannoli.ui.ButtonStyle
 import dev.cannoli.ui.R
-import dev.cannoli.ui.START_GLYPH
 import dev.cannoli.ui.components.BottomBar
 import dev.cannoli.ui.components.ListSection
 import dev.cannoli.ui.components.PillRowKeyValue
@@ -122,7 +121,7 @@ fun RommFirmwareListScreen(
                 leftItems = listOf(buttonStyle.back to stringResource(R.string.label_back)),
                 rightItems = if (rows.isEmpty()) emptyList() else listOf(
                     buttonStyle.confirm to stringResource(R.string.label_toggle),
-                    START_GLYPH to stringResource(R.string.label_download),
+                    buttonStyle.start to stringResource(R.string.label_download),
                 ),
             )
         }

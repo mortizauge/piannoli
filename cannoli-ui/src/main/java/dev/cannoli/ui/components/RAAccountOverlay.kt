@@ -26,7 +26,7 @@ fun RAAccountOverlay(username: String, buttonStyle: ButtonStyle = ButtonStyle())
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .screenBackground(),
         contentAlignment = Alignment.Center
     ) {
         Column(

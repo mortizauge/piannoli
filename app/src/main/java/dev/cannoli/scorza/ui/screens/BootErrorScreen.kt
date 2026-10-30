@@ -31,7 +31,7 @@ fun BootErrorScreen(
     buttonStyle: ButtonStyle = ButtonStyle(),
 ) {
     val typo = LocalCannoliTypography.current
-    ScreenBackground(backgroundImagePath = null) {
+    ScreenBackground() {
         Box(modifier = Modifier.fillMaxSize().padding(screenInsets())) {
             Column(modifier = Modifier.fillMaxSize().padding(bottom = footerReservation())) {
                 ScreenTitle(text = stringResource(R.string.boot_error_title), fontSize = 22.sp, lineHeight = 32.sp)

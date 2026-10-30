@@ -1,5 +1,6 @@
 package dev.cannoli.scorza.ui.screens
 
+import dev.cannoli.ui.components.screenBackground
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -80,7 +81,7 @@ fun InputTesterScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .screenBackground()
             .padding(20.dp)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {

@@ -17,7 +17,6 @@ import dev.cannoli.ui.components.List
 import dev.cannoli.ui.components.PillRowKeyValue
 import dev.cannoli.ui.components.pillItemHeight
 
-private const val GLYPH_L1 = "L1"
 
 @Composable
 fun SaveSlotsScreen(
@@ -45,7 +44,7 @@ fun SaveSlotsScreen(
             listLineHeight = listLineHeight,
             leftBottomItems = buildList {
                 if (!isAutosave && selected != null) {
-                    add(GLYPH_L1 to stringResource(R.string.save_slots_delete))
+                    add(buttonStyle.l1 to stringResource(R.string.save_slots_delete))
                     add(buttonStyle.west to stringResource(R.string.save_slots_rename))
                 }
             },

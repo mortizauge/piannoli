@@ -1,5 +1,6 @@
 package dev.cannoli.igm
 
+import dev.cannoli.ui.components.screenBackground
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import androidx.compose.foundation.ScrollState
@@ -152,7 +153,7 @@ fun CannoliIGM(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .background(Color.Black.copy(alpha = 0.85f)),
+                                .screenBackground(alpha = 0.85f),
                             contentAlignment = Alignment.Center
                         ) {
                             Column(
@@ -249,7 +250,7 @@ fun CannoliIGM(
                         }
                         return path
                     }
-                    ScreenBackground(backgroundImagePath = null, backgroundAlpha = 0.85f, backgroundColor = Color.Black) {
+                    ScreenBackground(backgroundAlpha = 0.85f) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -413,7 +414,7 @@ fun CannoliIGM(
                         stringResource(dev.cannoli.ui.R.string.ach_unlocked_date, date)
                     } else if (ach.unlocked) stringResource(dev.cannoli.ui.R.string.ach_unlocked) else stringResource(dev.cannoli.ui.R.string.ach_locked)
 
-                    ScreenBackground(backgroundImagePath = null, backgroundAlpha = 0.85f, backgroundColor = Color.Black) {
+                    ScreenBackground(backgroundAlpha = 0.85f) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -505,7 +506,7 @@ fun CannoliIGM(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.92f)),
+                        .screenBackground(),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(

@@ -1,5 +1,6 @@
 package dev.cannoli.scorza.ui.screens
 
+import dev.cannoli.ui.components.screenBackground
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -43,7 +44,7 @@ fun HousekeepingScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .screenBackground()
             .padding(screenInsets()),
         contentAlignment = Alignment.Center
     ) {

@@ -42,6 +42,7 @@ import dev.cannoli.ui.theme.LocalPillScale
 import dev.cannoli.ui.theme.LocalScaleFactor
 import dev.cannoli.ui.theme.Radius
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 
 val screenPadding = 20.dp
 val pillInternalH = 14.dp
@@ -106,18 +107,22 @@ const val MarqueeInitialDelayMs = 800L
 
 @Composable
 fun MarqueeEffect(scrollState: ScrollState, active: Boolean, key: Any = active, initialDelayMs: Long = MarqueeInitialDelayMs) {
-    LaunchedEffect(key) {
-        scrollState.scrollTo(0)
-        if (!active) return@LaunchedEffect
-        delay(initialDelayMs)
-        while (true) {
-            val max = scrollState.maxValue
-            if (max <= 0) break
-            val duration = (max * 4).coerceIn(500, 8000)
-            scrollState.animateScrollTo(max, animationSpec = tween(durationMillis = duration, easing = LinearEasing))
-            delay(800)
-            scrollState.animateScrollTo(0, animationSpec = tween(durationMillis = duration, easing = LinearEasing))
-            delay(800)
+    val uiActive = LocalUiActive.current
+    LaunchedEffect(key, active, uiActive) {
+        uiActive.collectLatest { focused ->
+            if (!focused) return@collectLatest
+            scrollState.scrollTo(0)
+            if (!active) return@collectLatest
+            delay(initialDelayMs)
+            while (true) {
+                val max = scrollState.maxValue
+                if (max <= 0) break
+                val duration = (max * 4).coerceIn(500, 8000)
+                scrollState.animateScrollTo(max, animationSpec = tween(durationMillis = duration, easing = LinearEasing))
+                delay(800)
+                scrollState.animateScrollTo(0, animationSpec = tween(durationMillis = duration, easing = LinearEasing))
+                delay(800)
+            }
         }
     }
 }

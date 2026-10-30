@@ -61,7 +61,7 @@ fun GuideScreen(
     val colors = LocalCannoliColors.current
     val zoomIndex = (textZoom - 1).coerceIn(0, GuideZoom.pdfScales.lastIndex)
 
-    ScreenBackground(backgroundImagePath = null, backgroundAlpha = 1f) {
+    ScreenBackground() {
         Box(modifier = Modifier.fillMaxSize().padding(12.dp)) {
             when (guideType) {
                 GuideType.PDF -> PdfContent(

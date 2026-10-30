@@ -42,7 +42,7 @@ fun RommPairingOverlay(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .screenBackground(),
         contentAlignment = Alignment.Center
     ) {
         if (!waitingApproval) {

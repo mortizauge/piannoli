@@ -38,7 +38,7 @@ fun RommConnectedOverlay(host: String, username: String?, version: String?, butt
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .screenBackground(),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {

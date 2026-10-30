@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -39,6 +38,8 @@ import dev.cannoli.ui.theme.LocalCannoliFont
 import dev.cannoli.ui.theme.LocalCannoliIconFont
 import dev.cannoli.ui.theme.LocalScaleFactor
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.collectLatest
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -101,74 +102,84 @@ fun StatusBar(
     var hasBluetooth by remember { mutableStateOf(false) }
     var rawTime by remember { mutableStateOf(Date()) }
 
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(15000)
+    val uiActive = LocalUiActive.current
+    LaunchedEffect(uiActive, showClock) {
+        uiActive.collectLatest { focused ->
+            if (!focused || !showClock) return@collectLatest
             rawTime = Date()
+            while (true) {
+                delay(15000)
+                rawTime = Date()
+            }
         }
     }
 
-    DisposableEffect(Unit) {
-        rawTime = Date()
+    LaunchedEffect(uiActive) {
+        uiActive.collectLatest { focused ->
+            if (!focused) return@collectLatest
+            rawTime = Date()
 
-        val batteryFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
-        val batteryReceiver = object : BroadcastReceiver() {
-            override fun onReceive(ctx: Context, intent: Intent) {
-                val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, 0)
-                val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, 100)
-                batteryLevel = (level * 100) / scale
-                val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
-                isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
-                    status == BatteryManager.BATTERY_STATUS_FULL
-            }
-        }
-        context.registerReceiver(batteryReceiver, batteryFilter)
-
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-        var networkCallback: ConnectivityManager.NetworkCallback? = null
-        try {
-            if (cm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                fun updateNetState(caps: NetworkCapabilities?) {
-                    wifiConnected = caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
-                    hasVpn = caps?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+            val batteryFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+            val batteryReceiver = object : BroadcastReceiver() {
+                override fun onReceive(ctx: Context, intent: Intent) {
+                    val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, 0)
+                    val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, 100)
+                    batteryLevel = (level * 100) / scale
+                    val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+                    isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                        status == BatteryManager.BATTERY_STATUS_FULL
                 }
-                val net = cm.activeNetwork
-                updateNetState(if (net != null) cm.getNetworkCapabilities(net) else null)
-                networkCallback = object : ConnectivityManager.NetworkCallback() {
-                    override fun onAvailable(network: Network) {
-                        updateNetState(cm.getNetworkCapabilities(network))
+            }
+            context.registerReceiver(batteryReceiver, batteryFilter)
+
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            var networkCallback: ConnectivityManager.NetworkCallback? = null
+            try {
+                if (cm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    fun updateNetState(caps: NetworkCapabilities?) {
+                        wifiConnected = caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+                        hasVpn = caps?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
                     }
-                    override fun onLost(network: Network) {
-                        updateNetState(null)
+                    val net = cm.activeNetwork
+                    updateNetState(if (net != null) cm.getNetworkCapabilities(net) else null)
+                    networkCallback = object : ConnectivityManager.NetworkCallback() {
+                        override fun onAvailable(network: Network) {
+                            updateNetState(cm.getNetworkCapabilities(network))
+                        }
+                        override fun onLost(network: Network) {
+                            updateNetState(null)
+                        }
+                        override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                            updateNetState(caps)
+                        }
                     }
-                    override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
-                        updateNetState(caps)
-                    }
+                    cm.registerDefaultNetworkCallback(networkCallback!!)
                 }
-                cm.registerDefaultNetworkCallback(networkCallback!!)
+            } catch (_: SecurityException) {
+                wifiConnected = false
             }
-        } catch (_: SecurityException) {
-            wifiConnected = false
-        }
 
-        val btReceiver = object : BroadcastReceiver() {
-            override fun onReceive(ctx: Context, intent: Intent) {
-                val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
-                hasBluetooth = state == BluetoothAdapter.STATE_ON
+            val btReceiver = object : BroadcastReceiver() {
+                override fun onReceive(ctx: Context, intent: Intent) {
+                    val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+                    hasBluetooth = state == BluetoothAdapter.STATE_ON
+                }
             }
-        }
-        try {
-            val btAdapter = BluetoothAdapter.getDefaultAdapter()
-            hasBluetooth = btAdapter?.isEnabled == true
-            context.registerReceiver(btReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
-        } catch (_: SecurityException) {
-            hasBluetooth = false
-        }
+            try {
+                val btAdapter = BluetoothAdapter.getDefaultAdapter()
+                hasBluetooth = btAdapter?.isEnabled == true
+                context.registerReceiver(btReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
+            } catch (_: SecurityException) {
+                hasBluetooth = false
+            }
 
-        onDispose {
-            try { context.unregisterReceiver(batteryReceiver) } catch (_: Exception) {}
-            try { context.unregisterReceiver(btReceiver) } catch (_: Exception) {}
-            try { networkCallback?.let { cm?.unregisterNetworkCallback(it) } } catch (_: Exception) {}
+            try {
+                awaitCancellation()
+            } finally {
+                try { context.unregisterReceiver(batteryReceiver) } catch (_: Exception) {}
+                try { context.unregisterReceiver(btReceiver) } catch (_: Exception) {}
+                try { networkCallback?.let { cm?.unregisterNetworkCallback(it) } } catch (_: Exception) {}
+            }
         }
     }
 

@@ -28,7 +28,7 @@ fun OverlayScrim(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .screenBackground()
             .padding(screenPadding)
     ) {
         Column(

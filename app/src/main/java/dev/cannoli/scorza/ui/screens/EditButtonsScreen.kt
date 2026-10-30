@@ -1,5 +1,6 @@
 package dev.cannoli.scorza.ui.screens
 
+import dev.cannoli.ui.components.screenBackground
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -176,7 +177,7 @@ fun EditButtonsScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.92f)),
+                    .screenBackground(),
                 contentAlignment = Alignment.Center,
             ) {
                 Column(

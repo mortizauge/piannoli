@@ -26,7 +26,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.cannoli.ui.ButtonStyle
 import dev.cannoli.ui.R
-import dev.cannoli.ui.START_GLYPH
 import dev.cannoli.ui.theme.GrayText
 import dev.cannoli.ui.theme.LocalCannoliColors
 import dev.cannoli.ui.theme.LocalCannoliTypography
@@ -71,12 +70,12 @@ private fun glyphLabel(glyph: HelpGlyph, buttonStyle: ButtonStyle): String = whe
     HelpGlyph.BACK -> buttonStyle.back
     HelpGlyph.NORTH -> buttonStyle.north
     HelpGlyph.WEST -> buttonStyle.west
-    HelpGlyph.START -> START_GLYPH
-    HelpGlyph.SELECT -> "SELECT"
-    HelpGlyph.L1 -> "L1"
-    HelpGlyph.R1 -> "R1"
-    HelpGlyph.L2 -> "L2"
-    HelpGlyph.R2 -> "R2"
+    HelpGlyph.START -> buttonStyle.start
+    HelpGlyph.SELECT -> buttonStyle.select
+    HelpGlyph.L1 -> buttonStyle.l1
+    HelpGlyph.R1 -> buttonStyle.r1
+    HelpGlyph.L2 -> buttonStyle.l2
+    HelpGlyph.R2 -> buttonStyle.r2
     HelpGlyph.DPAD -> ""
 }
 
@@ -85,7 +84,8 @@ fun KeyboardHelpOverlay(
     layout: KeyboardLayout,
     titleFontSize: TextUnit = 22.sp,
     titleLineHeight: TextUnit = 32.sp,
-    buttonStyle: ButtonStyle = ButtonStyle()
+    buttonStyle: ButtonStyle = ButtonStyle(),
+    onClose: () -> Unit = {},
 ) {
     val colors = LocalCannoliColors.current
     val groups = keyboardHelpGroups(layout)
@@ -93,7 +93,7 @@ fun KeyboardHelpOverlay(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.background)
+            .screenBackground()
             .padding(screenPadding)
     ) {
         Column(
@@ -121,7 +121,8 @@ fun KeyboardHelpOverlay(
         BottomBar(
             modifier = Modifier.align(Alignment.BottomCenter),
             leftItems = listOf(buttonStyle.back to stringResource(R.string.label_close)),
-            rightItems = emptyList()
+            rightItems = emptyList(),
+            onLeftItemClick = { onClose() },
         )
     }
 }

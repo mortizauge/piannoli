@@ -44,7 +44,7 @@ fun CheatsScreen(
     val verticalPadding = pillVerticalPadding()
     val itemHeight = pillItemHeight(lineHeight, verticalPadding)
 
-    ScreenBackground(backgroundImagePath = null, backgroundAlpha = 0.85f, backgroundColor = Color.Black) {
+    ScreenBackground(backgroundAlpha = 0.85f) {
         Box(
             modifier = Modifier
                 .fillMaxSize()

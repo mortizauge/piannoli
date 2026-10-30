@@ -65,7 +65,7 @@ fun RommGameDetailScreen(
     listLineHeight: TextUnit = 32.sp,
     buttonStyle: ButtonStyle = ButtonStyle(),
 ) {
-    ScreenBackground(backgroundImagePath = null) {
+    ScreenBackground() {
         BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(screenInsets())) {
             val scale = RommGameDetailLayout.scaleFor(maxWidth.value, maxHeight.value)
             val coverW = maxWidth * 0.32f

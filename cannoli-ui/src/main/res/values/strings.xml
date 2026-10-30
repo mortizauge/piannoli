@@ -1,5 +1,6 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Bottom bar labels -->
+    <string name="loading_title">Loading</string>
     <string name="label_back">BACK</string>
     <string name="label_cancel" tools:ignore="ButtonCase">CANCEL</string>
     <string name="label_select">SELECT</string>
@@ -17,6 +18,8 @@
     <string name="label_change_emulator">CHANGE EMULATOR</string>
     <string name="label_delete">DELETE</string>
     <string name="label_confirm">CONFIRM</string>
+    <string name="label_paste">PASTE</string>
+    <string name="keyboard_clipboard_unusable">Clipboard is empty or does not contain usable text.</string>
     <string name="label_proceed">PROCEED</string>
     <string name="label_toggle">TOGGLE</string>
     <string name="label_new">NEW</string>
@@ -905,7 +908,7 @@
     <string name="kbd_help_space">SPACE</string>
     <string name="kbd_help_shift">SHIFT / CAPS (TAP)</string>
     <string name="kbd_help_symbols">SYMBOLS (HOLD)</string>
-    <string name="kbd_help_cursor_move">MOVE LEFT / RIGHT</string>
+    <string name="kbd_help_cursor_move">MOVE CARET ONE POSITION LEFT / RIGHT</string>
     <string name="kbd_help_cursor_jump">JUMP TO START / END</string>
     <string name="kbd_help_submit">SUBMIT</string>
     <string name="kbd_help_cancel">CANCEL</string>

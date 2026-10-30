@@ -48,7 +48,7 @@ fun QuickInfoOverlay(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .screenBackground(),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {

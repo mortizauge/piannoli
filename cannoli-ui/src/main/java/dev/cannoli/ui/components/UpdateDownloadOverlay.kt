@@ -36,7 +36,7 @@ fun UpdateDownloadOverlay(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .screenBackground(),
         contentAlignment = Alignment.Center
     ) {
         Column(

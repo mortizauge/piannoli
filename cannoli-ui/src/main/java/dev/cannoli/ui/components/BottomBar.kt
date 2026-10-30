@@ -1,6 +1,7 @@
 package dev.cannoli.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -98,13 +99,13 @@ fun GlyphPill(button: String) {
 }
 
 @Composable
-fun LegendPill(label: String, glyphs: @Composable () -> Unit) {
+fun LegendPill(label: String, modifier: Modifier = Modifier, glyphs: @Composable () -> Unit) {
     val accent = LocalCannoliColors.current.accent
     val outerPill = accent.copy(alpha = 0.15f)
     val sf = LocalScaleFactor.current
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .clip(Radius.Pill)
             .background(outerPill)
             .padding(start = (5 * sf).dp, end = (14 * sf).dp, top = (LegendPadVDp * sf).dp, bottom = (LegendPadVDp * sf).dp),
@@ -121,13 +122,16 @@ fun LegendPill(label: String, glyphs: @Composable () -> Unit) {
 }
 
 @Composable
-fun LegendPill(button: String, label: String) = LegendPill(label = label) { GlyphPill(button) }
+fun LegendPill(button: String, label: String, modifier: Modifier = Modifier) =
+    LegendPill(label = label, modifier = modifier) { GlyphPill(button) }
 
 @Composable
 fun BottomBar(
     modifier: Modifier = Modifier,
     leftItems: List<Pair<String, String>>,
-    rightItems: List<Pair<String, String>>
+    rightItems: List<Pair<String, String>>,
+    onLeftItemClick: ((Int) -> Unit)? = null,
+    onRightItemClick: ((Int) -> Unit)? = null,
 ) {
     val sf = LocalScaleFactor.current
     Row(
@@ -136,16 +140,24 @@ fun BottomBar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy((8 * sf).dp)) {
-            leftItems.forEach { (button, label) ->
-                LegendPill(button = button, label = label)
+            leftItems.forEachIndexed { index, (button, label) ->
+                LegendPill(
+                    button = button,
+                    label = label,
+                    modifier = if (onLeftItemClick != null) Modifier.clickable { onLeftItemClick(index) } else Modifier,
+                )
             }
         }
 
         Spacer(modifier = Modifier.weight(1f))
 
         Row(horizontalArrangement = Arrangement.spacedBy((8 * sf).dp)) {
-            rightItems.forEach { (button, label) ->
-                LegendPill(button = button, label = label)
+            rightItems.forEachIndexed { index, (button, label) ->
+                LegendPill(
+                    button = button,
+                    label = label,
+                    modifier = if (onRightItemClick != null) Modifier.clickable { onRightItemClick(index) } else Modifier,
+                )
             }
         }
     }
