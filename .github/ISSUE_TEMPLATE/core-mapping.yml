@@ -23,5 +23,5 @@ body:
     id: log
     attributes:
       label: Session log (optional)
-      description: Relevant portion of `/storage/<sd>/Cannoli/Logs/<core_or_app>/*.log`, pasted or attached.
+      description: Relevant portion of `/storage/<sd>/Piannoli/Logs/<core_or_app>/*.log`, pasted or attached.
       render: text

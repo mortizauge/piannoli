@@ -1,0 +1,518 @@
+package dev.piannoli.scorza.ui.viewmodel
+
+import dagger.hilt.android.scopes.ActivityScoped
+import dev.piannoli.scorza.config.PlatformConfig
+import dev.piannoli.scorza.config.PlatformFolders
+import dev.piannoli.scorza.db.AppsRepository
+import dev.piannoli.scorza.db.CollectionsRepository
+import dev.piannoli.scorza.db.RecentlyPlayedRepository
+import dev.piannoli.scorza.db.RomScanner
+import dev.piannoli.scorza.db.RomsRepository
+import dev.piannoli.scorza.db.ScanScheduler
+import dev.piannoli.scorza.di.PiannoliPathsProvider
+import dev.piannoli.scorza.model.AppType
+import dev.piannoli.scorza.model.Platform
+import dev.piannoli.scorza.navigation.BrowsePosition
+import dev.piannoli.scorza.scanner.RomDirectoryWatcher
+import dev.piannoli.scorza.settings.ContentMode
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import javax.inject.Inject
+
+@ActivityScoped
+class SystemListViewModel @Inject constructor(
+    private val romsRepository: RomsRepository,
+    private val romScanner: RomScanner,
+    private val appsRepository: AppsRepository,
+    private val collectionsRepository: CollectionsRepository,
+    private val recentlyPlayedRepository: RecentlyPlayedRepository,
+    private val platformConfig: PlatformConfig,
+    private val piannoliPaths: PiannoliPathsProvider,
+    private val romDirectoryWatcher: RomDirectoryWatcher,
+    private val scanScheduler: ScanScheduler,
+) {
+    private val romDirectory: File get() = piannoliPaths.romDir
+    fun systemArtworkFile(tag: String, type: dev.piannoli.scorza.settings.SystemArtworkType): File? =
+        dev.piannoli.scorza.scraper.SystemArtwork.file(piannoliPaths.root, tag, type)
+
+    suspend fun deleteSystemArtwork(tag: String, type: dev.piannoli.scorza.settings.SystemArtworkType) {
+        withContext(Dispatchers.IO) {
+            dev.piannoli.scorza.scraper.SystemArtwork.delete(piannoliPaths.root, tag, type)
+        }
+    }
+
+    fun refreshFilteredPlatform(tag: String) {
+        scope.launch(Dispatchers.IO) {
+            scanScheduler.markLauncherMutation(tag)
+            scanScheduler.runNow(tag)
+            withContext(Dispatchers.Main) { rebuildFromDb() }
+        }
+    }
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    init {
+        scope.launch {
+            scanScheduler.results.collectLatest { result ->
+                if (isMissingPlatformRow(result.platformTag)) rebuildFromDb()
+                else refreshCountsForVisibleList()
+            }
+        }
+    }
+
+    private fun isMissingPlatformRow(platformTag: String): Boolean {
+        val config = lastScanConfig ?: return false
+        if (config.contentMode != ContentMode.PLATFORMS) return false
+        val tag = platformTag.uppercase()
+        return _state.value.items.none { item ->
+            item is ListItem.PlatformItem && item.platform.allTags.any { it.uppercase() == tag }
+        }
+    }
+
+    private fun rebuildFromDb() {
+        val config = lastScanConfig ?: return
+        scan(
+            showRecentlyPlayed = config.showRecentlyPlayed,
+            showFavorites = config.showFavorites,
+            contentMode = config.contentMode,
+            fghCollectionId = config.fghCollectionId,
+            toolsName = config.toolsName,
+            portsName = config.portsName,
+            scanDisk = false,
+        )
+    }
+
+    private fun refreshCountsForVisibleList() {
+        scope.launch(Dispatchers.IO) {
+            val counts = romsRepository.platformCounts().mapKeys { it.key.uppercase() }
+            _state.update { current ->
+                val newItems = current.items.map { item ->
+                    if (item is ListItem.PlatformItem) {
+                        val tag = item.platform.tag.uppercase()
+                        val c = counts[tag] ?: item.platform.gameCount
+                        if (c == item.platform.gameCount) item
+                        else ListItem.PlatformItem(item.platform.copy(gameCount = c))
+                    } else item
+                }
+                current.copy(items = newItems)
+            }
+        }
+    }
+
+    sealed class ListItem {
+        val artworkTag: String?
+            get() = when (this) {
+                RecentlyPlayedItem -> "@recent"
+                FavoritesItem -> "@favorites"
+                CollectionsFolder -> "@collections"
+                is CollectionItem -> "@collection-$id"
+                is ToolsFolder -> "@tools"
+                is PortsFolder -> "PORTS"
+                is PlatformItem -> platform.tag
+                is GameItem -> null
+            }
+
+        data object RecentlyPlayedItem : ListItem()
+        data object FavoritesItem : ListItem()
+        data object CollectionsFolder : ListItem()
+        data class PlatformItem(val platform: Platform) : ListItem()
+        data class CollectionItem(val id: Long, val name: String, val count: Int) : ListItem()
+        data class GameItem(val item: dev.piannoli.scorza.model.ListItem) : ListItem() {
+            val displayName: String get() = when (val i = item) {
+                is dev.piannoli.scorza.model.ListItem.RomItem -> i.rom.displayName
+                is dev.piannoli.scorza.model.ListItem.AppItem -> i.app.displayName
+                else -> ""
+            }
+            val artFile: java.io.File? get() = when (val i = item) {
+                is dev.piannoli.scorza.model.ListItem.RomItem -> i.rom.artFile
+                is dev.piannoli.scorza.model.ListItem.AppItem -> i.app.artFile
+                else -> null
+            }
+            val tags: String? get() = (item as? dev.piannoli.scorza.model.ListItem.RomItem)?.rom?.tags
+            val recentKey: String get() = when (val i = item) {
+                is dev.piannoli.scorza.model.ListItem.RomItem -> i.rom.path.absolutePath
+                is dev.piannoli.scorza.model.ListItem.AppItem -> "/apps/${i.app.type.name}/${i.app.packageName}"
+                else -> ""
+            }
+        }
+        data class ToolsFolder(val name: String, val count: Int) : ListItem()
+        data class PortsFolder(val name: String, val count: Int) : ListItem()
+    }
+
+    data class State(
+        val items: List<ListItem> = emptyList(),
+        val platforms: List<Platform> = emptyList(),
+        val selectedIndex: Int = 0,
+        val scrollTarget: Int = 0,
+        val isLoading: Boolean = true,
+        val reorderMode: Boolean = false,
+        val reorderOriginalIndex: Int = -1,
+        val hasGameItems: Boolean = false
+    )
+
+    private val _state = MutableStateFlow(State())
+    val state: StateFlow<State> = _state
+
+    var firstVisibleIndex: Int = 0
+    private data class Saved(val item: ListItem?, val index: Int, val scroll: Int)
+    private var savedPosition: Saved? = null
+    private var currentFghCollectionId: Long? = null
+
+    private data class ScanConfig(
+        val showRecentlyPlayed: Boolean,
+        val showFavorites: Boolean,
+        val contentMode: ContentMode,
+        val fghCollectionId: Long?,
+        val toolsName: String,
+        val portsName: String,
+    )
+
+    private var lastScanConfig: ScanConfig? = null
+
+    fun savePosition(scrollIdx: Int = firstVisibleIndex) {
+        val current = _state.value
+        savedPosition = Saved(current.items.getOrNull(current.selectedIndex), current.selectedIndex, scrollIdx)
+        _state.update { it.copy(scrollTarget = scrollIdx) }
+    }
+
+    fun browsePosition(): BrowsePosition {
+        val current = _state.value
+        return BrowsePosition(browseId(current.items.getOrNull(current.selectedIndex)), current.selectedIndex, firstVisibleIndex)
+    }
+
+    fun restoreBrowsePosition(position: BrowsePosition) {
+        _state.update { current ->
+            val max = current.items.lastIndex.coerceAtLeast(0)
+            val index = position.id?.let { id -> current.items.indexOfFirst { browseId(it) == id }.takeIf { it >= 0 } }
+                ?: position.index.coerceIn(0, max)
+            val scroll = position.scroll.coerceIn(0, max)
+            firstVisibleIndex = scroll
+            current.copy(selectedIndex = index, scrollTarget = scroll)
+        }
+    }
+
+    private fun browseId(item: ListItem?): String? = when (item) {
+        is ListItem.PlatformItem -> "platform:${item.platform.tag}"
+        is ListItem.CollectionItem -> "collection:${item.id}"
+        is ListItem.GameItem -> item.recentKey
+        ListItem.RecentlyPlayedItem -> "recent"
+        ListItem.FavoritesItem -> "favorites"
+        ListItem.CollectionsFolder -> "collections"
+        is ListItem.ToolsFolder -> "tools"
+        is ListItem.PortsFolder -> "ports"
+        null -> null
+    }
+
+    fun scan(showRecentlyPlayed: Boolean = true, showFavorites: Boolean = true, contentMode: ContentMode = ContentMode.PLATFORMS, fghCollectionId: Long? = null, toolsName: String = "Tools", portsName: String = "Ports", scanDisk: Boolean = true, reconcileOrphans: Boolean = false, onProgress: ((tag: String, current: Int, total: Int) -> Unit)? = null, onReady: () -> Unit = {}) {
+        val prev = _state.value
+        val prevItemCount = prev.items.size
+        val restored = savedPosition
+        savedPosition = null
+        val prevSelectedItem = restored?.item ?: prev.items.getOrNull(prev.selectedIndex)
+        val prevSelectedIndex = restored?.index ?: prev.selectedIndex
+        val prevFirstVisible = restored?.scroll ?: firstVisibleIndex
+        currentFghCollectionId = fghCollectionId
+        lastScanConfig = ScanConfig(showRecentlyPlayed, showFavorites, contentMode, fghCollectionId, toolsName, portsName)
+
+        scope.launch(Dispatchers.IO) {
+            if (scanDisk) {
+                scanAllPlatformDirs(reconcileOrphans) { tag, current, total ->
+                    withContext(Dispatchers.Main) { onProgress?.invoke(tag, current, total) }
+                }
+            }
+            val knownTagsInDb = romsRepository.knownPlatformTags().map(PlatformFolders::canonicalTag).distinct()
+            val watcherTags = knownTagsInDb
+                .filter { it != TAG_TOOLS && it != TAG_PORTS && platformConfig.isKnownTag(it) }
+            romDirectoryWatcher.start(romDirectory, watcherTags)
+            val countsByTag = romsRepository.platformCounts().mapKeys { it.key.uppercase() }
+            val knownTags = (knownTagsInDb + countsByTag.keys.map(PlatformFolders::canonicalTag)).distinct()
+                .filter { it != TAG_TOOLS && it != TAG_PORTS }
+
+            val allPlatforms = knownTags
+                .filter { platformConfig.isKnownTag(it) }
+                .map { tag ->
+                    val count = countsByTag[tag] ?: 0
+                    platformConfig.resolvePlatform(tag, romDirectory, count)
+                }
+
+            val groupedPlatforms = allPlatforms.groupBy { it.displayName }.map { (_, group) ->
+                if (group.size == 1) group[0]
+                else {
+                    val primary = group.maxBy { it.gameCount }
+                    primary.copy(
+                        gameCount = group.sumOf { it.gameCount },
+                        tags = group.map { it.tag }
+                    )
+                }
+            }
+
+            val toolCount = appsRepository.count(AppType.TOOL)
+            val portCount = appsRepository.count(AppType.PORT)
+
+            val items = mutableListOf<ListItem>()
+            val favoritesId = collectionsRepository.favoritesId()
+
+            if (contentMode == ContentMode.FIVE_GAME_HANDHELD) {
+                val fghId = fghCollectionId?.takeIf { collectionsRepository.byId(it) != null }
+                currentFghCollectionId = fghId
+                if (fghId != null) {
+                    collectionsRepository.romIdsIn(fghId)
+                        .mapNotNull { romsRepository.gameById(it) }
+                        .forEach { rom -> items.add(ListItem.GameItem(dev.piannoli.scorza.model.ListItem.RomItem(rom))) }
+                    collectionsRepository.appIdsIn(fghId)
+                        .mapNotNull { appsRepository.byId(it) }
+                        .forEach { app -> items.add(ListItem.GameItem(dev.piannoli.scorza.model.ListItem.AppItem(app))) }
+                }
+            } else {
+                currentFghCollectionId = null
+                if (showRecentlyPlayed && recentlyPlayedRepository.hasAny()) {
+                    items.add(ListItem.RecentlyPlayedItem)
+                }
+                if (showFavorites && favoritesId != null) {
+                    val hasFavorites = collectionsRepository.romIdsIn(favoritesId).isNotEmpty() ||
+                        collectionsRepository.appIdsIn(favoritesId).isNotEmpty()
+                    if (hasFavorites) items.add(ListItem.FavoritesItem)
+                }
+                if (contentMode == ContentMode.PLATFORMS) {
+                    val hasTopLevelStandard = collectionsRepository.topLevel().isNotEmpty()
+                    if (hasTopLevelStandard) {
+                        items.add(ListItem.CollectionsFolder)
+                    }
+                }
+            }
+
+            val reorderableItems = mutableListOf<ListItem>()
+            when (contentMode) {
+                ContentMode.PLATFORMS -> {
+                    groupedPlatforms.filter { platform ->
+                        platform.gameCount > 0 || platform.allTags.any { piannoliPaths.filteredExtensions(it).isNotEmpty() }
+                    }.sortedBy { it.displayName }.forEach {
+                        reorderableItems.add(ListItem.PlatformItem(it))
+                    }
+                }
+                ContentMode.COLLECTIONS -> {
+                    collectionsRepository.topLevel().forEach { row ->
+                        val count = collectionsRepository.romIdsIn(row.id).size + collectionsRepository.appIdsIn(row.id).size
+                        reorderableItems.add(ListItem.CollectionItem(row.id, row.displayName, count))
+                    }
+                }
+                ContentMode.FIVE_GAME_HANDHELD -> {}
+            }
+            if (contentMode != ContentMode.FIVE_GAME_HANDHELD) {
+                if (portCount > 0) reorderableItems.add(ListItem.PortsFolder(portsName, portCount))
+                if (toolCount > 0) reorderableItems.add(ListItem.ToolsFolder(toolsName, toolCount))
+            }
+            if (reorderableItems.isNotEmpty()) {
+                val ordered = applyCustomOrder(reorderableItems, romsRepository.knownPlatformTags())
+                items.addAll(ordered)
+            }
+
+            val current = _state.value
+            if (items == current.items && groupedPlatforms == current.platforms) {
+                if (current.isLoading) {
+                    _state.update { it.copy(isLoading = false) }
+                }
+                withContext(Dispatchers.Main) { onReady() }
+                return@launch
+            }
+
+            val canRestore = (restored != null || items.size == prevItemCount) && prevItemCount > 0
+            val (safeIndex, scrollTo) = if (canRestore && items.isNotEmpty()) {
+                val maxIdx = items.lastIndex
+                val remapped = prevSelectedItem?.let { items.indexOf(it).takeIf { idx -> idx >= 0 } }
+                val idx = when {
+                    remapped != null -> remapped
+                    current.selectedIndex in items.indices -> current.selectedIndex
+                    prevSelectedIndex in items.indices -> prevSelectedIndex
+                    else -> maxIdx
+                }
+                idx to prevFirstVisible.coerceIn(0, maxIdx)
+            } else {
+                0 to 0
+            }
+            _state.value = State(
+                items = items,
+                platforms = groupedPlatforms,
+                selectedIndex = safeIndex,
+                scrollTarget = scrollTo,
+                isLoading = false,
+                hasGameItems = items.any { it is ListItem.GameItem }
+            )
+            withContext(Dispatchers.Main) { onReady() }
+        }
+    }
+
+    /** [reconcileOrphans] folds in platforms that still hold rows but no longer have a folder,
+     *  which the directory walk alone can never reach and only a scan of that tag clears. It is
+     *  passed in by the actions that move the library, never inferred, so an unreadable listing on
+     *  a slow card cannot quietly wipe a platform the user still has. */
+    private suspend fun scanAllPlatformDirs(
+        reconcileOrphans: Boolean = false,
+        onProgress: (suspend (String, Int, Int) -> Unit)? = null,
+    ) {
+        if (!romDirectory.exists()) return
+        val tagDirs = romDirectory.listFiles { f -> f.isDirectory && !f.name.startsWith(".") } ?: return
+        val onDisk = tagDirs.map { PlatformFolders.canonicalTag(it.name) }
+        val orphaned = if (reconcileOrphans) romsRepository.platformCounts().keys.map(PlatformFolders::canonicalTag) else emptyList()
+        val known = (onDisk + orphaned).distinct().filter { platformConfig.isKnownTag(it) }
+        known.forEachIndexed { i, tag ->
+            onProgress?.invoke(tag, i, known.size)
+            romScanner.scanPlatform(tag, isArcade = platformConfig.isArcade(tag))
+        }
+        if (known.isNotEmpty()) {
+            onProgress?.invoke(known.last(), known.size, known.size)
+        }
+    }
+
+
+    fun moveSelection(delta: Int) {
+        _state.update { current ->
+            val size = current.items.size
+            if (size == 0) return@update current
+            val raw = current.selectedIndex + delta
+            val target = ((raw % size) + size) % size
+            current.copy(selectedIndex = target)
+        }
+    }
+
+    fun setSelectedIndex(index: Int) {
+        _state.update { it.copy(selectedIndex = index) }
+    }
+
+    fun getSelectedItem(): ListItem? {
+        val current = _state.value
+        return current.items.getOrNull(current.selectedIndex)
+    }
+
+    fun getSelectedPlatformTag(): String? {
+        return when (val item = getSelectedItem()) {
+            is ListItem.PlatformItem -> item.platform.tag
+            is ListItem.PortsFolder -> "PORTS"
+            else -> null
+        }
+    }
+
+    fun getPlatformTags(): List<String> =
+        _state.value.items.filterIsInstance<ListItem.PlatformItem>().map { it.platform.tag }
+
+    fun getNavigableItems(): List<ListItem> =
+        _state.value.items
+
+    fun enterReorderMode() {
+        _state.update { current ->
+            val item = current.items.getOrNull(current.selectedIndex) ?: return@update current
+            if (!item.isReorderable()) return@update current
+            current.copy(reorderMode = true, reorderOriginalIndex = current.selectedIndex)
+        }
+    }
+
+    fun isReorderMode(): Boolean = _state.value.reorderMode
+
+    fun reorderMoveUp() {
+        _state.update { current ->
+            if (!current.reorderMode) return@update current
+            val idx = current.selectedIndex
+            val items = current.items.toMutableList()
+            val prevSelectable = (idx - 1 downTo 0).firstOrNull { items[it].isReorderable() }
+                ?: return@update current
+            items[idx] = items[prevSelectable].also { items[prevSelectable] = items[idx] }
+            current.copy(items = items, selectedIndex = prevSelectable)
+        }
+    }
+
+    fun reorderMoveDown() {
+        _state.update { current ->
+            if (!current.reorderMode) return@update current
+            val idx = current.selectedIndex
+            val items = current.items.toMutableList()
+            val nextSelectable = (idx + 1..items.lastIndex).firstOrNull { items[it].isReorderable() }
+                ?: return@update current
+            items[idx] = items[nextSelectable].also { items[nextSelectable] = items[idx] }
+            current.copy(items = items, selectedIndex = nextSelectable)
+        }
+    }
+
+    fun confirmReorder() {
+        val current = _state.value
+        if (!current.reorderMode) return
+        val gameItems = current.items.filterIsInstance<ListItem.GameItem>()
+        val collectionItems = current.items.filterIsInstance<ListItem.CollectionItem>()
+        if (gameItems.isNotEmpty()) {
+            val fghId = currentFghCollectionId
+            if (fghId != null) {
+                val refs = gameItems.mapNotNull { gameItem ->
+                    when (val inner = gameItem.item) {
+                        is dev.piannoli.scorza.model.ListItem.RomItem -> dev.piannoli.scorza.db.LibraryRef.Rom(inner.rom.id)
+                        is dev.piannoli.scorza.model.ListItem.AppItem -> dev.piannoli.scorza.db.LibraryRef.App(inner.app.id)
+                        else -> null
+                    }
+                }
+                scope.launch(Dispatchers.IO) {
+                    collectionsRepository.setMemberOrder(fghId, refs)
+                }
+            }
+        } else if (collectionItems.isNotEmpty()) {
+            val orderedIds = collectionItems.map { it.id }
+            scope.launch(Dispatchers.IO) {
+                collectionsRepository.setCollectionOrder(orderedIds)
+            }
+        } else {
+            val tags = current.items.mapNotNull { it.orderTag() }
+            if (tags.isNotEmpty()) {
+                ensureReservedTag(TAG_TOOLS)
+                ensureReservedTag(TAG_PORTS)
+                scope.launch(Dispatchers.IO) {
+                    romsRepository.setPlatformOrder(tags)
+                }
+            }
+        }
+        _state.update { it.copy(reorderMode = false, reorderOriginalIndex = -1) }
+    }
+
+    private fun ensureReservedTag(tag: String) {
+        romScanner.ensureReservedPlatformTag(tag)
+    }
+
+    fun cancelReorder(showRecentlyPlayed: Boolean = true, showFavorites: Boolean = true, contentMode: ContentMode = ContentMode.PLATFORMS, fghCollectionId: Long? = null, toolsName: String = "Tools", portsName: String = "Ports") {
+        val current = _state.value
+        if (!current.reorderMode) return
+        scan(showRecentlyPlayed, showFavorites, contentMode, fghCollectionId, toolsName, portsName)
+    }
+
+    private fun ListItem.isReorderable(): Boolean = this is ListItem.PlatformItem || this is ListItem.ToolsFolder || this is ListItem.PortsFolder || this is ListItem.CollectionItem || this is ListItem.GameItem
+
+    private fun ListItem.orderTag(): String? = when (this) {
+        is ListItem.PlatformItem -> platform.tag
+        is ListItem.CollectionItem -> name
+        is ListItem.ToolsFolder -> TAG_TOOLS
+        is ListItem.PortsFolder -> TAG_PORTS
+        is ListItem.GameItem -> null
+        else -> null
+    }
+
+    private fun applyCustomOrder(items: List<ListItem>, order: List<String>): List<ListItem> {
+        if (order.isEmpty()) return items
+        val byTag = items.associateBy { it.orderTag() }
+        val ordered = mutableListOf<ListItem>()
+        for (tag in order) {
+            byTag[tag]?.let { ordered.add(it) }
+        }
+        val remaining = items.filter { it.orderTag() !in order }
+        return ordered + remaining
+    }
+
+    fun close() { scope.cancel() }
+
+    companion object {
+        const val TAG_TOOLS = "__TOOLS__"
+        const val TAG_PORTS = "__PORTS__"
+    }
+}

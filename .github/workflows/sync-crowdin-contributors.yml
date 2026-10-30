@@ -38,7 +38,7 @@ jobs:
       - name: Check for changes
         id: diff
         run: |
-          if git diff --quiet -- credits.json app/src/main/java/dev/cannoli/scorza/ui/components/CreditsData.kt; then
+          if git diff --quiet -- credits.json app/src/main/java/dev/piannoli/scorza/ui/components/CreditsData.kt; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"

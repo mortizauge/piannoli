@@ -25,7 +25,7 @@
     <uses-feature android:name="android.hardware.gamepad" android:required="false" />
 
     <application
-        android:name=".CannoliApp"
+        android:name=".PiannoliApp"
         android:banner="@drawable/tv_banner"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -35,7 +35,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
-        android:theme="@style/Theme.Cannoli"
+        android:theme="@style/Theme.Piannoli"
         android:isGame="true"
         android:appCategory="game"
         android:hardwareAccelerated="true"
@@ -46,7 +46,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.Cannoli.Splash"
+            android:theme="@style/Theme.Piannoli.Splash"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode|density|navigation|touchscreen"
             android:launchMode="singleTop"
             android:resizeableActivity="false"
@@ -63,14 +63,14 @@
         <activity
             android:name=".libretro.LibretroActivity"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode|density|navigation|touchscreen"
-            android:theme="@style/Theme.Cannoli"
+            android:theme="@style/Theme.Piannoli"
             android:immersive="true"
             android:resizeableActivity="false"
             android:preferMinimalPostProcessing="true"
             android:windowLayoutInDisplayCutoutMode="shortEdges" />
 
         <provider
-            android:name=".launcher.CannoliFileProvider"
+            android:name=".launcher.PiannoliFileProvider"
             android:authorities="${applicationId}.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
@@ -80,18 +80,9 @@
         </provider>
 
         <service
-            android:name=".server.KitchenService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-
-        <service
             android:name=".romm.download.RommDownloadService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
-
-        <receiver
-            android:name=".server.ApkInstallReceiver"
-            android:exported="false" />
 
     </application>
 

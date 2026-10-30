@@ -1,0 +1,62 @@
+package dev.piannoli.scorza.ui.quickmenu
+
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+class QuickMenuRowsTest {
+
+    @Test fun `romm row only present when paired`() {
+        val withRomm = QuickMenuRow.visibleRows(rommPaired = true)
+        val withoutRomm = QuickMenuRow.visibleRows(rommPaired = false)
+        assertEquals(true, withRomm.contains(QuickMenuRow.ROMM))
+        assertEquals(false, withoutRomm.contains(QuickMenuRow.ROMM))
+    }
+
+    @Test fun `order is romm, scraping, systems, rescan, info`() {
+        assertEquals(
+            listOf(QuickMenuRow.ROMM, QuickMenuRow.SCRAPING, QuickMenuRow.SCRAPE_SYSTEMS, QuickMenuRow.RESCAN, QuickMenuRow.INFO),
+            QuickMenuRow.visibleRows(rommPaired = true)
+        )
+    }
+
+    @Test fun `without romm the rest still present in order`() {
+        assertEquals(
+            listOf(QuickMenuRow.SCRAPING, QuickMenuRow.SCRAPE_SYSTEMS, QuickMenuRow.RESCAN, QuickMenuRow.INFO),
+            QuickMenuRow.visibleRows(rommPaired = false)
+        )
+    }
+
+    @Test fun `errors row only when sync enabled and errors present`() {
+        val withErrors = QuickMenuRow.visibleRows(rommPaired = true, saveSyncEnabled = true, syncErrors = 2)
+        val noErrors = QuickMenuRow.visibleRows(rommPaired = true, saveSyncEnabled = true, syncErrors = 0)
+        val syncDisabled = QuickMenuRow.visibleRows(rommPaired = true, saveSyncEnabled = false, syncErrors = 2)
+        assertEquals(true, withErrors.contains(QuickMenuRow.ERRORS))
+        assertEquals(false, noErrors.contains(QuickMenuRow.ERRORS))
+        assertEquals(false, syncDisabled.contains(QuickMenuRow.ERRORS))
+    }
+
+    @Test fun `errors row follows conflicts`() {
+        val rows = QuickMenuRow.visibleRows(
+            rommPaired = true, saveSyncEnabled = true, pendingConflicts = 1, syncErrors = 1,
+        )
+        assertEquals(rows.indexOf(QuickMenuRow.CONFLICTS) + 1, rows.indexOf(QuickMenuRow.ERRORS))
+    }
+
+    @Test fun `downloads row present immediately after romm when paired`() {
+        val rows = QuickMenuRow.visibleRows(rommPaired = true, downloadCount = 3)
+        assertEquals(true, rows.contains(QuickMenuRow.DOWNLOADS))
+        assertEquals(rows.indexOf(QuickMenuRow.ROMM) + 1, rows.indexOf(QuickMenuRow.DOWNLOADS))
+    }
+
+    @Test fun `downloads row present and first when not paired`() {
+        val rows = QuickMenuRow.visibleRows(rommPaired = false, downloadCount = 3)
+        assertEquals(true, rows.contains(QuickMenuRow.DOWNLOADS))
+        assertEquals(false, rows.contains(QuickMenuRow.ROMM))
+        assertEquals(QuickMenuRow.DOWNLOADS, rows.first())
+    }
+
+    @Test fun `downloads row absent when queue empty`() {
+        val rows = QuickMenuRow.visibleRows(rommPaired = true, downloadCount = 0)
+        assertEquals(false, rows.contains(QuickMenuRow.DOWNLOADS))
+    }
+}

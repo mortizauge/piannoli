@@ -1,12 +1,12 @@
-# Translating Cannoli
+# Translating Piannoli
 
-Cannoli's interface can be translated by anyone, no coding required. All
+Piannoli's interface can be translated by anyone, no coding required. All
 translation happens in a web editor on Crowdin.
 
 ## How to help
 
 1. Create a free account at [Crowdin](https://crowdin.com).
-2. Open the Cannoli project: https://crowdin.com/project/cannoli
+2. Open the Piannoli project: https://crowdin.com/project/cannoli
 3. Pick your language and start translating. If your language is not listed,
    open an issue and we will add it.
 

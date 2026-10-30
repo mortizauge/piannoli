@@ -541,7 +541,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *) {
 }
 
 JNIEXPORT jboolean JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeLoadCore(JNIEnv *env, jobject, jstring corePath) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeLoadCore(JNIEnv *env, jobject, jstring corePath) {
     // Full reset of all bridge state so each core load starts from a clean slate,
     // independent of whether the previous session's deinit ran.
     free(g_memory_descriptors);
@@ -614,7 +614,7 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeLoadCore(JNIEnv *env, jobj
 }
 
 JNIEXPORT void JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeInit(JNIEnv *env, jobject,
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeInit(JNIEnv *env, jobject,
         jstring systemDir, jstring saveDir) {
     const char *sys = env->GetStringUTFChars(systemDir, nullptr);
     const char *sav = env->GetStringUTFChars(saveDir, nullptr);
@@ -637,42 +637,42 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeInit(JNIEnv *env, jobject,
 }
 
 JNIEXPORT void JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeAudioInit(JNIEnv *, jobject, jint sampleRate, jdouble contentFps) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeAudioInit(JNIEnv *, jobject, jint sampleRate, jdouble contentFps) {
     nativeAudioInit(sampleRate, contentFps);
 }
 
 JNIEXPORT void JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeAudioStop(JNIEnv *, jobject) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeAudioStop(JNIEnv *, jobject) {
     nativeAudioStop();
 }
 
 JNIEXPORT void JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeAudioSetMuted(JNIEnv *, jobject, jboolean muted) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeAudioSetMuted(JNIEnv *, jobject, jboolean muted) {
     nativeAudioSetMuted(muted);
 }
 
 JNIEXPORT void JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeAudioSetNonblock(JNIEnv *, jobject, jboolean nonblock) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeAudioSetNonblock(JNIEnv *, jobject, jboolean nonblock) {
     nativeAudioSetNonblock(nonblock);
 }
 
 JNIEXPORT void JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeAudioPause(JNIEnv *, jobject) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeAudioPause(JNIEnv *, jobject) {
     nativeAudioPause();
 }
 
 JNIEXPORT void JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeAudioResume(JNIEnv *, jobject) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeAudioResume(JNIEnv *, jobject) {
     nativeAudioResume();
 }
 
 JNIEXPORT jstring JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeAudioGetDiagnostics(JNIEnv *env, jobject) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeAudioGetDiagnostics(JNIEnv *env, jobject) {
     return env->NewStringUTF(nativeAudioGetDiagnostics());
 }
 
 JNIEXPORT jintArray JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeLoadGame(JNIEnv *env, jobject, jstring romPath) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeLoadGame(JNIEnv *env, jobject, jstring romPath) {
     const char *path = env->GetStringUTFChars(romPath, nullptr);
 
     struct retro_system_info sys_info = {0};
@@ -744,20 +744,20 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeLoadGame(JNIEnv *env, jobj
 extern "C" void ra_process_frame(void);
 
 JNIEXPORT void JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeRun(JNIEnv *, jobject) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeRun(JNIEnv *, jobject) {
     core.run();
     cheat_engine_apply();
     ra_process_frame();
 }
 
 JNIEXPORT void JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeSetInput(JNIEnv *, jobject, jint port, jint mask) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeSetInput(JNIEnv *, jobject, jint port, jint mask) {
     if (port >= 0 && port < MAX_PORTS)
         g_input_state[port] = (int16_t)mask;
 }
 
 JNIEXPORT jobjectArray JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetControllerTypes(JNIEnv *env, jobject, jint port) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeGetControllerTypes(JNIEnv *env, jobject, jint port) {
     jclass strClass = env->FindClass("java/lang/String");
     if (port < 0 || port >= MAX_PORTS || g_controller_types[port].empty()) {
         return env->NewObjectArray(0, strClass, nullptr);
@@ -775,7 +775,7 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetControllerTypes(JNIEnv 
 }
 
 JNIEXPORT void JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeSetAnalog(JNIEnv *, jobject, jint port, jint index, jint x, jint y) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeSetAnalog(JNIEnv *, jobject, jint port, jint index, jint x, jint y) {
     if (port >= 0 && port < MAX_PORTS && index >= 0 && index < 2) {
         g_analog_state[port][index][0] = (int16_t)x;
         g_analog_state[port][index][1] = (int16_t)y;
@@ -783,18 +783,18 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeSetAnalog(JNIEnv *, jobjec
 }
 
 JNIEXPORT void JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeSetControllerPortDevice(JNIEnv *, jobject, jint port, jint device) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeSetControllerPortDevice(JNIEnv *, jobject, jint port, jint device) {
     if (core.set_controller_port_device && port >= 0 && port < MAX_PORTS)
         core.set_controller_port_device((unsigned)port, (unsigned)device);
 }
 
 JNIEXPORT jint JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetRotation(JNIEnv *, jobject) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeGetRotation(JNIEnv *, jobject) {
     return (jint)g_rotation;
 }
 
 JNIEXPORT jint JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetPixelFormat(JNIEnv *, jobject) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeGetPixelFormat(JNIEnv *, jobject) {
     // 0RGB1555 is converted to RGB565 in video_refresh_cb
     unsigned effective = (g_pixel_format == RETRO_PIXEL_FORMAT_0RGB1555)
         ? RETRO_PIXEL_FORMAT_RGB565 : g_pixel_format;
@@ -802,25 +802,25 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetPixelFormat(JNIEnv *, j
 }
 
 JNIEXPORT jint JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetFrameWidth(JNIEnv *, jobject) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeGetFrameWidth(JNIEnv *, jobject) {
     std::lock_guard<std::mutex> lock(g_frame_mutex);
     return (jint)g_frame_width;
 }
 
 JNIEXPORT jint JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetFrameHeight(JNIEnv *, jobject) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeGetFrameHeight(JNIEnv *, jobject) {
     std::lock_guard<std::mutex> lock(g_frame_mutex);
     return (jint)g_frame_height;
 }
 
 JNIEXPORT jboolean JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeHasNewFrame(JNIEnv *, jobject) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeHasNewFrame(JNIEnv *, jobject) {
     std::lock_guard<std::mutex> lock(g_frame_mutex);
     return g_frame_ready ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT void JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeCopyFrame(JNIEnv *env, jobject, jobject buffer) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeCopyFrame(JNIEnv *env, jobject, jobject buffer) {
     std::lock_guard<std::mutex> lock(g_frame_mutex);
     if (!g_frame_buf || !g_frame_ready) return;
     void *dst = env->GetDirectBufferAddress(buffer);
@@ -832,7 +832,7 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeCopyFrame(JNIEnv *env, job
 }
 
 JNIEXPORT void JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeCopyLastFrame(JNIEnv *env, jobject, jobject buffer) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeCopyLastFrame(JNIEnv *env, jobject, jobject buffer) {
     std::lock_guard<std::mutex> lock(g_frame_mutex);
     if (!g_frame_buf) return;
     void *dst = env->GetDirectBufferAddress(buffer);
@@ -843,7 +843,7 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeCopyLastFrame(JNIEnv *env,
 }
 
 JNIEXPORT jboolean JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeSaveState(JNIEnv *env, jobject, jstring path) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeSaveState(JNIEnv *env, jobject, jstring path) {
     size_t size = core.serialize_size();
     if (size == 0) return JNI_FALSE;
 
@@ -925,7 +925,7 @@ static bool rastate_extract_mem(const void *src, size_t src_size, const void **o
 }
 
 JNIEXPORT jboolean JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeLoadState(JNIEnv *env, jobject, jstring path) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeLoadState(JNIEnv *env, jobject, jstring path) {
     const char *p = env->GetStringUTFChars(path, nullptr);
     FILE *f = fopen(p, "rb");
     env->ReleaseStringUTFChars(path, p);
@@ -965,7 +965,7 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeLoadState(JNIEnv *env, job
 }
 
 JNIEXPORT jboolean JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeSaveSRAM(JNIEnv *env, jobject, jstring path) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeSaveSRAM(JNIEnv *env, jobject, jstring path) {
     void *data = core.get_memory_data(RETRO_MEMORY_SAVE_RAM);
     size_t size = core.get_memory_size(RETRO_MEMORY_SAVE_RAM);
     if (!data || size == 0) return JNI_FALSE;
@@ -981,7 +981,7 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeSaveSRAM(JNIEnv *env, jobj
 }
 
 JNIEXPORT jboolean JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeLoadSRAM(JNIEnv *env, jobject, jstring path) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeLoadSRAM(JNIEnv *env, jobject, jstring path) {
     void *data = core.get_memory_data(RETRO_MEMORY_SAVE_RAM);
     size_t size = core.get_memory_size(RETRO_MEMORY_SAVE_RAM);
     if (!data || size == 0) return JNI_FALSE;
@@ -997,7 +997,7 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeLoadSRAM(JNIEnv *env, jobj
 }
 
 JNIEXPORT void JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeApplyEmuCheats(JNIEnv *env, jobject, jobjectArray codes) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeApplyEmuCheats(JNIEnv *env, jobject, jobjectArray codes) {
     if (!core.cheat_reset || !core.cheat_set) return;
     core.cheat_reset();
     jsize n = env->GetArrayLength(codes);
@@ -1013,7 +1013,7 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeApplyEmuCheats(JNIEnv *env
 }
 
 JNIEXPORT void JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeSetRetroCheats(JNIEnv *env, jobject, jlongArray table) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeSetRetroCheats(JNIEnv *env, jobject, jlongArray table) {
     if (!table) {
         cheat_engine_clear();
         return;
@@ -1029,17 +1029,17 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeSetRetroCheats(JNIEnv *env
 }
 
 JNIEXPORT jlong JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeCheatMemorySize(JNIEnv *, jobject) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeCheatMemorySize(JNIEnv *, jobject) {
     return (jlong)cheat_engine_total_memory();
 }
 
 JNIEXPORT void JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeUnloadGame(JNIEnv *, jobject) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeUnloadGame(JNIEnv *, jobject) {
     core.unload_game();
 }
 
 JNIEXPORT void JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeDeinit(JNIEnv *env, jobject) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeDeinit(JNIEnv *env, jobject) {
     core.deinit();
     if (core.handle) {
         dlclose(core.handle);
@@ -1061,12 +1061,12 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeDeinit(JNIEnv *env, jobjec
 }
 
 JNIEXPORT void JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeReset(JNIEnv *, jobject) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeReset(JNIEnv *, jobject) {
     if (core.reset) core.reset();
 }
 
 JNIEXPORT jobjectArray JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetCoreOptions(JNIEnv *env, jobject) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeGetCoreOptions(JNIEnv *env, jobject) {
     jclass strClass = env->FindClass("java/lang/String");
     int count = (int)g_core_options.size();
     jobjectArray result = env->NewObjectArray(count * 7, strClass, nullptr);
@@ -1093,7 +1093,7 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetCoreOptions(JNIEnv *env
 }
 
 JNIEXPORT jobjectArray JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetCoreCategories(JNIEnv *env, jobject) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeGetCoreCategories(JNIEnv *env, jobject) {
     jclass strClass = env->FindClass("java/lang/String");
     int count = (int)g_core_categories.size();
     jobjectArray result = env->NewObjectArray(count * 3, strClass, nullptr);
@@ -1106,7 +1106,7 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetCoreCategories(JNIEnv *
 }
 
 JNIEXPORT void JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeSetCoreOption(JNIEnv *env, jobject, jstring key, jstring value) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeSetCoreOption(JNIEnv *env, jobject, jstring key, jstring value) {
     const char *k = env->GetStringUTFChars(key, nullptr);
     const char *v = env->GetStringUTFChars(value, nullptr);
     std::string k_str(k);
@@ -1148,7 +1148,7 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeSetCoreOption(JNIEnv *env,
 }
 
 JNIEXPORT jobjectArray JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetSystemInfo(JNIEnv *env, jobject) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeGetSystemInfo(JNIEnv *env, jobject) {
     struct retro_system_info info = {0};
     core.get_system_info(&info);
 
@@ -1159,7 +1159,7 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetSystemInfo(JNIEnv *env,
 }
 
 JNIEXPORT jfloat JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetAspectRatio(JNIEnv *, jobject) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeGetAspectRatio(JNIEnv *, jobject) {
     struct retro_system_av_info av_info;
     core.get_system_av_info(&av_info);
     float ar = av_info.geometry.aspect_ratio;
@@ -1170,24 +1170,24 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetAspectRatio(JNIEnv *, j
 }
 
 JNIEXPORT jboolean JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeHasDiskControl(JNIEnv *, jobject) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeHasDiskControl(JNIEnv *, jobject) {
     return g_has_disk_control ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT jint JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetDiskCount(JNIEnv *, jobject) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeGetDiskCount(JNIEnv *, jobject) {
     if (!g_has_disk_control || !g_disk_control.get_num_images) return 0;
     return (jint)g_disk_control.get_num_images();
 }
 
 JNIEXPORT jint JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetDiskIndex(JNIEnv *, jobject) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeGetDiskIndex(JNIEnv *, jobject) {
     if (!g_has_disk_control || !g_disk_control.get_image_index) return 0;
     return (jint)g_disk_control.get_image_index();
 }
 
 JNIEXPORT jboolean JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeSetDiskIndex(JNIEnv *, jobject, jint index) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeSetDiskIndex(JNIEnv *, jobject, jint index) {
     if (!g_has_disk_control || !g_disk_control.set_eject_state || !g_disk_control.set_image_index) return JNI_FALSE;
     g_disk_control.set_eject_state(true);
     bool ok = g_disk_control.set_image_index((unsigned)index);
@@ -1196,7 +1196,7 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeSetDiskIndex(JNIEnv *, job
 }
 
 JNIEXPORT jstring JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetDiskLabel(JNIEnv *env, jobject, jint index) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeGetDiskLabel(JNIEnv *env, jobject, jint index) {
     if (g_get_image_label) {
         const char *label = g_get_image_label((unsigned)index);
         if (label && label[0]) return env->NewStringUTF(label);
@@ -1237,7 +1237,7 @@ extern "C" size_t bridge_get_memory_size(unsigned id) {
 }
 
 extern "C" JNIEXPORT jobjectArray JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetMemoryDescriptors(JNIEnv *env, jobject) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeGetMemoryDescriptors(JNIEnv *env, jobject) {
     jclass strClass = env->FindClass("java/lang/String");
     jobjectArray result = env->NewObjectArray((jsize)g_memory_descriptor_count, strClass, nullptr);
     for (unsigned i = 0; i < g_memory_descriptor_count; i++) {
@@ -1256,7 +1256,7 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetMemoryDescriptors(JNIEn
 }
 
 extern "C" JNIEXPORT jobjectArray JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetCoreLogs(JNIEnv *env, jobject) {
+Java_dev_piannoli_scorza_libretro_LibretroRunner_nativeGetCoreLogs(JNIEnv *env, jobject) {
     std::lock_guard<std::mutex> lock(g_log_ring_mutex);
     jclass strClass = env->FindClass("java/lang/String");
     jobjectArray result = env->NewObjectArray(g_log_ring_count, strClass, nullptr);

@@ -66,9 +66,9 @@ jobs:
           VERSION_CODE=$(( ${MAJOR:-0} * 1000000 + ${MINOR:-0} * 10000 + ${PATCH:-0} * 100 + PRE ))
 
           APK=$(gh release view "$TAG" --json assets \
-            -q '.assets[] | select(.name | startswith("cannoli-") and endswith(".apk")) | .name')
+            -q '.assets[] | select(.name | startswith("piannoli-") and endswith(".apk")) | .name')
           if [[ -z "$APK" ]]; then
-            echo "::error::No cannoli-*.apk asset found in release $TAG"
+            echo "::error::No piannoli-*.apk asset found in release $TAG"
             exit 1
           fi
 

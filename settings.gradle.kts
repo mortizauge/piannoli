@@ -22,8 +22,8 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Cannoli"
+rootProject.name = "Piannoli"
 include(":app")
-include(":cannoli-ui")
-include(":cannoli-igm")
-include(":cannoli-core")
+include(":piannoli-ui")
+include(":piannoli-igm")
+include(":piannoli-core")

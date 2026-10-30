@@ -1,6 +1,7 @@
 {
   "inspiration": [
-    {"name":  "Hallie", "detail":  "My beautiful wife who makes me better in every way"},
+    {"name":  "Hallie", "detail":  "Brandon's beautiful wife who makes him better in every way"},
+    {"name":  "Brandon Kowalski", "detail":  "Cannoli Developer"},
     { "name": "Shaun Inman", "detail": "MinUI" },
     {"name":  "Abraham McCampbell", "detail":  "Cannoli Logo"}
   ],
@@ -36,7 +37,7 @@
   ],
   "shaders": [
     { "name": "EasyMode", "shader": "crt-aperture", "license": "GPL" },
-    { "name": "Cannoli (based on EasyMode)", "shader": "crt-cannoli", "license": "GPL" },
+    { "name": "Piannoli (based on EasyMode; adapted from Cannoli)", "shader": "crt-piannoli", "license": "GPL" },
     { "name": "EasyMode", "shader": "crt-easymode", "license": "GPL" },
     { "name": "cgwg / Themaister / DOLLS", "shader": "crt-geom", "license": "GPLv2" },
     { "name": "Timothy Lottes / hunterk", "shader": "crt-lottes-fast", "license": "Public domain" },

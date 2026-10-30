@@ -3,7 +3,7 @@
 # Targets: 2000 collections, 11200 ROMs, deep nesting
 # Run via: adb shell sh /sdcard/generate_test_data.sh
 
-ROOT="/storage/689D-DA19/CannoliTest"
+ROOT="/storage/689D-DA19/PiannoliTest"
 ROMS="$ROOT/Roms"
 COLLECTIONS="$ROOT/Collections"
 CONFIG="$ROOT/Config"

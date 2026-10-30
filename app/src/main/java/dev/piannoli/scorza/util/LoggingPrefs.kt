@@ -1,0 +1,33 @@
+package dev.piannoli.scorza.util
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+
+object LoggingPrefs {
+    enum class Category { ROM_SCAN, INPUT, SESSION, STORAGE, ROMM }
+
+    var romScan: Boolean by mutableStateOf(false)
+    var input: Boolean by mutableStateOf(false)
+    var session: Boolean by mutableStateOf(false)
+    var storage: Boolean by mutableStateOf(false)
+    var romm: Boolean by mutableStateOf(false)
+
+    fun isEnabled(category: Category): Boolean = when (category) {
+        Category.ROM_SCAN -> romScan
+        Category.INPUT -> input
+        Category.SESSION -> session
+        Category.STORAGE -> storage
+        Category.ROMM -> romm
+    }
+
+    fun set(category: Category, enabled: Boolean) {
+        when (category) {
+            Category.ROM_SCAN -> romScan = enabled
+            Category.INPUT -> input = enabled
+            Category.SESSION -> session = enabled
+            Category.STORAGE -> storage = enabled
+            Category.ROMM -> romm = enabled
+        }
+    }
+}

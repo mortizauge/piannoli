@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Cannoli" parent="android:Theme.Material.NoActionBar">
+    <style name="Theme.Piannoli" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowFullscreen">true</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowBackground">@android:color/black</item>
     </style>
 
-    <style name="Theme.Cannoli.Splash" parent="Theme.SplashScreen">
+    <style name="Theme.Piannoli.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@android:color/black</item>
         <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_splash</item>
-        <item name="postSplashScreenTheme">@style/Theme.Cannoli</item>
+        <item name="postSplashScreenTheme">@style/Theme.Piannoli</item>
     </style>
 </resources>

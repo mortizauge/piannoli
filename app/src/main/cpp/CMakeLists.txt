@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(cannoli_native)
+project(piannoli_native)
 
 find_library(log-lib log)
 find_package(oboe REQUIRED CONFIG)
@@ -9,7 +9,7 @@ add_library(speex_resampler STATIC
     third_party/speexdsp/libspeexdsp/resample.c)
 target_compile_definitions(speex_resampler PUBLIC
     OUTSIDE_SPEEX
-    RANDOM_PREFIX=cannoli)
+    RANDOM_PREFIX=piannoli)
 target_compile_definitions(speex_resampler PRIVATE
     FLOATING_POINT
     EXPORT=)

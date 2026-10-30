@@ -3,8 +3,6 @@ version: '3'
 vars:
   BUILDBOT: https://buildbot.libretro.com/nightly/android/latest
   CORES_DIR: app/src/main/jniLibs
-  KITCHEN_SRC: ../cannoli-kitchen
-  KITCHEN_DEST: app/src/main/assets/kitchen
 
 tasks:
   cores:
@@ -62,12 +60,3 @@ tasks:
     cmds:
       - python3 scripts/sync_crowdin_contributors.py
       - python3 scripts/sync_credits.py
-
-  kitchen:
-    desc: Build cannoli-kitchen and copy dist into app assets
-    dir: '{{.KITCHEN_SRC}}'
-    cmds:
-      # build-only skips vue-tsc, which cannot run under bun (Volar .vue resolution breaks); run `bun run type-check` under Node for the type gate
-      - bun run build-only
-      - rm -rf {{.USER_WORKING_DIR}}/{{.KITCHEN_DEST}}/*
-      - cp -R dist/. {{.USER_WORKING_DIR}}/{{.KITCHEN_DEST}}/

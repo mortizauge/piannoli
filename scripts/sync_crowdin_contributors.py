@@ -18,7 +18,7 @@ import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 API = "https://api.crowdin.com/api/v2"
-CATALOG = os.path.join(ROOT, "app/src/main/java/dev/cannoli/scorza/i18n/LanguageCatalog.kt")
+CATALOG = os.path.join(ROOT, "app/src/main/java/dev/piannoli/scorza/i18n/LanguageCatalog.kt")
 CREDITS = os.path.join(ROOT, "credits.json")
 
 # Crowdin credits pre-translated strings to whoever applied them. Lowercase handles, matched

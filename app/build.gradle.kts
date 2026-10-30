@@ -33,7 +33,7 @@ fun screenScraperProperty(name: String): String =
         .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
 
 android {
-    namespace = "dev.cannoli.scorza"
+    namespace = "dev.piannoli.scorza"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -131,8 +131,8 @@ android {
 }
 
 dependencies {
-    implementation(project(":cannoli-igm"))
-    implementation(project(":cannoli-core"))
+    implementation(project(":piannoli-igm"))
+    implementation(project(":piannoli-core"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -151,8 +151,6 @@ dependencies {
     implementation("org.tukaani:xz:1.10")
     implementation("io.legere:pdfiumandroid:1.0.35")
     implementation("com.google.oboe:oboe:1.9.3")
-    implementation(libs.nanohttpd)
-    implementation(libs.commons.fileupload.core)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
     implementation(libs.coil.compose)

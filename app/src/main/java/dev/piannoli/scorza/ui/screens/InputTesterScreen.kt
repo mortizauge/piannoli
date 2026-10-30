@@ -1,0 +1,207 @@
+package dev.piannoli.scorza.ui.screens
+
+import dev.piannoli.ui.components.screenBackground
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import dev.piannoli.scorza.R
+import dev.piannoli.scorza.ui.viewmodel.EventLogEntry
+import dev.piannoli.scorza.ui.viewmodel.InputTesterViewModel
+import dev.piannoli.ui.ButtonStyle
+import dev.piannoli.ui.components.ControllerDiagram
+import dev.piannoli.ui.components.DiagramInput
+import dev.piannoli.ui.components.FaceLabels
+import dev.piannoli.ui.theme.ErrorHighlight
+import dev.piannoli.ui.theme.LocalPiannoliColors
+import dev.piannoli.ui.theme.Radius
+import dev.piannoli.ui.theme.Spacing
+
+@Composable
+fun InputTesterScreen(
+    viewModel: InputTesterViewModel,
+    buttonStyle: ButtonStyle,
+    onExit: () -> Unit,
+) {
+    val uiState by viewModel.state.collectAsState()
+    val colors = LocalPiannoliColors.current
+
+    DisposableEffect(Unit) {
+        onDispose { viewModel.reset() }
+    }
+
+    LaunchedEffect(uiState.exitRequested) {
+        if (uiState.exitRequested) onExit()
+    }
+
+    val faceLabels = remember(buttonStyle.labelSet) {
+        val ls = buttonStyle.labelSet
+        FaceLabels(top = ls.north, bottom = ls.south, left = ls.west, right = ls.east)
+    }
+
+    val activePortState = uiState.portStates[uiState.activePort]
+    val diagramInput = DiagramInput(
+        pressed = activePortState?.pressedButtons ?: emptySet(),
+        leftStick = activePortState?.leftStick ?: androidx.compose.ui.geometry.Offset.Zero,
+        rightStick = activePortState?.rightStick ?: androidx.compose.ui.geometry.Offset.Zero,
+        leftTrigger = activePortState?.leftTrigger ?: 0f,
+        rightTrigger = activePortState?.rightTrigger ?: 0f,
+    )
+
+    val noneText = stringResource(R.string.input_tester_none)
+    val deviceInfo = uiState.lastEventDevice
+        ?: uiState.connectedPorts.firstOrNull { it.port == uiState.activePort }
+        ?: uiState.connectedPorts.firstOrNull()
+    val deviceLabel = deviceInfo?.let {
+        stringResource(R.string.input_tester_device_format, it.port + 1, it.name, it.deviceId)
+    } ?: noneText
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .screenBackground()
+            .padding(20.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Header(
+                activeDevice = deviceLabel,
+                highlight = colors.highlight,
+                text = colors.text,
+                highlightText = colors.highlightText,
+            )
+            Spacer(Modifier.height(Spacing.Sm))
+            if (uiState.eventLog.any { it.unbound }) {
+                Text(
+                    text = stringResource(R.string.input_tester_unbound),
+                    color = ErrorHighlight,
+                    fontSize = 14.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(Spacing.Sm))
+            }
+            Row(modifier = Modifier.fillMaxWidth().weight(1f, fill = true)) {
+                Box(modifier = Modifier.fillMaxHeight().weight(1f, fill = true)) {
+                    ControllerDiagram(
+                        input = diagramInput,
+                        faceLabels = faceLabels,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                if (uiState.eventLog.isNotEmpty()) {
+                    Spacer(Modifier.width(12.dp))
+                    EventLog(
+                        entries = uiState.eventLog,
+                        textColor = colors.text,
+                    )
+                }
+            }
+            Spacer(Modifier.height(Spacing.Sm))
+            Text(
+                text = stringResource(R.string.input_tester_exit_hint),
+                color = colors.text.copy(alpha = 0.6f),
+                fontSize = 12.sp,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (uiState.axisDumpEnabled) {
+                AxisDumpPanel(
+                    axisValues = activePortState?.axisValues ?: emptyMap(),
+                    textColor = colors.text,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AxisDumpPanel(axisValues: Map<Int, Float>, textColor: Color) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp),
+    ) {
+        axisValues.entries.sortedBy { it.key }.forEach { (axis, value) ->
+            Text(
+                text = "$axis=${"%.2f".format(value)}",
+                color = textColor.copy(alpha = 0.85f),
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier.padding(end = 10.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun Header(
+    activeDevice: String,
+    highlight: Color,
+    text: Color,
+    highlightText: Color,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .clip(Radius.Pill)
+                .background(highlight)
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Text(text = activeDevice, color = highlightText, fontSize = 14.sp)
+        }
+    }
+}
+
+@Composable
+private fun EventLog(
+    entries: List<EventLogEntry>,
+    textColor: Color,
+) {
+    Box(
+        modifier = Modifier
+            .width(160.dp)
+            .clip(RoundedCornerShape(Radius.Md))
+            .background(Color.White.copy(alpha = 0.04f))
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+    ) {
+        Column {
+            entries.forEach { e ->
+                val color = if (e.unbound || e.resolvedButton == null) ErrorHighlight else textColor
+                val arrow = if (e.isDown) "↓" else "↑"
+                Text(
+                    text = "$arrow ${e.keyName} (${e.keyCode})",
+                    color = color,
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            }
+        }
+    }
+}

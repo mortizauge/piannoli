@@ -7,7 +7,7 @@
 #define OUTSIDE_SPEEX
 #endif
 #ifndef RANDOM_PREFIX
-#define RANDOM_PREFIX cannoli
+#define RANDOM_PREFIX piannoli
 #endif
 #include "speex_resampler.h"
 
