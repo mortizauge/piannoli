@@ -3,6 +3,7 @@ package dev.cannoli.scorza.input
 import android.view.KeyEvent
 
 interface ScreenInputHandler {
+    fun onCaptureButton(button: CanonicalButton, mapping: DeviceMapping): Boolean = false
     fun onUp() {}
     fun onDown() {}
     fun onLeft() {}
