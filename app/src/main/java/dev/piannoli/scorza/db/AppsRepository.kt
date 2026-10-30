@@ -13,19 +13,19 @@ class AppsRepository(
 ) {
     fun all(type: AppType? = null): List<App> = if (type != null) {
         db.queryAll(
-            "SELECT $COLUMNS FROM apps WHERE type = ? ORDER BY $ORDER",
+            "SELECT $COLUMNS FROM apps WHERE type = ? AND is_hidden = 0 ORDER BY $ORDER",
             type.name,
             mapper = ::rowToApp,
         )
     } else {
         db.queryAll(
-            "SELECT $COLUMNS FROM apps ORDER BY type, $ORDER",
+            "SELECT $COLUMNS FROM apps WHERE is_hidden = 0 ORDER BY type, $ORDER",
             mapper = ::rowToApp,
         )
     }
 
     fun byId(appId: Long): App? = db.queryOne(
-        "SELECT $COLUMNS FROM apps WHERE id = ?", appId, mapper = ::rowToApp,
+        "SELECT $COLUMNS FROM apps WHERE id = ? AND is_hidden = 0", appId, mapper = ::rowToApp,
     )
 
     fun byPackage(type: AppType, packageName: String): App? = db.queryOne(
@@ -34,7 +34,7 @@ class AppsRepository(
     )
 
     fun count(type: AppType): Int = db.queryOne(
-        "SELECT COUNT(*) FROM apps WHERE type = ?", type.name,
+        "SELECT COUNT(*) FROM apps WHERE type = ? AND is_hidden = 0", type.name,
     ) { it.getInt(0) } ?: 0
 
     fun upsert(type: AppType, displayName: String, packageName: String): Long {
@@ -53,6 +53,21 @@ class AppsRepository(
     )
 
     fun delete(appId: Long) = db.execute("DELETE FROM apps WHERE id = ?", appId)
+
+    fun hiddenApps(): List<App> = db.queryAll(
+        "SELECT $COLUMNS FROM apps WHERE is_hidden = 1 AND type = 'PORT' ORDER BY display_name COLLATE NOCASE",
+        mapper = ::rowToApp,
+    )
+
+    fun hiddenCount(): Int = db.queryOne(
+        "SELECT COUNT(*) FROM apps WHERE is_hidden = 1 AND type = 'PORT'",
+    ) { it.getInt(0) } ?: 0
+
+    fun setHidden(appId: Long, hidden: Boolean) {
+        val type = db.queryOne("SELECT type FROM apps WHERE id = ?", appId) { it.getText(0) }
+        require(type == AppType.PORT.name) { "Only ports can be hidden as games" }
+        db.execute("UPDATE apps SET is_hidden = ? WHERE id = ?", hidden, appId)
+    }
 
     fun setToolsPinned(appIds: List<Long>, pinned: Boolean): Boolean = db.transaction { conn ->
         val tools = conn.queryAll("SELECT id, pin_order FROM apps WHERE type = 'TOOL'") {
@@ -89,11 +104,12 @@ class AppsRepository(
             lastPlayedAt = if (stmt.isNull(4)) null else stmt.getLong(4),
             artFile = artwork.findByName(type.artTag, sanitizeFsName(displayName)),
             isPinned = !stmt.isNull(5),
+            isHidden = stmt.getLong(6) != 0L,
         )
     }
 
     private companion object {
-        const val COLUMNS = "id, type, display_name, package_name, last_played_at, pin_order"
+        const val COLUMNS = "id, type, display_name, package_name, last_played_at, pin_order, is_hidden"
         const val ORDER = "(pin_order IS NULL), pin_order DESC, sort_order, display_name COLLATE NOCASE"
     }
 }

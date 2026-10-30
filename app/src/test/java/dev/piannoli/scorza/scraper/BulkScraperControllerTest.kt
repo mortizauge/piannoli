@@ -66,6 +66,7 @@ class BulkScraperControllerTest {
         every { settings.steamGridApiKey } returns "key"
         every { settings.scrapeFailBehavior } returns ScrapeFailBehavior.DEFAULT
         every { roms.platformCounts() } returns linkedMapOf("SNES" to 1, "NES" to 1)
+        every { roms.visiblePlatformCounts() } returns linkedMapOf("SNES" to 1, "NES" to 1)
         every { platforms.getDisplayName(any()) } answers { firstArg() }
         every { roms.romsForScraping("SNES", any()) } returns listOf(game)
         every { roms.romsForScraping("NES", any()) } returns emptyList()

@@ -49,6 +49,7 @@ class ConflictsApplyingStateTest {
     private val games = mockk<dev.piannoli.scorza.ui.viewmodel.GameListViewModel>(relaxed = true)
     private val activityActions = mockk<ActivityActions>(relaxed = true)
     private val apps = mockk<dev.piannoli.scorza.db.AppsRepository>(relaxed = true)
+    private val roms = mockk<dev.piannoli.scorza.db.RomsRepository>(relaxed = true)
 
     // Never advanced: the apply coroutine stays queued so the assertions see only what Start did
     // synchronously, which is the part the user perceives.
@@ -73,7 +74,7 @@ class ConflictsApplyingStateTest {
             settingsViewModel = mockk(relaxed = true),
             gameListViewModel = games,
             systemListViewModel = systems,
-            romsRepository = mockk(relaxed = true),
+            romsRepository = roms,
             gameOverrideStore = mockk(relaxed = true),
             appsRepository = apps,
             artworkLookup = mockk(relaxed = true),
@@ -188,6 +189,16 @@ class ConflictsApplyingStateTest {
         val choose = context.getString(dev.piannoli.scorza.R.string.choose_artwork)
         assertEquals("Scrape Game", scrape)
         assertEquals(choose, options[options.indexOf(scrape) + 1])
+        assertTrue(MENU_HIDE_GAME in options)
+        assertEquals(
+            listOf(MENU_UNHIDE_GAME),
+            handler.buildGameContextOptions(
+                dev.piannoli.scorza.model.ListItem.RomItem(rom),
+                dev.piannoli.scorza.ui.viewmodel.GameListViewModel.State(
+                    platformTag = "hidden_games", isHiddenGames = true,
+                ),
+            ),
+        )
 
         val folderOptions = handler.buildGameContextOptions(
             dev.piannoli.scorza.model.ListItem.SubfolderItem("Adventure", "RPGs/Adventure"),
@@ -195,6 +206,52 @@ class ConflictsApplyingStateTest {
         )
         assertEquals(choose, folderOptions.first())
         assertTrue(MENU_RENAME in folderOptions)
+        val port = dev.piannoli.scorza.model.App(4, dev.piannoli.scorza.model.AppType.PORT, "Game", "dev.game")
+        assertTrue(MENU_HIDE_GAME in handler.buildGameContextOptions(
+            dev.piannoli.scorza.model.ListItem.AppItem(port),
+            dev.piannoli.scorza.ui.viewmodel.GameListViewModel.State(platformTag = "ports"),
+        ))
+        val tool = port.copy(type = dev.piannoli.scorza.model.AppType.TOOL)
+        assertFalse(MENU_HIDE_GAME in handler.buildGameContextOptions(
+            dev.piannoli.scorza.model.ListItem.AppItem(tool),
+            dev.piannoli.scorza.ui.viewmodel.GameListViewModel.State(platformTag = "tools"),
+        ))
+    }
+
+    @Test fun `hide and restore context actions update persistent local game state`() = runTest(dispatcher) {
+        Dispatchers.setMain(dispatcher)
+        try {
+            val rom = dev.piannoli.scorza.model.Rom(
+                21, java.io.File("Roms/SNES/Hidden.sfc"), "SNES", "Hidden",
+            )
+            val item = dev.piannoli.scorza.model.ListItem.RomItem(rom)
+            every { games.getSelectedItem() } returns item
+            every { games.state } returns kotlinx.coroutines.flow.MutableStateFlow(
+                dev.piannoli.scorza.ui.viewmodel.GameListViewModel.State(platformTag = "SNES"),
+            )
+            nav.push(LauncherScreen.GameList)
+            nav.dialogState.value = DialogState.ContextMenu("Hidden", options = listOf(MENU_HIDE_GAME))
+
+            handler.onConfirm()
+            runCurrent()
+
+            verify(exactly = 1) { roms.setHidden(21, true) }
+            verify(exactly = 1) { games.reload(any()) }
+            verify(exactly = 1) { launcherActions.rescanSystemList() }
+
+            every { games.state } returns kotlinx.coroutines.flow.MutableStateFlow(
+                dev.piannoli.scorza.ui.viewmodel.GameListViewModel.State(
+                    platformTag = "hidden_games", isHiddenGames = true,
+                ),
+            )
+            nav.dialogState.value = DialogState.ContextMenu("Hidden", options = listOf(MENU_UNHIDE_GAME))
+            handler.onConfirm()
+            runCurrent()
+
+            verify(exactly = 1) { roms.setHidden(21, false) }
+        } finally {
+            Dispatchers.resetMain()
+        }
     }
 
     @Test fun `tool pin action reloads list without favoriting and reports pin limit`() = runTest(dispatcher) {

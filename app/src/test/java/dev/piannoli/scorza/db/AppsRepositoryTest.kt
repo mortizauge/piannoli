@@ -136,4 +136,38 @@ class AppsRepositoryTest {
         assertTrue(repo.setToolsPinned(listOf(ids.last()), true))
         assertEquals(ids.last(), repo.all(AppType.TOOL).first().id)
     }
+
+    @Test fun `hidden ports disappear but retain Favorites and collection membership across restart`() {
+        val collections = CollectionsRepository(database)
+        val favorites = collections.create("Favorites", dev.piannoli.scorza.model.CollectionType.FAVORITES)
+        val shelf = collections.create("Shelf")
+        val port = repo.upsert(AppType.PORT, "Game", "dev.game")
+        collections.addMember(favorites, LibraryRef.App(port))
+        collections.addMember(shelf, LibraryRef.App(port))
+
+        repo.setHidden(port, true)
+        assertTrue(repo.all(AppType.PORT).isEmpty())
+        assertNull(repo.byId(port))
+        assertEquals(0, repo.count(AppType.PORT))
+        assertTrue(collections.isMember(favorites, LibraryRef.App(port)))
+        assertTrue(collections.isMember(shelf, LibraryRef.App(port)))
+        assertTrue(collections.appIdsIn(favorites).isEmpty())
+        assertEquals(1, repo.hiddenApps().size)
+
+        database.close()
+        database = PiannoliDatabase(paths)
+        repo = AppsRepository(database, ArtworkLookup(paths))
+        val restoredCollections = CollectionsRepository(database)
+        assertEquals(1, repo.hiddenApps().size)
+        assertTrue(restoredCollections.isMember(favorites, LibraryRef.App(port)))
+        repo.setHidden(port, false)
+        assertEquals(listOf(port), repo.all(AppType.PORT).map { it.id })
+        assertEquals(listOf(port), restoredCollections.appIdsIn(favorites))
+    }
+
+    @Test fun `only ports can be hidden as games`() {
+        val tool = repo.upsert(AppType.TOOL, "Settings", "dev.settings")
+        assertThrows(IllegalArgumentException::class.java) { repo.setHidden(tool, true) }
+        assertEquals(listOf(tool), repo.all(AppType.TOOL).map { it.id })
+    }
 }

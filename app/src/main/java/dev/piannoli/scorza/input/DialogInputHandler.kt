@@ -113,6 +113,22 @@ class DialogInputHandler @Inject constructor(
         }
     }
 
+    private fun setGameHidden(item: ListItem, hidden: Boolean) {
+        val rom = (item as? ListItem.RomItem)?.rom
+        val app = (item as? ListItem.AppItem)?.app
+        if (rom == null && app?.type != AppType.PORT) return
+        pendingContextReturn = null
+        nav.dialogState.value = DialogState.None
+        ioScope.launch {
+            if (rom != null) romsRepository.setHidden(rom.id, hidden)
+            else if (app != null) appsRepository.setHidden(app.id, hidden)
+            withContext(Dispatchers.Main) {
+                gameListViewModel.reload()
+                launcherActions.rescanSystemList()
+            }
+        }
+    }
+
     override fun cancelSelectHold() {
         selectHoldHandler.removeCallbacks(selectHoldRunnable)
     }
@@ -1618,6 +1634,8 @@ class DialogInputHandler @Inject constructor(
                 }
                 return
             }
+            selected == MENU_HIDE_GAME -> setGameHidden(item, hidden = true)
+            selected == MENU_UNHIDE_GAME -> setGameHidden(item, hidden = false)
             selected == MENU_RENAME -> {
                 if (collection != null) {
                     nav.dialogState.value = DialogState.CollectionRenameInput(
@@ -2025,6 +2043,7 @@ class DialogInputHandler @Inject constructor(
     }
 
     fun buildGameContextOptions(item: ListItem, glState: GameListViewModel.State): List<String> {
+        if (glState.isHiddenGames) return listOf(MENU_UNHIDE_GAME)
         if (glState.isCollectionsList || item is ListItem.ChildCollectionItem) return listOf(MENU_RENAME, MENU_CHILD_COLLECTIONS, MENU_DELETE)
         if (item is ListItem.SubfolderItem) return buildList {
             add(context.getString(dev.piannoli.scorza.R.string.choose_artwork))
@@ -2057,6 +2076,7 @@ class DialogInputHandler @Inject constructor(
                     add(MENU_RENAME)
                 }
                 if (app?.artFile != null) add(MENU_DELETE_ART)
+                if (app?.type == AppType.PORT) add(MENU_HIDE_GAME)
                 add(MENU_REMOVE)
             } else {
                 if (rom != null) {
@@ -2084,6 +2104,10 @@ class DialogInputHandler @Inject constructor(
                 if (rom?.artFile != null) {
                     val idx = indexOf(MENU_DELETE_GAME)
                     if (idx >= 0) add(idx, MENU_DELETE_ART) else add(MENU_DELETE_ART)
+                }
+                if (rom != null) {
+                    val idx = indexOf(MENU_DELETE_GAME)
+                    if (idx >= 0) add(idx, MENU_HIDE_GAME) else add(MENU_HIDE_GAME)
                 }
                 if (rom != null && dev.piannoli.scorza.ra.RaPreloadEligibility.isEligible(
                         platformTag = rom.platformTag,
@@ -2503,6 +2527,7 @@ class DialogInputHandler @Inject constructor(
         }
         val rom = (item as? ListItem.RomItem)?.rom
         when {
+            selected == MENU_HIDE_GAME -> setGameHidden(item, hidden = true)
             selected == MENU_PIN_TOOL || selected == MENU_UNPIN_TOOL -> {
                 val app = (item as? ListItem.AppItem)?.app ?: return
                 if (app.type == AppType.TOOL) setToolsPinned(listOf(app.id), selected == MENU_PIN_TOOL)

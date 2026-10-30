@@ -31,11 +31,12 @@ class PlatformFolderScanTest {
     private lateinit var scanner: RomScanner
     private lateinit var repository: RomsRepository
     private lateinit var config: PlatformConfig
+    private lateinit var paths: PiannoliPathsProvider
 
     @Before fun setup() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         romDir = File(temp.root, "Roms").apply { mkdirs() }
-        val paths = mockk<PiannoliPathsProvider>()
+        paths = mockk<PiannoliPathsProvider>()
         every { paths.root } returns temp.root
         every { paths.romDir } returns romDir
         every { paths.showHiddenFiles } returns false
@@ -89,5 +90,48 @@ class PlatformFolderScanTest {
         assertEquals(original.id, restored.id)
         assertEquals(123, restored.raGameId)
         assertEquals("PS", restored.platformTag)
+    }
+
+    @Test fun `hidden game stays out of normal lists after scan and restart with membership intact`() {
+        val file = write("PS/Hidden.chd")
+        scanner.scanPlatform("PS")
+        val game = repository.gameByPath(file.absolutePath)!!
+        val collections = CollectionsRepository(db)
+        val favorites = collections.favoritesId() ?: collections.create(
+            "Favorites", dev.piannoli.scorza.model.CollectionType.FAVORITES,
+        )
+        val shelf = collections.create("Shelf")
+        collections.addMember(favorites, LibraryRef.Rom(game.id))
+        collections.addMember(shelf, LibraryRef.Rom(game.id))
+        RecentlyPlayedRepository(db).record(LibraryRef.Rom(game.id), 10)
+
+        repository.setHidden(game.id, true)
+        assertTrue(repository.gamesForPlatform("PS").isEmpty())
+        assertTrue(repository.allRomsForPlatform("PS").isEmpty())
+        assertTrue(repository.searchAllGames(dev.piannoli.scorza.model.GameSearchQuery("Hidden")).isEmpty())
+        assertEquals(1, repository.platformCounts()["PS"] ?: 0)
+        assertEquals(0, repository.visiblePlatformCounts()["PS"] ?: 0)
+        assertEquals(0, collections.romIdsIn(favorites).size)
+        assertTrue(collections.isMember(favorites, LibraryRef.Rom(game.id)))
+        assertTrue(collections.isMember(shelf, LibraryRef.Rom(game.id)))
+        assertTrue(RecentlyPlayedRepository(db).recent().isEmpty())
+        assertEquals(game.id, repository.hiddenGames().single().id)
+
+        db.close()
+        db = PiannoliDatabase(paths)
+        val artwork = ArtworkLookup(paths)
+        repository = RomsRepository(paths, db, artwork)
+        scanner = RomScanner(db, RomDirectoryWalker(
+            paths, ApplicationProvider.getApplicationContext<Context>().assets, ArcadeTitleLookup(paths),
+        ), artwork)
+        scanner.scanPlatform("PS")
+        assertTrue(repository.gamesForPlatform("PS").isEmpty())
+        assertTrue(repository.hiddenGames().single().isHidden)
+        assertTrue(CollectionsRepository(db).isMember(favorites, LibraryRef.Rom(game.id)))
+
+        repository.setHidden(game.id, false)
+        assertEquals(listOf(game.id), repository.gamesForPlatform("PS")
+            .filterIsInstance<ListItem.RomItem>().map { it.rom.id })
+        assertEquals(listOf(game.id), CollectionsRepository(db).romIdsIn(favorites))
     }
 }

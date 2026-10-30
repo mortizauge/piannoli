@@ -126,6 +126,7 @@ class GameListViewModel @Inject constructor(
         val isLoading: Boolean = true,
         val isCollection: Boolean = false,
         val isFavorites: Boolean = false,
+        val isHiddenGames: Boolean = false,
         val collectionName: String? = null,
         val collectionId: Long? = null,
         val isCollectionsList: Boolean = false,
@@ -253,6 +254,7 @@ class GameListViewModel @Inject constructor(
             bookmark.collectionsList -> loadCollectionsList(onReady = done)
             bookmark.globalSearch != null -> loadGlobalSearch(GameSearchQuery(bookmark.globalSearch), onReady = done)
             bookmark.platformTag == "recently_played" -> loadRecentlyPlayed(done)
+            bookmark.platformTag == "hidden_games" -> loadHiddenGames(done)
             bookmark.platformTag in listOf("tools", "ports") -> loadApkList(bookmark.platformTag, bookmark.breadcrumb, done)
             else -> {
                 breadcrumbStack.clear()
@@ -400,6 +402,29 @@ class GameListViewModel @Inject constructor(
         }
     }
 
+    fun loadHiddenGames(onReady: () -> Unit = {}) {
+        breadcrumbStack.clear()
+        indexStack.clear()
+        scope.launch(Dispatchers.IO) {
+            try {
+                val items = (romsRepository.hiddenGames().map { ListItem.RomItem(it) } +
+                    appsRepository.hiddenApps().map { ListItem.AppItem(it) })
+                    .sortedNatural { displayNameOf(it) }
+                _state.value = State(
+                    platformTag = "hidden_games",
+                    breadcrumb = resources.getString(R.string.manage_hidden_games),
+                    items = items,
+                    allItems = items,
+                    selectedIndex = 0,
+                    isLoading = false,
+                    isHiddenGames = true,
+                )
+            } finally {
+                withContext(Dispatchers.Main) { onReady() }
+            }
+        }
+    }
+
     fun loadRecentlyPlayed(onReady: () -> Unit = {}) {
         breadcrumbStack.clear()
         indexStack.clear()
@@ -524,6 +549,13 @@ class GameListViewModel @Inject constructor(
             collectionsListSaved = SavedPos(preserveId, preserveIndex, preserveScroll)
             collectionsListItemCount = prevCount
             loadCollectionsList(restoreIndex = true, onReady = done)
+        } else if (current.isHiddenGames) {
+            loadHiddenGames {
+                val s = _state.value
+                val (idx, scroll) = reloadPosition(s.items, preserveId, preserveIndex, preserveScroll, prevCount)
+                _state.value = s.copy(selectedIndex = idx, scrollTarget = scroll)
+                done()
+            }
         } else if (current.isCollection && current.collectionId != null) {
             scope.launch(Dispatchers.IO) {
                 loadCollectionByIdInternal(current.collectionId) {

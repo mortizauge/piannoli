@@ -222,6 +222,13 @@ class SystemListInputHandler @Inject constructor(
                     nav.navigating = false
                 }
             }
+            is SystemListViewModel.ListItem.HiddenGamesFolder -> {
+                nav.navigating = true
+                gameListViewModel.loadHiddenGames {
+                    nav.screenStack.add(LauncherScreen.GameList)
+                    nav.navigating = false
+                }
+            }
             else -> {}
         }
     }
@@ -248,9 +255,16 @@ class SystemListInputHandler @Inject constructor(
                 ) add(context.getString(dev.piannoli.scorza.R.string.steamgrid_action))
                 add(MENU_MANAGE_COLLECTIONS)
                 add(MENU_EMULATOR_OVERRIDE)
+                if (item.item is dev.piannoli.scorza.model.ListItem.RomItem ||
+                    (item.item as? dev.piannoli.scorza.model.ListItem.AppItem)?.app?.type == dev.piannoli.scorza.model.AppType.PORT
+                ) add(dev.piannoli.scorza.input.MENU_HIDE_GAME)
                 add(MENU_DELETE_GAME)
             }
             nav.dialogState.value = DialogState.ContextMenu(gameName = menuName, options = options)
+            return
+        }
+        if (item is SystemListViewModel.ListItem.HiddenGamesFolder) {
+            nav.dialogState.value = DialogState.None
             return
         }
         nav.pendingFghItem = null
@@ -262,6 +276,8 @@ class SystemListInputHandler @Inject constructor(
             is SystemListViewModel.ListItem.FavoritesItem -> context.getString(dev.piannoli.scorza.R.string.label_favorites)
             is SystemListViewModel.ListItem.CollectionsFolder -> context.getString(dev.piannoli.scorza.R.string.label_collections)
             is SystemListViewModel.ListItem.CollectionItem -> item.name
+            is SystemListViewModel.ListItem.HiddenGamesFolder ->
+                context.getString(dev.piannoli.scorza.R.string.manage_hidden_games_count, item.count)
             else -> return
         }
         val options = buildList {

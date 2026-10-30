@@ -35,8 +35,18 @@ class RomsRepository(
         db.queryOne("SELECT id FROM roms WHERE path = ?", relative) { it.getLong(0) }
 
     fun gameById(romId: Long): Rom? = db.queryOne(
-        "$BASE_SELECT WHERE id = ?", romId, mapper = ::rowToRom,
+        "$BASE_SELECT WHERE id = ? AND is_hidden = 0", romId, mapper = ::rowToRom,
     )
+
+    fun hiddenGames(): List<Rom> = db.queryAll(
+        "$BASE_SELECT WHERE is_hidden = 1 ORDER BY display_name COLLATE NOCASE",
+        mapper = ::rowToRom,
+    )
+
+    fun hiddenCount(): Int = db.queryOne("SELECT COUNT(*) FROM roms WHERE is_hidden = 1") { it.getInt(0) } ?: 0
+
+    fun setHidden(romId: Long, hidden: Boolean) =
+        db.execute("UPDATE roms SET is_hidden = ? WHERE id = ?", hidden, romId)
 
     fun setRaGameId(romId: Long, raGameId: Int?) {
         if (raGameId == null) {
@@ -95,6 +105,10 @@ class RomsRepository(
         "SELECT platform_tag, COUNT(*) FROM roms GROUP BY platform_tag",
     ) { it.getText(0) to it.getInt(1) }.toMap()
 
+    fun visiblePlatformCounts(): Map<String, Int> = db.queryAll(
+        "SELECT platform_tag, COUNT(*) FROM roms WHERE is_hidden = 0 GROUP BY platform_tag",
+    ) { it.getText(0) to it.getInt(1) }.toMap()
+
     fun knownPlatformTags(): List<String> = db.queryAll(
         "SELECT tag FROM platforms ORDER BY sort_order, display_name COLLATE NOCASE",
     ) { it.getText(0) }
@@ -110,7 +124,7 @@ class RomsRepository(
         val term = TextNormalizer.normalize(query.text)
         if (term.isEmpty()) return emptyList()
         return db.queryAll(
-            "$BASE_SELECT WHERE name_normalized LIKE ? ORDER BY display_name COLLATE NOCASE",
+            "$BASE_SELECT WHERE is_hidden = 0 AND name_normalized LIKE ? ORDER BY display_name COLLATE NOCASE",
             "%$term%",
             mapper = ::rowToRom,
         )
@@ -130,7 +144,7 @@ class RomsRepository(
     }
 
     private fun romsForPlatform(platformTag: String): List<Rom> = db.queryAll(
-        "$BASE_SELECT WHERE platform_tag = ? ORDER BY sort_key",
+        "$BASE_SELECT WHERE platform_tag = ? AND is_hidden = 0 ORDER BY sort_key",
         platformTag, mapper = ::rowToRom,
     )
 
@@ -190,6 +204,7 @@ class RomsRepository(
             raGameId = if (stmt.isNull(5)) null else stmt.getLong(5).toInt(),
             lastPlayedAt = if (stmt.isNull(6)) null else stmt.getLong(6),
             raCachedGameId = if (stmt.isNull(7)) null else stmt.getLong(7).toInt(),
+            isHidden = stmt.getLong(8) != 0L,
         )
     }
 
@@ -205,6 +220,6 @@ class RomsRepository(
     }
 
     private companion object {
-        const val BASE_SELECT = "SELECT id, path, platform_tag, display_name, tags, ra_game_id, last_played_at, ra_cached_game_id FROM roms"
+        const val BASE_SELECT = "SELECT id, path, platform_tag, display_name, tags, ra_game_id, last_played_at, ra_cached_game_id, is_hidden FROM roms"
     }
 }

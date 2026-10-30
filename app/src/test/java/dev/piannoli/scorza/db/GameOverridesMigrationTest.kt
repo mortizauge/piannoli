@@ -129,4 +129,25 @@ class GameOverridesMigrationTest {
         }
         conn.close()
     }
+
+    @Test fun `migration 14 adds persistent hidden flags defaulting to visible`() {
+        val conn = v11Connection("hidden")
+        conn.execSQL("ALTER TABLE apps ADD COLUMN pin_order INTEGER")
+        conn.execSQL("INSERT INTO roms (id, path, platform_tag) VALUES (1, 'NES/game.nes', 'NES')")
+        conn.execSQL("INSERT INTO apps (id) VALUES (1)")
+        conn.execSQL("PRAGMA user_version = 13")
+
+        Migrations.applyFrom(conn, 13)
+
+        conn.prepare("SELECT is_hidden FROM roms WHERE id = 1").use {
+            it.step()
+            assertEquals(0, it.getInt(0))
+        }
+        conn.prepare("SELECT is_hidden FROM apps WHERE id = 1").use {
+            it.step()
+            assertEquals(0, it.getInt(0))
+        }
+        conn.prepare("UPDATE roms SET is_hidden = 1 WHERE id = 1").use { it.step() }
+        conn.close()
+    }
 }

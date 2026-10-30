@@ -5,9 +5,9 @@ class RecentlyPlayedRepository(private val db: PiannoliDatabase) {
 
     fun recent(limit: Int = 10): List<Entry> = db.queryAll(
         """
-        SELECT 'rom' AS kind, id, last_played_at FROM roms WHERE last_played_at IS NOT NULL
+        SELECT 'rom' AS kind, id, last_played_at FROM roms WHERE last_played_at IS NOT NULL AND is_hidden = 0
         UNION ALL
-        SELECT 'app' AS kind, id, last_played_at FROM apps WHERE last_played_at IS NOT NULL
+        SELECT 'app' AS kind, id, last_played_at FROM apps WHERE last_played_at IS NOT NULL AND is_hidden = 0
         ORDER BY last_played_at DESC
         LIMIT ?
         """.trimIndent(),
@@ -36,8 +36,8 @@ class RecentlyPlayedRepository(private val db: PiannoliDatabase) {
 
     fun hasAny(): Boolean = db.queryOne(
         """
-        SELECT 1 WHERE EXISTS(SELECT 1 FROM roms WHERE last_played_at IS NOT NULL)
-            OR EXISTS(SELECT 1 FROM apps WHERE last_played_at IS NOT NULL)
+        SELECT 1 WHERE EXISTS(SELECT 1 FROM roms WHERE last_played_at IS NOT NULL AND is_hidden = 0)
+            OR EXISTS(SELECT 1 FROM apps WHERE last_played_at IS NOT NULL AND is_hidden = 0)
         LIMIT 1
         """.trimIndent(),
     ) { true } ?: false

@@ -47,12 +47,14 @@ class SystemListScanTargetsTest {
 
     private lateinit var romScanner: RomScanner
     private lateinit var romsRepository: RomsRepository
+    private val appsRepository = mockk<AppsRepository>(relaxed = true)
     private val created = mutableListOf<SystemListViewModel>()
 
     private fun viewModel(romDir: File, indexed: Map<String, Int>, filters: Map<String, Set<String>> = emptyMap()): SystemListViewModel {
         romScanner = mockk(relaxed = true)
         romsRepository = mockk(relaxed = true)
         every { romsRepository.platformCounts() } returns indexed
+        every { romsRepository.visiblePlatformCounts() } returns indexed
         every { romsRepository.knownPlatformTags() } returns indexed.keys.toList()
 
         val paths = mockk<PiannoliPathsProvider>()
@@ -73,7 +75,7 @@ class SystemListScanTargetsTest {
         return SystemListViewModel(
             romsRepository = romsRepository,
             romScanner = romScanner,
-            appsRepository = mockk(relaxed = true),
+            appsRepository = appsRepository,
             collectionsRepository = mockk(relaxed = true),
             recentlyPlayedRepository = mockk(relaxed = true),
             platformConfig = platformConfig,
@@ -162,6 +164,19 @@ class SystemListScanTargetsTest {
         val scanned = scannedTags(vm, reconcileOrphans = true)
 
         assertEquals(listOf("GB"), scanned)
+    }
+
+    @Test fun `hidden games entry exposes recovery when hidden games exist`() {
+        val romDir = tmp.newFolder("Roms")
+        val vm = viewModel(romDir, indexed = emptyMap())
+        every { romsRepository.hiddenCount() } returns 2
+        every { appsRepository.hiddenCount() } returns 1
+        val done = CountDownLatch(1)
+
+        vm.scan(scanDisk = false, onReady = { done.countDown() })
+
+        assertTrue(done.await(10, TimeUnit.SECONDS))
+        assertTrue(SystemListViewModel.ListItem.HiddenGamesFolder(3) in vm.state.value.items)
     }
 
     @Test fun `saved platform identity and viewport survive recreation and changed list ordering`() {

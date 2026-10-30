@@ -177,7 +177,7 @@ class BulkScraperController @Inject constructor(
                         ScrapeGame.SystemGame(tag, name, type, artwork.systemArtworkFile(tag, type))
                     }
                 }
-                val tags = if (allPlatforms) roms.platformCounts().keys.sorted() else listOfNotNull(selectedPlatform)
+                val tags = if (allPlatforms) roms.visiblePlatformCounts().keys.sorted() else listOfNotNull(selectedPlatform)
                 val romGames = tags.filterNot { it.equals("PORTS", ignoreCase = true) }
                     .flatMap { roms.romsForScraping(it, allPlatforms || includeSubfolders) }
                     .map { ScrapeGame.RomGame(it) }

@@ -142,10 +142,18 @@ class CollectionsRepository(private val db: PiannoliDatabase) {
         collectionId,
     ) { it.getInt(0) } ?: 0
 
-    private fun readMemberIds(column: String, collectionId: Long): List<Long> = db.queryAll(
-        "SELECT $column FROM collection_members WHERE collection_id = ? AND $column IS NOT NULL ORDER BY sort_order, id",
-        collectionId,
-    ) { it.getLong(0) }
+    private fun readMemberIds(column: String, collectionId: Long): List<Long> {
+        val table = if (column == "rom_id") "roms" else "apps"
+        return db.queryAll(
+            """
+            SELECT cm.$column FROM collection_members cm
+            JOIN $table item ON item.id = cm.$column
+            WHERE cm.collection_id = ? AND cm.$column IS NOT NULL AND item.is_hidden = 0
+            ORDER BY cm.sort_order, cm.id
+            """.trimIndent(),
+            collectionId,
+        ) { it.getLong(0) }
+    }
 
     private fun rowToCollection(stmt: SQLiteStatement) = CollectionRow(
         id = stmt.getLong(0),

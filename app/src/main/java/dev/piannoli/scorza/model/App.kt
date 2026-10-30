@@ -10,6 +10,7 @@ data class App(
     val lastPlayedAt: Long? = null,
     val artFile: File? = null,
     val isPinned: Boolean = false,
+    val isHidden: Boolean = false,
 )
 
 enum class AppType { TOOL, PORT }

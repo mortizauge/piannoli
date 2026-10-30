@@ -25,6 +25,10 @@
     <string name="tool_pin_limit">You can pin up to 5 tools. Unpin a tool before pinning another.</string>
     <string name="filter_extensions">Filter extensions</string>
     <string name="filter_extensions_subtitle">Checked extensions won\'t be shown</string>
+    <string name="manage_hidden_games_count">Manage Hidden Games (%1$d)</string>
+    <string name="manage_hidden_games">Manage Hidden Games</string>
+    <string name="hide_game">Hide Game</string>
+    <string name="unhide_game">Show Game</string>
     <string name="setting_hidden_files">Hidden files</string>
     <string name="remap_piannoli">Remap Piannoli</string>
     <string name="remap_confirm">A</string>

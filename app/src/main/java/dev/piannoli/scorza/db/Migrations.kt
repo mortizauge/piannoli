@@ -248,6 +248,12 @@ internal object Migrations {
         Migration(13) { db ->
             db.execSQL("ALTER TABLE apps ADD COLUMN pin_order INTEGER")
         },
+        Migration(14) { db ->
+            db.execSQL("ALTER TABLE roms ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE apps ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("CREATE INDEX roms_hidden ON roms(is_hidden) WHERE is_hidden = 1")
+            db.execSQL("CREATE INDEX apps_hidden ON apps(is_hidden) WHERE is_hidden = 1")
+        },
     )
 
     val current: Int = all.maxOf { it.version }

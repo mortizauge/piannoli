@@ -223,6 +223,7 @@ fun SystemListScreen(
                             is ListItem.GameItem -> "game:${item.recentKey}"
                             is ListItem.ToolsFolder -> "tools"
                             is ListItem.PortsFolder -> "ports"
+                            is ListItem.HiddenGamesFolder -> "hidden-games"
                         }
                     }
                 ) { _, item, isSelected ->
@@ -235,6 +236,7 @@ fun SystemListScreen(
                         is ListItem.GameItem -> item.displayName
                         is ListItem.ToolsFolder -> item.name
                         is ListItem.PortsFolder -> item.name
+                        is ListItem.HiddenGamesFolder -> stringResource(R.string.manage_hidden_games_count, item.count)
                     }
                     val showReorder = state.reorderMode && isSelected && (item is ListItem.PlatformItem || item is ListItem.ToolsFolder || item is ListItem.PortsFolder || item is ListItem.CollectionItem || item is ListItem.GameItem)
                     val tagSuffix = (item as? ListItem.GameItem)
