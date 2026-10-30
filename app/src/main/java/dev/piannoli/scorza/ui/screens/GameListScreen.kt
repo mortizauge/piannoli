@@ -81,6 +81,7 @@ private val ListItem.isLeafSelectable: Boolean get() = this is ListItem.RomItem 
 private val ListItem.artPath: String? get() = when (this) {
     is ListItem.RomItem -> rom.artFile?.absolutePath
     is ListItem.AppItem -> app.artFile?.absolutePath
+    is ListItem.SubfolderItem -> artFile?.absolutePath
     else -> null
 }
 

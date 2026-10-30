@@ -23,7 +23,7 @@ class RomsRepository(
         val tag = platformTag.uppercase()
         val roms = romsForPlatform(tag)
         val (matching, nested) = partitionForSubfolder(roms, subfolder)
-        return subfolderItemsFrom(nested, subfolder) + matching.map { ListItem.RomItem(it) }
+        return subfolderItemsFrom(nested, subfolder, tag) + matching.map { ListItem.RomItem(it) }
     }
 
     fun gameByPath(absolutePath: String): Rom? {
@@ -161,7 +161,7 @@ class RomsRepository(
         return file.substring(0, dot) == folder
     }
 
-    private fun subfolderItemsFrom(roms: List<Rom>, subfolder: String?): List<ListItem.SubfolderItem> {
+    private fun subfolderItemsFrom(roms: List<Rom>, subfolder: String?, platformTag: String): List<ListItem.SubfolderItem> {
         if (roms.isEmpty()) return emptyList()
         val basePrefix = if (subfolder.isNullOrEmpty()) "" else "$subfolder${File.separator}"
         val seen = linkedSetOf<String>()
@@ -169,7 +169,10 @@ class RomsRepository(
             val firstSeg = rom.relativeAfterPlatform().removePrefix(basePrefix).substringBefore(File.separator)
             if (firstSeg.isNotEmpty()) seen.add(firstSeg)
         }
-        return seen.sortedWith(NaturalSort).map { ListItem.SubfolderItem(name = it, path = basePrefix + it) }
+        return seen.sortedWith(NaturalSort).map { name ->
+            val path = basePrefix + name
+            ListItem.SubfolderItem(name = name, path = path, artFile = artwork.findFolder(platformTag, path))
+        }
     }
 
     private fun rowToRom(stmt: SQLiteStatement): Rom {

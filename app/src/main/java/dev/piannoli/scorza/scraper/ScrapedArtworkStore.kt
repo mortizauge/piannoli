@@ -21,16 +21,74 @@ class ScrapedArtworkStore @Inject constructor(
         SystemArtwork.file(paths.root, tag, type)?.takeIf { it.isFile }
 
     fun importSystem(tag: String, type: dev.piannoli.scorza.settings.SystemArtworkType, input: InputStream): File {
-        val limit = 20 * 1024 * 1024
+        return installSystem(tag, type, readBounded(input), allowGif = true)
+    }
+
+    fun importGame(rom: Rom, input: InputStream): File {
+        val basename = if (rom.path.name.endsWith(".p8.png", ignoreCase = true)) {
+            rom.path.name.dropLast(".p8.png".length)
+        } else {
+            rom.path.nameWithoutExtension
+        }
+        val destination = artwork.customGameFile(rom.platformTag, basename)
+            ?: throw ScraperException(ScraperError.NO_ARTWORK)
+        return installCustomImage(destination, rom.platformTag, basename, readBounded(input))
+    }
+
+    fun importPortArtwork(app: App, input: InputStream): File {
+        require(app.type == dev.piannoli.scorza.model.AppType.PORT)
+        val basename = dev.piannoli.scorza.romm.download.sanitizeFsName(app.displayName)
+        val destination = artwork.customGameFile("PORTS", basename)
+            ?: throw ScraperException(ScraperError.NO_ARTWORK)
+        return installCustomImage(destination, "PORTS", basename, readBounded(input))
+    }
+
+    fun importFolderArtwork(platformTag: String, relativePath: String, input: InputStream): File {
+        val destination = artwork.customFolderFile(platformTag, relativePath)
+            ?: throw ScraperException(ScraperError.NO_ARTWORK)
+        return installCustomImage(destination, platformTag, null, readBounded(input))
+    }
+
+    private fun readBounded(input: InputStream): ByteArray {
         val output = java.io.ByteArrayOutputStream()
         val buffer = ByteArray(8192)
         var count = input.read(buffer)
         while (count != -1) {
-            if (output.size() + count > limit) throw ScraperException(ScraperError.INVALID_RESPONSE)
+            if (output.size() + count > 20 * 1024 * 1024) throw ScraperException(ScraperError.INVALID_RESPONSE)
             output.write(buffer, 0, count)
             count = input.read(buffer)
         }
-        return installSystem(tag, type, output.toByteArray(), allowGif = true)
+        return output.toByteArray()
+    }
+
+    private fun installCustomImage(destination: File, tag: String, basename: String?, bytes: ByteArray): File {
+        val bitmap = SystemArtwork.bitmap(bytes, allowGif = true)
+        try {
+            val directory = destination.parentFile ?: throw ScraperException(ScraperError.STORAGE)
+            if (!directory.isDirectory && !directory.mkdirs()) throw ScraperException(ScraperError.STORAGE)
+            val temp = File.createTempFile(".custom-", ".part", directory)
+            try {
+                temp.outputStream().use {
+                    if (!bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)) {
+                        throw ScraperException(ScraperError.STORAGE)
+                    }
+                }
+                Files.move(temp.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                if (basename != null) {
+                    directory.listFiles()?.filter {
+                        it != destination && it.isFile && it.nameWithoutExtension == basename
+                    }?.forEach { Files.deleteIfExists(it.toPath()) }
+                    artwork.invalidate(tag)
+                }
+            } catch (e: IOException) {
+                throw ScraperException(ScraperError.STORAGE)
+            } finally {
+                temp.delete()
+            }
+            return destination
+        } finally {
+            bitmap.recycle()
+        }
     }
 
     fun installSystem(

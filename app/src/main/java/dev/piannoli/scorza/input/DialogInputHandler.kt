@@ -1593,6 +1593,17 @@ class DialogInputHandler @Inject constructor(
         pendingContextReturn = ContextReturn.Single(state.gameName, state.options, state.selectedOption)
         val selected = state.options[state.selectedOption]
         when {
+            selected == context.getString(dev.piannoli.scorza.R.string.choose_artwork) -> {
+                when (item) {
+                    is ListItem.RomItem -> activityActions.chooseGameArtwork(item.rom.path.absolutePath)
+                    is ListItem.AppItem -> if (item.app.type == AppType.PORT) {
+                        activityActions.choosePortArtwork(item.app.packageName)
+                    }
+                    is ListItem.SubfolderItem ->
+                        activityActions.chooseFolderArtwork(glState.platformTag, item.path)
+                    else -> {}
+                }
+            }
             selected == context.getString(dev.piannoli.scorza.R.string.steamgrid_action) -> {
                 if (rom != null) scraper.open(rom)
                 else if (app?.type == AppType.PORT) scraper.openPort(app)
@@ -1647,6 +1658,8 @@ class DialogInputHandler @Inject constructor(
                     rom.artFile?.delete()
                     artworkLookup.invalidate(rom.platformTag)
                     scanner.markLauncherMutation(rom.platformTag)
+                } else if (item is ListItem.SubfolderItem) {
+                    artworkLookup.deleteFolder(glState.platformTag, item.path)
                 } else if (app != null) {
                     artworkLookup.deleteArt(app.type.artTag, sanitizeFsName(app.displayName))
                 }
@@ -2013,7 +2026,12 @@ class DialogInputHandler @Inject constructor(
 
     fun buildGameContextOptions(item: ListItem, glState: GameListViewModel.State): List<String> {
         if (glState.isCollectionsList || item is ListItem.ChildCollectionItem) return listOf(MENU_RENAME, MENU_CHILD_COLLECTIONS, MENU_DELETE)
-        if (item is ListItem.SubfolderItem) return listOf(MENU_RENAME, MENU_DELETE)
+        if (item is ListItem.SubfolderItem) return buildList {
+            add(context.getString(dev.piannoli.scorza.R.string.choose_artwork))
+            if (artworkLookup.findFolder(glState.platformTag, item.path) != null) add(MENU_DELETE_ART)
+            add(MENU_RENAME)
+            add(MENU_DELETE)
+        }
         val rom = (item as? ListItem.RomItem)?.rom
         val app = (item as? ListItem.AppItem)?.app
         val isApk = app != null
@@ -2030,7 +2048,10 @@ class DialogInputHandler @Inject constructor(
                 if (app.isPinned) MENU_UNPIN_TOOL else MENU_PIN_TOOL
             } else if (isFav) MENU_REMOVE_FAVORITE else MENU_ADD_FAVORITE)
             if (isApk) {
-                if (app?.type == AppType.PORT) add(context.getString(dev.piannoli.scorza.R.string.steamgrid_action))
+                if (app?.type == AppType.PORT) {
+                    add(context.getString(dev.piannoli.scorza.R.string.steamgrid_action))
+                    add(context.getString(dev.piannoli.scorza.R.string.choose_artwork))
+                }
                 if (glState.platformTag != "tools") {
                     add(MENU_MANAGE_COLLECTIONS)
                     add(MENU_RENAME)
@@ -2040,6 +2061,7 @@ class DialogInputHandler @Inject constructor(
             } else {
                 if (rom != null) {
                     add(context.getString(dev.piannoli.scorza.R.string.steamgrid_action))
+                    add(context.getString(dev.piannoli.scorza.R.string.choose_artwork))
                 }
                 addAll(gameContextOptions.map { menuItem ->
                     when {

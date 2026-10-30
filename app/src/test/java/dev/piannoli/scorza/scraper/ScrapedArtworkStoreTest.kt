@@ -11,6 +11,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -74,6 +75,45 @@ class ScrapedArtworkStoreTest {
         assertArrayEquals(bytes, saved.readBytes())
         assertEquals(saved, artwork.find(rom.platformTag, rom.path))
         assertFalse(saved.parentFile!!.listFiles()!!.any { it.extension == "part" })
+    }
+
+    @Test fun `local game art is validated indexed and protected from skip scraping`() {
+        val saved = png().inputStream().use { store.importGame(rom, it) }
+        assertEquals(File(root, "Art/SNES/Game (USA).png"), saved)
+        assertEquals(saved, artwork.find(rom.platformTag, rom.path))
+        assertEquals(ScraperError.EXISTING_ARTWORK,
+            assertThrows(ScraperException::class.java) { store.install(rom, png()) }.error)
+
+        val replacement = ByteArrayOutputStream().use { output ->
+            ImageIO.write(BufferedImage(4, 3, BufferedImage.TYPE_INT_RGB), "jpeg", output)
+            output.toByteArray()
+        }
+        val explicitOverwrite = store.install(rom, replacement, overwrite = true)
+        assertEquals(explicitOverwrite, artwork.find(rom.platformTag, rom.path))
+        assertFalse(saved.exists())
+
+        val before = explicitOverwrite.readBytes()
+        assertThrows(ScraperException::class.java) {
+            "not an image".byteInputStream().use { store.importGame(rom, it) }
+        }
+        assertArrayEquals(before, explicitOverwrite.readBytes())
+    }
+
+    @Test fun `folder art has collision safe identities and can be found and deleted`() {
+        val nested = File("RPGs/Adventure")
+        val first = png().inputStream().use {
+            store.importFolderArtwork("SNES", nested.path, it)
+        }
+        val sibling = png().inputStream().use {
+            store.importFolderArtwork("SNES", "RPGs/Arcade", it)
+        }
+        assertEquals(first, artwork.findFolder("SNES", "RPGs/Adventure"))
+        assertFalse(first == sibling)
+        assertNull(artwork.customFolderFile("SNES", "../outside"))
+        assertNull(artwork.customFolderFile("../SNES", "RPGs/Adventure"))
+        assertTrue(artwork.deleteFolder("SNES", "RPGs/Adventure"))
+        assertFalse(first.exists())
+        assertEquals(sibling, artwork.findFolder("SNES", "RPGs/Arcade"))
     }
 
     @Test fun `preserves existing art even when it appeared after lookup was cached`() {

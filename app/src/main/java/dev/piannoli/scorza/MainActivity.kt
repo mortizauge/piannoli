@@ -104,6 +104,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
     @Inject lateinit var romDirectoryWatcher: Provider<dev.piannoli.scorza.scanner.RomDirectoryWatcher>
     @Inject lateinit var installedCoreService: Provider<InstalledCoreService>
     @Inject lateinit var romsRepository: Provider<RomsRepository>
+    @Inject lateinit var appsRepository: Provider<dev.piannoli.scorza.db.AppsRepository>
     @Inject lateinit var romScanner: Provider<RomScanner>
     @Inject lateinit var collectionsRepository: Provider<CollectionsRepository>
     @Inject lateinit var piannoliDatabase: Provider<PiannoliDatabase>
@@ -177,14 +178,18 @@ class MainActivity : ComponentActivity(), ActivityActions {
         bootSequencer.onStoragePermissionResult()
     }
 
-    private var artworkPickerTag: String? = null
-    private var artworkPickerType: dev.piannoli.scorza.settings.SystemArtworkType? = null
+    private sealed interface ArtworkPickerTarget {
+        data class System(val tag: String, val type: dev.piannoli.scorza.settings.SystemArtworkType) : ArtworkPickerTarget
+        data class Game(val path: String) : ArtworkPickerTarget
+        data class Port(val packageName: String) : ArtworkPickerTarget
+        data class Folder(val platformTag: String, val relativePath: String) : ArtworkPickerTarget
+    }
+
+    private var artworkPickerTarget: ArtworkPickerTarget? = null
     private val artworkPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        val tag = artworkPickerTag
-        val type = artworkPickerType
-        artworkPickerTag = null
-        artworkPickerType = null
-        if (uri != null && tag != null && type != null) {
+        val target = artworkPickerTarget
+        artworkPickerTarget = null
+        if (uri != null && target != null) {
             val loading = DialogState.ArtworkImporting
             nav.dialogState.value = loading
             lifecycleScope.launch {
@@ -192,9 +197,29 @@ class MainActivity : ComponentActivity(), ActivityActions {
                     withContext(Dispatchers.IO) {
                         val input = contentResolver.openInputStream(uri)
                             ?: throw java.io.IOException("Cannot open selected artwork")
-                        input.use { artworkStore.get().importSystem(tag, type, it) }
+                        input.use {
+                            when (target) {
+                                is ArtworkPickerTarget.System -> artworkStore.get().importSystem(target.tag, target.type, it)
+                                is ArtworkPickerTarget.Game -> {
+                                    val rom = romsRepository.get().gameByPath(target.path)
+                                        ?: throw java.io.IOException("The game is no longer in the library")
+                                    artworkStore.get().importGame(rom, it)
+                                }
+                                is ArtworkPickerTarget.Port -> {
+                                    val app = appsRepository.get().byPackage(
+                                        dev.piannoli.scorza.model.AppType.PORT, target.packageName,
+                                    ) ?: throw java.io.IOException("The port is no longer in the library")
+                                    artworkStore.get().importPortArtwork(app, it)
+                                }
+                                is ArtworkPickerTarget.Folder ->
+                                    artworkStore.get().importFolderArtwork(target.platformTag, target.relativePath, it)
+                            }
+                        }
                     }
-                    if (nav.dialogState.value === loading) nav.dialogState.value = DialogState.None
+                    if (nav.dialogState.value === loading) {
+                        nav.dialogState.value = DialogState.None
+                        if (target !is ArtworkPickerTarget.System) gameListViewModel.get().reload()
+                    }
                 } catch (e: java.io.IOException) {
                     artworkImportFailed(e, loading)
                 } catch (e: SecurityException) {
@@ -214,21 +239,54 @@ class MainActivity : ComponentActivity(), ActivityActions {
     }
 
     override fun chooseSystemArtwork(tag: String, type: dev.piannoli.scorza.settings.SystemArtworkType) {
-        if (artworkPickerTag != null) return
-        artworkPickerTag = tag
-        artworkPickerType = type
+        chooseArtwork(ArtworkPickerTarget.System(tag, type))
+    }
+
+    override fun chooseGameArtwork(path: String) {
+        chooseArtwork(ArtworkPickerTarget.Game(path))
+    }
+
+    override fun choosePortArtwork(packageName: String) {
+        chooseArtwork(ArtworkPickerTarget.Port(packageName))
+    }
+
+    override fun chooseFolderArtwork(platformTag: String, relativePath: String) {
+        chooseArtwork(ArtworkPickerTarget.Folder(platformTag, relativePath))
+    }
+
+    private fun chooseArtwork(target: ArtworkPickerTarget) {
+        if (artworkPickerTarget != null) return
+        artworkPickerTarget = target
         try {
             artworkPicker.launch(arrayOf("image/jpeg", "image/png", "image/webp", "image/gif"))
         } catch (e: android.content.ActivityNotFoundException) {
-            artworkPickerTag = null
-            artworkPickerType = null
+            artworkPickerTarget = null
             nav.dialogState.value = DialogState.LaunchError(getString(R.string.artwork_picker_unavailable))
         }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        outState.putString("artworkPickerTag", artworkPickerTag)
-        outState.putString("artworkPickerType", artworkPickerType?.name)
+        when (val target = artworkPickerTarget) {
+            is ArtworkPickerTarget.System -> {
+                outState.putString("artworkPickerKind", "system")
+                outState.putString("artworkPickerTag", target.tag)
+                outState.putString("artworkPickerType", target.type.name)
+            }
+            is ArtworkPickerTarget.Game -> {
+                outState.putString("artworkPickerKind", "game")
+                outState.putString("artworkPickerPath", target.path)
+            }
+            is ArtworkPickerTarget.Port -> {
+                outState.putString("artworkPickerKind", "port")
+                outState.putString("artworkPickerPackage", target.packageName)
+            }
+            is ArtworkPickerTarget.Folder -> {
+                outState.putString("artworkPickerKind", "folder")
+                outState.putString("artworkPickerTag", target.platformTag)
+                outState.putString("artworkPickerPath", target.relativePath)
+            }
+            null -> {}
+        }
         super.onSaveInstanceState(outState)
     }
 
@@ -252,9 +310,21 @@ class MainActivity : ComponentActivity(), ActivityActions {
             }
         }
         super.onCreate(savedInstanceState)
-        artworkPickerTag = savedInstanceState?.getString("artworkPickerTag")
-        artworkPickerType = savedInstanceState?.getString("artworkPickerType")?.let {
-            dev.piannoli.scorza.settings.SystemArtworkType.valueOf(it)
+        artworkPickerTarget = when (savedInstanceState?.getString("artworkPickerKind")) {
+            "system" -> {
+                val type = savedInstanceState.getString("artworkPickerType")
+                    ?.let { runCatching { dev.piannoli.scorza.settings.SystemArtworkType.valueOf(it) }.getOrNull() }
+                val tag = savedInstanceState.getString("artworkPickerTag")
+                if (type != null && tag != null) ArtworkPickerTarget.System(tag, type) else null
+            }
+            "game" -> savedInstanceState.getString("artworkPickerPath")?.let(ArtworkPickerTarget::Game)
+            "port" -> savedInstanceState.getString("artworkPickerPackage")?.let(ArtworkPickerTarget::Port)
+            "folder" -> {
+                val tag = savedInstanceState.getString("artworkPickerTag")
+                val path = savedInstanceState.getString("artworkPickerPath")
+                if (tag != null && path != null) ArtworkPickerTarget.Folder(tag, path) else null
+            }
+            else -> null
         }
 
         // Belt-and-suspenders: ensure the launcher window does not hold FLAG_KEEP_SCREEN_ON,

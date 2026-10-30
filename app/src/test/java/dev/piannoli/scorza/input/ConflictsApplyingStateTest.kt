@@ -175,6 +175,28 @@ class ConflictsApplyingStateTest {
         assertTrue(MENU_MANAGE_COLLECTIONS in port && MENU_RENAME in port)
     }
 
+    @Test fun `local artwork follows scrape action and is available for folders`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val rom = dev.piannoli.scorza.model.Rom(
+            3, java.io.File("Roms/SNES/Adventure.sfc"), "SNES", "Adventure",
+        )
+        val options = handler.buildGameContextOptions(
+            dev.piannoli.scorza.model.ListItem.RomItem(rom),
+            dev.piannoli.scorza.ui.viewmodel.GameListViewModel.State(platformTag = "SNES"),
+        )
+        val scrape = context.getString(dev.piannoli.scorza.R.string.steamgrid_action)
+        val choose = context.getString(dev.piannoli.scorza.R.string.choose_artwork)
+        assertEquals("Scrape Game", scrape)
+        assertEquals(choose, options[options.indexOf(scrape) + 1])
+
+        val folderOptions = handler.buildGameContextOptions(
+            dev.piannoli.scorza.model.ListItem.SubfolderItem("Adventure", "RPGs/Adventure"),
+            dev.piannoli.scorza.ui.viewmodel.GameListViewModel.State(platformTag = "SNES"),
+        )
+        assertEquals(choose, folderOptions.first())
+        assertTrue(MENU_RENAME in folderOptions)
+    }
+
     @Test fun `tool pin action reloads list without favoriting and reports pin limit`() = runTest(dispatcher) {
         Dispatchers.setMain(dispatcher)
         try {

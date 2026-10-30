@@ -7,4 +7,7 @@ interface ActivityActions {
     fun startRommPairing(host: String)
     fun startRommCodePairing(host: String, pairCode: String)
     fun chooseSystemArtwork(tag: String, type: dev.piannoli.scorza.settings.SystemArtworkType)
+    fun chooseGameArtwork(path: String)
+    fun choosePortArtwork(packageName: String)
+    fun chooseFolderArtwork(platformTag: String, relativePath: String)
 }

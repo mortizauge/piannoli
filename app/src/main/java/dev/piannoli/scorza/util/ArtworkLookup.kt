@@ -3,6 +3,7 @@ package dev.piannoli.scorza.util
 import dev.piannoli.scorza.config.PiannoliPaths
 import dev.piannoli.scorza.di.PiannoliPathsProvider
 import java.io.File
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 
 class ArtworkLookup(private val pathsProvider: PiannoliPathsProvider) {
@@ -18,6 +19,31 @@ class ArtworkLookup(private val pathsProvider: PiannoliPathsProvider) {
 
     fun findByName(platformTag: String, basename: String): File? =
         cache.getOrPut(platformTag) { buildMap(platformTag) }[basename]
+
+    fun findFolder(platformTag: String, relativePath: String): File? =
+        customFolderFile(platformTag, relativePath)?.takeIf { it.isFile }
+
+    fun customGameFile(platformTag: String, basename: String): File? {
+        if (!isSafeTag(platformTag) || !isSafeName(basename)) return null
+        return File(File(artDir, platformTag.uppercase()), "$basename.png")
+    }
+
+    fun customFolderFile(platformTag: String, relativePath: String): File? {
+        if (!isSafeTag(platformTag)) return null
+        val normalized = relativePath.replace('\\', '/')
+        val segments = normalized.split('/')
+        if (segments.isEmpty() || segments.any { it.isEmpty() || it == "." || it == ".." }) return null
+        val identity = "${platformTag.uppercase()}/$normalized"
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(identity.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+        return File(File(File(artDir, platformTag.uppercase()), ".folders"), "$digest.png")
+    }
+
+    fun deleteFolder(platformTag: String, relativePath: String): Boolean {
+        val existing = findFolder(platformTag, relativePath) ?: return false
+        return existing.delete()
+    }
 
     fun renameArt(platformTag: String, oldBasename: String, newBasename: String): Boolean {
         val existing = findByName(platformTag, oldBasename) ?: return false
@@ -59,4 +85,11 @@ class ArtworkLookup(private val pathsProvider: PiannoliPathsProvider) {
         for (file in entries) if (file.isFile) out[file.nameWithoutExtension] = file
         return out
     }
+
+    private fun isSafeTag(tag: String): Boolean =
+        tag.matches(Regex("[A-Za-z0-9][A-Za-z0-9_-]*"))
+
+    private fun isSafeName(name: String): Boolean =
+        name.isNotBlank() && name != "." && name != ".." &&
+            name.none { it == '/' || it == '\\' || it == '\u0000' }
 }
