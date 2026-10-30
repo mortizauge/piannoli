@@ -195,7 +195,7 @@ class ScrapedArtworkStoreTest {
             store.installSystem("CUSTOM", type, png()))
     }
 
-
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
     @Test fun `local imports accept raster formats and GIF first frame and refresh artwork`() {
         val type = dev.cannoli.scorza.settings.SystemArtworkType.LOGO
         val formats = listOf("png", "jpeg", "gif")
@@ -216,6 +216,28 @@ class ScrapedArtworkStoreTest {
         val webp = java.util.Base64.getDecoder().decode(
             "UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA")
         webp.inputStream().use { store.importSystem("@favorites", type, it) }
+    }
+
+    @Test fun `local import failures preserve existing artwork and category paths are isolated`() {
+        val type = dev.cannoli.scorza.settings.SystemArtworkType.ICON
+        val category = png().inputStream().use { store.importSystem("@collection-7", type, it) }
+        val original = category.readBytes()
+        val revision = SystemArtwork.revision.value
+        assertThrows(ScraperException::class.java) {
+            byteArrayOf(1, 2).inputStream().use { store.importSystem("@collection-7", type, it) }
+        }
+        assertThrows(ScraperException::class.java) {
+            ByteArray(20 * 1024 * 1024 + 1).inputStream().use { store.importSystem("@collection-7", type, it) }
+        }
+        assertEquals(revision, SystemArtwork.revision.value)
+        assertArrayEquals(original, category.readBytes())
+        val system = store.installSystem("COLLECTION-7", type, png())
+        assertFalse(system == category)
+        assertEquals("Categories", category.parentFile!!.name)
+        assertNull(SystemArtwork.file(root, "@../favorites", type))
+        SystemArtwork.delete(root, "@collection-7", type)
+        org.junit.Assert.assertTrue(system.isFile)
+        assertFalse(category.exists())
     }
 
 

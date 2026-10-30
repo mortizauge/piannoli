@@ -102,8 +102,7 @@ fun SystemListScreen(
     val hasPlatforms = remember(state.items) {
         state.items.any { it is ListItem.PlatformItem || it is ListItem.PortsFolder }
     }
-    val isSystemArtwork = selectedItem is ListItem.PlatformItem || selectedItem is ListItem.PortsFolder ||
-        (hasPlatforms && selectedItem !is ListItem.GameItem)
+    val isSystemArtwork = selectedItem != null && selectedItem !is ListItem.GameItem
     val selectedArtWidth = if (isSystemArtwork) systemArtWidth else artWidth
     val selectedArtScale = if (isSystemArtwork) systemArtScale else artScale
     val selectedArtRadius = if (isSystemArtwork) systemArtRadius else artRadius
@@ -115,9 +114,7 @@ fun SystemListScreen(
     }
     val artPath = when (selectedItem) {
         is ListItem.GameItem -> selectedItem.artFile?.absolutePath
-        is ListItem.PlatformItem -> viewModel.systemArtworkFile(selectedItem.platform.tag, systemArtworkType)?.absolutePath
-        is ListItem.PortsFolder -> viewModel.systemArtworkFile("PORTS", systemArtworkType)?.absolutePath
-        else -> null
+        else -> selectedItem?.artworkTag?.let { viewModel.systemArtworkFile(it, systemArtworkType)?.absolutePath }
     }
     val uiActive = dev.cannoli.ui.components.LocalUiActive.current
     val selectedArt by key(artPath, artworkRevision) {
@@ -145,7 +142,7 @@ fun SystemListScreen(
             }
         }
     }
-    val showArt = selectedArtWidth > 0 && (hasPlatforms || state.hasGameItems)
+    val showArt = selectedArtWidth > 0 && (hasPlatforms || state.hasGameItems || selectedArt != null)
     val duplicateGameNames = remember(state.items) {
         state.items.asSequence()
             .filterIsInstance<ListItem.GameItem>()

@@ -6,6 +6,7 @@ import dev.cannoli.scorza.model.Rom
 import dev.cannoli.scorza.util.ArtworkLookup
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import javax.inject.Inject
@@ -17,13 +18,27 @@ class ScrapedArtworkStore @Inject constructor(
     fun systemArtworkFile(tag: String, type: dev.cannoli.scorza.settings.SystemArtworkType): File? =
         SystemArtwork.file(paths.root, tag, type)?.takeIf { it.isFile }
 
+    fun importSystem(tag: String, type: dev.cannoli.scorza.settings.SystemArtworkType, input: InputStream): File {
+        val limit = 20 * 1024 * 1024
+        val output = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(8192)
+        var count = input.read(buffer)
+        while (count != -1) {
+            if (output.size() + count > limit) throw ScraperException(ScraperError.INVALID_RESPONSE)
+            output.write(buffer, 0, count)
+            count = input.read(buffer)
+        }
+        return installSystem(tag, type, output.toByteArray(), allowGif = true)
+    }
+
     fun installSystem(
         tag: String,
         type: dev.cannoli.scorza.settings.SystemArtworkType,
         bytes: ByteArray,
+        allowGif: Boolean = false,
     ): File {
         val destination = SystemArtwork.file(paths.root, tag, type) ?: throw ScraperException(ScraperError.NO_ARTWORK)
-        val bitmap = SystemArtwork.bitmap(bytes)
+        val bitmap = SystemArtwork.bitmap(bytes, allowGif)
         try {
             val directory = destination.parentFile ?: throw ScraperException(ScraperError.STORAGE)
             if (!directory.isDirectory && !directory.mkdirs()) throw ScraperException(ScraperError.STORAGE)

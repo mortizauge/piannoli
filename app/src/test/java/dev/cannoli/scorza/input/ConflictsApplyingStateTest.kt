@@ -144,7 +144,8 @@ class ConflictsApplyingStateTest {
         try {
             val type = dev.cannoli.scorza.settings.SystemArtworkType.ICON
             every { settings.systemArtworkType } returns type
-            every { systems.getSelectedPlatformTag() } returns "PORTS"
+            every { systems.getSelectedItem() } returns
+                dev.cannoli.scorza.ui.viewmodel.SystemListViewModel.ListItem.PortsFolder("Ports", 1)
             val origin = DialogState.ContextMenu("Ports", options = listOf(MENU_DELETE_ART))
             nav.dialogState.value = origin
             handler.onConfirm()
@@ -161,6 +162,22 @@ class ConflictsApplyingStateTest {
         }
     }
 
+    @Test fun `choose artwork captures category identity and current artwork type`() {
+        val type = dev.cannoli.scorza.settings.SystemArtworkType.GRID
+        every { settings.systemArtworkType } returns type
+        every { systems.getSelectedItem() } returns
+            dev.cannoli.scorza.ui.viewmodel.SystemListViewModel.ListItem.FavoritesItem
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        nav.dialogState.value = DialogState.ContextMenu("Favorites",
+            options = listOf(context.getString(dev.cannoli.scorza.R.string.choose_artwork)))
+        handler.onConfirm()
+        verify(exactly = 1) { activityActions.chooseSystemArtwork("@favorites", type) }
+        verify(exactly = 0) { scraper.openSystem(any(), any()) }
+    }
+
+    private fun conflictsMenu() = DialogState.ConflictsMenu(
+        rows = listOf(ConflictRow(gameKey = "snes/Zelda.sfc", name = "Zelda"))
+    )
 
     @Test fun `extension filter confirm toggles exclusions and directions navigate checkbox list`() {
         val origin = DialogState.ContextMenu("Game Boy", options = listOf("Filter extensions"))

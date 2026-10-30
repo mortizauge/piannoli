@@ -129,6 +129,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
     @Inject lateinit var syncScheduler: dev.cannoli.scorza.romm.sync.SyncScheduler
     @Inject lateinit var saveSyncStatusHolder: dev.cannoli.scorza.romm.sync.SaveSyncStatusHolder
     @Inject lateinit var cannoliPathsProvider: dev.cannoli.scorza.di.CannoliPathsProvider
+    @Inject lateinit var artworkStore: Provider<dev.cannoli.scorza.scraper.ScrapedArtworkStore>
     @field:dev.cannoli.scorza.di.IoScope @Inject lateinit var ioScope: kotlinx.coroutines.CoroutineScope
 
     private val isTv: Boolean by lazy { dev.cannoli.scorza.util.DeviceType.isTv(this) }
@@ -176,6 +177,61 @@ class MainActivity : ComponentActivity(), ActivityActions {
         bootSequencer.onStoragePermissionResult()
     }
 
+    private var artworkPickerTag: String? = null
+    private var artworkPickerType: dev.cannoli.scorza.settings.SystemArtworkType? = null
+    private val artworkPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val tag = artworkPickerTag
+        val type = artworkPickerType
+        artworkPickerTag = null
+        artworkPickerType = null
+        if (uri != null && tag != null && type != null) {
+            val loading = DialogState.ArtworkImporting
+            nav.dialogState.value = loading
+            lifecycleScope.launch {
+                try {
+                    withContext(Dispatchers.IO) {
+                        val input = contentResolver.openInputStream(uri)
+                            ?: throw java.io.IOException("Cannot open selected artwork")
+                        input.use { artworkStore.get().importSystem(tag, type, it) }
+                    }
+                    if (nav.dialogState.value === loading) nav.dialogState.value = DialogState.None
+                } catch (e: java.io.IOException) {
+                    artworkImportFailed(e, loading)
+                } catch (e: SecurityException) {
+                    artworkImportFailed(e, loading)
+                } catch (e: dev.cannoli.scorza.scraper.ScraperException) {
+                    artworkImportFailed(e, loading)
+                }
+            }
+        }
+    }
+
+    private fun artworkImportFailed(error: Exception, loading: DialogState) {
+        android.util.Log.w("Artwork", "Cannot import selected artwork", error)
+        if (nav.dialogState.value === loading) {
+            nav.dialogState.value = DialogState.LaunchError(getString(R.string.artwork_import_failed))
+        }
+    }
+
+    override fun chooseSystemArtwork(tag: String, type: dev.cannoli.scorza.settings.SystemArtworkType) {
+        if (artworkPickerTag != null) return
+        artworkPickerTag = tag
+        artworkPickerType = type
+        try {
+            artworkPicker.launch(arrayOf("image/jpeg", "image/png", "image/webp", "image/gif"))
+        } catch (e: android.content.ActivityNotFoundException) {
+            artworkPickerTag = null
+            artworkPickerType = null
+            nav.dialogState.value = DialogState.LaunchError(getString(R.string.artwork_picker_unavailable))
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("artworkPickerTag", artworkPickerTag)
+        outState.putString("artworkPickerType", artworkPickerType?.name)
+        super.onSaveInstanceState(outState)
+    }
+
     private fun loadLoggingPrefs() {
         dev.cannoli.scorza.util.LoggingPrefs.romScan = settings.loggingRomScan
         dev.cannoli.scorza.util.LoggingPrefs.input = settings.loggingInput
@@ -197,6 +253,10 @@ class MainActivity : ComponentActivity(), ActivityActions {
             }
         }
         super.onCreate(savedInstanceState)
+        artworkPickerTag = savedInstanceState?.getString("artworkPickerTag")
+        artworkPickerType = savedInstanceState?.getString("artworkPickerType")?.let {
+            dev.cannoli.scorza.settings.SystemArtworkType.valueOf(it)
+        }
 
         // Belt-and-suspenders: ensure the launcher window does not hold FLAG_KEEP_SCREEN_ON,
         // so the system display timeout applies. The IGM activity manages its own flag.

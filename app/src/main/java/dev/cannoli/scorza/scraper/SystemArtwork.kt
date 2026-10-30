@@ -21,8 +21,15 @@ object SystemArtwork {
         return names[upper] ?: upper.lowercase(Locale.ROOT)
     }
 
-    fun file(root: File, tag: String, type: SystemArtworkType): File? =
-        sourceName(tag)?.let { File(File(File(root, "Art"), "Systems"), "${it}_${type.name.lowercase(Locale.ROOT)}.png") }
+    fun file(root: File, tag: String, type: SystemArtworkType): File? {
+        val category = tag.removePrefix("@").takeIf {
+            tag.startsWith("@") && (it in setOf("recent", "favorites", "collections", "tools") ||
+                it.matches(Regex("collection-[1-9][0-9]*")))
+        }
+        val name = category ?: sourceName(tag) ?: return null
+        val directory = File(File(root, "Art"), if (category != null) "Categories" else "Systems")
+        return File(directory, "${name}_${type.name.lowercase(Locale.ROOT)}.png")
+    }
 
     fun delete(root: File, tag: String, type: SystemArtworkType) {
         val target = file(root, tag, type) ?: throw IOException("Invalid platform tag")
@@ -30,11 +37,12 @@ object SystemArtwork {
         notifyChanged()
     }
 
-    internal fun bitmap(bytes: ByteArray): Bitmap {
+    internal fun bitmap(bytes: ByteArray, allowGif: Boolean = false): Bitmap {
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         bytes.inputStream().use { BitmapFactory.decodeStream(it, null, options) }
         if (options.outWidth !in 1..4096 || options.outHeight !in 1..4096 ||
-            options.outMimeType !in setOf("image/png", "image/jpeg", "image/webp")
+            (options.outMimeType !in setOf("image/png", "image/jpeg", "image/webp") &&
+                !(allowGif && options.outMimeType == "image/gif"))
         ) throw ScraperException(ScraperError.INVALID_RESPONSE)
         options.inJustDecodeBounds = false
         options.inSampleSize = 1

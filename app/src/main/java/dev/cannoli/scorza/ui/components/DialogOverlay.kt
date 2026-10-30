@@ -220,6 +220,10 @@ fun DialogOverlay(
             }
         }
 
+        DialogState.ArtworkImporting -> LoadingOverlay(
+            message = stringResource(R.string.artwork_importing),
+            showBack = false,
+        )
         is DialogState.ScraperStatus -> {
             if (dialogState.busy) {
                 LoadingOverlay(

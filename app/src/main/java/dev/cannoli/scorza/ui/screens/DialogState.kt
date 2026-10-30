@@ -50,6 +50,7 @@ data class ColorEntry(val key: String, @androidx.annotation.StringRes val labelR
 
 sealed interface DialogState {
     data object None : DialogState
+    data object ArtworkImporting : DialogState
     data class ExtensionFilters(
         val tag: String,
         val title: String,

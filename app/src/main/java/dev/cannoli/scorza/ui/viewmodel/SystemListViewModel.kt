@@ -108,6 +108,18 @@ class SystemListViewModel @Inject constructor(
     }
 
     sealed class ListItem {
+        val artworkTag: String?
+            get() = when (this) {
+                RecentlyPlayedItem -> "@recent"
+                FavoritesItem -> "@favorites"
+                CollectionsFolder -> "@collections"
+                is CollectionItem -> "@collection-$id"
+                is ToolsFolder -> "@tools"
+                is PortsFolder -> "PORTS"
+                is PlatformItem -> platform.tag
+                is GameItem -> null
+            }
+
         data object RecentlyPlayedItem : ListItem()
         data object FavoritesItem : ListItem()
         data object CollectionsFolder : ListItem()

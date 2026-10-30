@@ -1555,8 +1555,12 @@ class DialogInputHandler @Inject constructor(
                     context.getString(dev.cannoli.scorza.R.string.scrape_system) -> {
                         systemListViewModel.getSelectedPlatformTag()?.let { scraper.openSystem(it, state.gameName) }
                     }
+                    context.getString(dev.cannoli.scorza.R.string.choose_artwork) -> {
+                        val tag = systemListViewModel.getSelectedItem()?.artworkTag ?: return
+                        activityActions.chooseSystemArtwork(tag, settings.systemArtworkType)
+                    }
                     MENU_DELETE_ART -> {
-                        val tag = systemListViewModel.getSelectedPlatformTag() ?: return
+                        val tag = systemListViewModel.getSelectedItem()?.artworkTag ?: return
                         val type = settings.systemArtworkType
                         ioScope.launch {
                             try {

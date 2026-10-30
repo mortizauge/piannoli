@@ -6,4 +6,5 @@ interface ActivityActions {
     fun startRaLogin(username: String, password: String)
     fun startRommPairing(host: String)
     fun startRommCodePairing(host: String, pairCode: String)
+    fun chooseSystemArtwork(tag: String, type: dev.cannoli.scorza.settings.SystemArtworkType)
 }
