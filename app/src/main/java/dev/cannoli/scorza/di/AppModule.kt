@@ -16,6 +16,10 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
+    @Provides
+    fun provideScraperProvider(provider: dev.cannoli.scorza.scraper.ScreenScraperProvider): dev.cannoli.scorza.scraper.ScraperProvider =
+        provider
+
     @Provides @Singleton
     fun provideGlobalOverridesManager(settings: SettingsRepository): GlobalOverridesManager =
         GlobalOverridesManager { settings.sdCardRoot }

@@ -1,0 +1,103 @@
+package dev.cannoli.scorza.scraper
+
+import android.graphics.BitmapFactory
+import dev.cannoli.scorza.di.CannoliPathsProvider
+import dev.cannoli.scorza.model.Rom
+import dev.cannoli.scorza.util.ArtworkLookup
+import java.io.File
+import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import javax.inject.Inject
+
+class ScrapedArtworkStore @Inject constructor(
+    private val paths: CannoliPathsProvider,
+    private val artwork: ArtworkLookup,
+) {
+    fun systemArtworkFile(tag: String, type: dev.cannoli.scorza.settings.SystemArtworkType): File? =
+        SystemArtwork.file(paths.root, tag, type)?.takeIf { it.isFile }
+
+    fun installSystem(
+        tag: String,
+        type: dev.cannoli.scorza.settings.SystemArtworkType,
+        bytes: ByteArray,
+    ): File {
+        val destination = SystemArtwork.file(paths.root, tag, type) ?: throw ScraperException(ScraperError.NO_ARTWORK)
+        val bitmap = SystemArtwork.bitmap(bytes)
+        try {
+            val directory = destination.parentFile ?: throw ScraperException(ScraperError.STORAGE)
+            if (!directory.isDirectory && !directory.mkdirs()) throw ScraperException(ScraperError.STORAGE)
+            val temp = File.createTempFile(".system-", ".part", directory)
+            try {
+                temp.outputStream().use {
+                    if (!bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)) throw ScraperException(ScraperError.STORAGE)
+                }
+                Files.move(temp.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            } finally {
+                temp.delete()
+            }
+            SystemArtwork.notifyChanged()
+            return destination
+        } catch (e: IOException) {
+            throw ScraperException(ScraperError.STORAGE)
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    fun install(rom: Rom, bytes: ByteArray, overwrite: Boolean = false): File {
+        return install(rom.platformTag, rom.path.nameWithoutExtension,
+            rom.path.name.endsWith(".p8.png", ignoreCase = true), bytes, overwrite)
+    }
+
+    fun installPort(app: dev.cannoli.scorza.model.App, bytes: ByteArray, overwrite: Boolean = false): File {
+        require(app.type == dev.cannoli.scorza.model.AppType.PORT)
+        return install("PORTS", dev.cannoli.scorza.romm.download.sanitizeFsName(app.displayName), false, bytes, overwrite)
+    }
+
+    private fun install(tag: String, basename: String, embedded: Boolean, bytes: ByteArray, overwrite: Boolean): File {
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        bytes.inputStream().use { BitmapFactory.decodeStream(it, null, options) }
+        val extension = when (options.outMimeType) {
+            "image/png" -> "png"
+            "image/jpeg" -> "jpg"
+            "image/webp" -> "webp"
+            else -> throw ScraperException(ScraperError.INVALID_RESPONSE)
+        }
+        if (options.outWidth !in 1..4096 || options.outHeight !in 1..4096
+        ) throw ScraperException(ScraperError.INVALID_RESPONSE)
+        val directory = File(File(paths.root, "Art"), tag)
+        try {
+            artwork.invalidate(tag)
+            if (embedded ||
+                (!overwrite && artwork.findByName(tag, basename) != null)
+            ) throw ScraperException(ScraperError.EXISTING_ARTWORK)
+            if (!directory.isDirectory && !directory.mkdirs()) throw ScraperException(ScraperError.STORAGE)
+            val destination = File(directory, "$basename.$extension")
+            val temp = File.createTempFile(".scrape-", ".part", directory)
+            try {
+                temp.writeBytes(bytes)
+                if (overwrite) {
+                    Files.move(temp.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                    val entries = directory.listFiles() ?: throw ScraperException(ScraperError.STORAGE)
+                    for (file in entries) {
+                        if (file != destination && file.isFile && file.nameWithoutExtension == basename) {
+                            Files.delete(file.toPath())
+                        }
+                    }
+                } else {
+                    Files.move(temp.toPath(), destination.toPath())
+                }
+            } finally {
+                temp.delete()
+                artwork.invalidate(tag)
+            }
+            artwork.invalidate(tag)
+            return destination
+        } catch (e: ScraperException) {
+            throw e
+        } catch (e: IOException) {
+            throw ScraperException(ScraperError.STORAGE)
+        }
+    }
+}

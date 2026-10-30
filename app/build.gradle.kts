@@ -23,6 +23,15 @@ val keystoreProperties = Properties().apply {
     if (keystorePropertiesFile.exists()) load(keystorePropertiesFile.inputStream())
 }
 
+val localProperties = Properties().apply {
+    val source = rootProject.file("local.properties")
+    if (source.exists()) source.inputStream().use { load(it) }
+}
+
+fun screenScraperProperty(name: String): String =
+    localProperties.getProperty(name, "").replace("\\", "\\\\").replace("\"", "\\\"")
+        .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+
 android {
     namespace = "dev.cannoli.scorza"
     compileSdk {
@@ -52,6 +61,8 @@ android {
 
         buildConfigField("String", "BUILD_DATE", "\"${buildDate()}\"")
         buildConfigField("String", "GIT_HASH", "\"${gitCommitHash()}\"")
+        buildConfigField("String", "SCREENSCRAPER_DEV_ID", "\"${screenScraperProperty("screenscraper.devid")}\"")
+        buildConfigField("String", "SCREENSCRAPER_DEV_PASSWORD", "\"${screenScraperProperty("screenscraper.devpassword")}\"")
     }
 
     buildFeatures {
