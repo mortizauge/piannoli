@@ -246,6 +246,8 @@ fun SystemListScreen(
                         }
                     PillRowText(
                         label = label,
+                        showPinIcon = ((item as? ListItem.GameItem)?.item as? dev.cannoli.scorza.model.ListItem.AppItem)
+                            ?.app?.isPinned == true,
                         isSelected = isSelected,
                         fontSize = listFontSize,
                         lineHeight = listLineHeight,

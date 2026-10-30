@@ -243,6 +243,7 @@ fun GameListScreen(
                                 val label = if (item is ListItem.SubfolderItem) "/ $withStar" else withStar
                                 PillRowText(
                                     label = label,
+                                    showPinIcon = (item as? ListItem.AppItem)?.app?.isPinned == true,
                                     isSelected = isSelected,
                                     fontSize = listFontSize,
                                     lineHeight = listLineHeight,

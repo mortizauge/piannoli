@@ -1,6 +1,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Bottom bar labels -->
     <string name="loading_title">Loading</string>
+    <string name="label_pinned">Pinned</string>
     <string name="label_back">BACK</string>
     <string name="label_cancel" tools:ignore="ButtonCase">CANCEL</string>
     <string name="label_select">SELECT</string>

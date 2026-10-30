@@ -61,6 +61,7 @@ object CannoliIcons {
 
     // RomM lists
     val Variants = CannoliIcon("\uDB85\uDFF2", "Variants", "md-card_multiple_outline", "This row folds multiple versions", "RomM lists")
+    val Pin = CannoliIcon("\uDB81\uDC03", "Pin", "md-pin", "This tool is pinned to the top", "Library lists")
 
     /** Declaration order, which the gallery groups by [CannoliIcon.category]. */
     val all: List<CannoliIcon> = listOf(
@@ -72,6 +73,6 @@ object CannoliIcons {
         CloudAlert, CloudOff, AlertCircle, DatabaseSync,
         DatabaseAlert, Primary, CheckCircle, SyncDownload,
         SyncUpload, SyncAlert, NotInstalled, Unknown,
-        Variants,
+        Variants, Pin,
     )
 }

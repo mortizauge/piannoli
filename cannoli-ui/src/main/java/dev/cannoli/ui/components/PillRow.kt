@@ -31,12 +31,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.cannoli.ui.theme.LocalCannoliColors
+import dev.cannoli.ui.R
+import dev.cannoli.ui.theme.CannoliIcons
 import dev.cannoli.ui.theme.LocalCannoliIconFont
 import dev.cannoli.ui.theme.LocalPillScale
 import dev.cannoli.ui.theme.LocalScaleFactor
@@ -172,7 +177,8 @@ fun PillRowText(
     verticalPadding: Dp,
     showReorderIcon: Boolean = false,
     checkState: Boolean? = null,
-    tagSuffix: String? = null
+    tagSuffix: String? = null,
+    showPinIcon: Boolean = false,
 ) {
     val colors = LocalCannoliColors.current
     val baseStyle = MaterialTheme.typography.bodyLarge
@@ -205,6 +211,16 @@ fun PillRowText(
                         .horizontalScroll(scrollState),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (showPinIcon) {
+                        val pinnedLabel = stringResource(R.string.label_pinned)
+                        Text(
+                            text = CannoliIcons.Pin.glyph,
+                            style = textStyle.copy(fontFamily = LocalCannoliIconFont.current),
+                            color = textColor,
+                            modifier = Modifier.clearAndSetSemantics { contentDescription = pinnedLabel },
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
                     Text(
                         text = label,
                         style = textStyle,
