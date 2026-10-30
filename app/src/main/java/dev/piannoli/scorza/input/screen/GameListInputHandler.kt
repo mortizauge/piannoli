@@ -198,7 +198,8 @@ class GameListInputHandler @Inject constructor(
                     options.add(MENU_REMOVE_FROM_COLLECTION)
                 }
                 if (isApkList) {
-                    options.addAll(listOf(MENU_MANAGE_COLLECTIONS, MENU_REMOVE))
+                    if (!allTools) options.add(MENU_MANAGE_COLLECTIONS)
+                    options.add(MENU_REMOVE)
                 } else {
                     options.add(MENU_MANAGE_COLLECTIONS)
                     if (settings.raToken.isNotEmpty() &&

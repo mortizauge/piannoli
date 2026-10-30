@@ -105,6 +105,7 @@ fun DialogOverlay(
             backgroundImagePath = backgroundImagePath,
             backgroundTint = backgroundTint,
             title = dialogState.title,
+            subtitle = stringResource(R.string.filter_extensions_subtitle),
             listFontSize = listFontSize,
             listLineHeight = listLineHeight,
             rightBottomItems = listOf(buttonStyle.confirm to stringResource(R.string.filter_extension_action)),
@@ -1407,6 +1408,7 @@ internal fun ListDialogScreen(
     backgroundImagePath: String?,
     backgroundTint: Int,
     title: String,
+    subtitle: String? = null,
     listFontSize: TextUnit,
     listLineHeight: TextUnit,
     fullWidth: Boolean = true,
@@ -1432,6 +1434,14 @@ internal fun ListDialogScreen(
                     fontSize = listFontSize,
                     lineHeight = listLineHeight
                 )
+                if (subtitle != null) {
+                    Text(
+                        text = subtitle,
+                        color = LocalPiannoliColors.current.text.copy(alpha = 0.8f),
+                        fontSize = listFontSize * 0.75f,
+                        lineHeight = listLineHeight * 0.75f,
+                    )
+                }
                 Spacer(modifier = Modifier.height(listTitleSpacing()))
                 content()
             }

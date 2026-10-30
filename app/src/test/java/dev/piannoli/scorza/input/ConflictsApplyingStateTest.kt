@@ -162,6 +162,7 @@ class ConflictsApplyingStateTest {
         val options = handler.buildGameContextOptions(dev.piannoli.scorza.model.ListItem.AppItem(tool), state)
         assertTrue(MENU_PIN_TOOL in options)
         assertFalse(MENU_ADD_FAVORITE in options || MENU_REMOVE_FAVORITE in options)
+        assertFalse(MENU_MANAGE_COLLECTIONS in options || MENU_RENAME in options)
         val pinned = handler.buildGameContextOptions(
             dev.piannoli.scorza.model.ListItem.AppItem(tool.copy(isPinned = true)), state)
         assertTrue(MENU_UNPIN_TOOL in pinned)
@@ -171,6 +172,7 @@ class ConflictsApplyingStateTest {
             state.copy(platformTag = "ports"))
         assertTrue(MENU_ADD_FAVORITE in port)
         assertFalse(MENU_PIN_TOOL in port)
+        assertTrue(MENU_MANAGE_COLLECTIONS in port && MENU_RENAME in port)
     }
 
     @Test fun `tool pin action reloads list without favoriting and reports pin limit`() = runTest(dispatcher) {

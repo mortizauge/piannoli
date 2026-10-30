@@ -2031,8 +2031,10 @@ class DialogInputHandler @Inject constructor(
             } else if (isFav) MENU_REMOVE_FAVORITE else MENU_ADD_FAVORITE)
             if (isApk) {
                 if (app?.type == AppType.PORT) add(context.getString(dev.piannoli.scorza.R.string.steamgrid_action))
-                add(MENU_MANAGE_COLLECTIONS)
-                add(MENU_RENAME)
+                if (glState.platformTag != "tools") {
+                    add(MENU_MANAGE_COLLECTIONS)
+                    add(MENU_RENAME)
+                }
                 if (app?.artFile != null) add(MENU_DELETE_ART)
                 add(MENU_REMOVE)
             } else {

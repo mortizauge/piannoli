@@ -13,7 +13,7 @@
     <string name="scrape_fail_best_match">Best Match</string>
     <string name="scrape_fail_retry_skip">Retry -&gt; Skip</string>
     <string name="scrape_fail_retry_best_match">Retry -&gt; Best Match</string>
-    <string name="steamgrid_action">Scrape with SteamGridDB</string>
+    <string name="steamgrid_action">Scrape Game</string>
     <string name="bulk_scraping">Scraping</string>
     <string name="scrape_system">Scrape system</string>
     <string name="system_artwork_delete_failed">Cannot delete system artwork. Check storage access and try again.</string>
@@ -24,6 +24,7 @@
     <string name="app_icon_artwork_failed">Apps were added, but their icons could not be saved as artwork: %1$s. Check storage access and available space.</string>
     <string name="tool_pin_limit">You can pin up to 5 tools. Unpin a tool before pinning another.</string>
     <string name="filter_extensions">Filter extensions</string>
+    <string name="filter_extensions_subtitle">Checked extensions won\'t be shown</string>
     <string name="setting_hidden_files">Hidden files</string>
     <string name="remap_piannoli">Remap Piannoli</string>
     <string name="remap_confirm">A</string>
