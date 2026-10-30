@@ -114,7 +114,47 @@ class ConflictsApplyingStateTest {
         verify(exactly = 1) { scraper.openPort(port) }
     }
 
+    @Test fun `tool menus pin instead of favorite while ports still use Favorites`() {
+        val state = dev.cannoli.scorza.ui.viewmodel.GameListViewModel.State(platformTag = "tools")
+        val tool = dev.cannoli.scorza.model.App(7, dev.cannoli.scorza.model.AppType.TOOL, "Files", "dev.files")
+        val options = handler.buildGameContextOptions(dev.cannoli.scorza.model.ListItem.AppItem(tool), state)
+        assertTrue(MENU_PIN_TOOL in options)
+        assertFalse(MENU_ADD_FAVORITE in options || MENU_REMOVE_FAVORITE in options)
+        val pinned = handler.buildGameContextOptions(
+            dev.cannoli.scorza.model.ListItem.AppItem(tool.copy(isPinned = true)), state)
+        assertTrue(MENU_UNPIN_TOOL in pinned)
+        assertFalse(MENU_PIN_TOOL in pinned)
+        val port = handler.buildGameContextOptions(
+            dev.cannoli.scorza.model.ListItem.AppItem(tool.copy(type = dev.cannoli.scorza.model.AppType.PORT)),
+            state.copy(platformTag = "ports"))
+        assertTrue(MENU_ADD_FAVORITE in port)
+        assertFalse(MENU_PIN_TOOL in port)
+    }
 
+    @Test fun `tool pin action reloads list without favoriting and reports pin limit`() = runTest(dispatcher) {
+        Dispatchers.setMain(dispatcher)
+        try {
+            val tool = dev.cannoli.scorza.model.App(7, dev.cannoli.scorza.model.AppType.TOOL, "Files", "dev.files")
+            every { games.getSelectedItem() } returns dev.cannoli.scorza.model.ListItem.AppItem(tool)
+            every { games.state } returns kotlinx.coroutines.flow.MutableStateFlow(
+                dev.cannoli.scorza.ui.viewmodel.GameListViewModel.State(platformTag = "tools"))
+            every { apps.setToolsPinned(listOf(7), true) } returns true
+            nav.push(LauncherScreen.GameList)
+            nav.dialogState.value = DialogState.ContextMenu("Files", options = listOf(MENU_PIN_TOOL))
+            handler.onConfirm()
+            runCurrent()
+            verify(exactly = 1) { apps.setToolsPinned(listOf(7), true) }
+            verify(exactly = 1) { games.reload(any()) }
+            verify(exactly = 0) { games.toggleFavorite(any()) }
+            every { apps.setToolsPinned(listOf(7), true) } returns false
+            nav.dialogState.value = DialogState.ContextMenu("Files", options = listOf(MENU_PIN_TOOL))
+            handler.onConfirm()
+            runCurrent()
+            assertTrue(nav.dialogState.value is DialogState.LaunchError)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
 
     @Test fun `ports platform dispatches both game and system scraping`() {
         every { systems.getSelectedPlatformTag() } returns "PORTS"

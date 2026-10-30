@@ -1711,6 +1711,9 @@ class DialogInputHandler @Inject constructor(
                     nav.dialogState.value = DialogState.None
                 }
             }
+            selected == MENU_PIN_TOOL || selected == MENU_UNPIN_TOOL -> {
+                if (app?.type == AppType.TOOL) setToolsPinned(listOf(app.id), selected == MENU_PIN_TOOL)
+            }
             selected == MENU_ADD_FAVORITE || selected == MENU_REMOVE_FAVORITE -> {
                 pendingContextReturn = null
                 gameListViewModel.toggleFavorite { launcherActions.rescanSystemList() }
@@ -1814,6 +1817,13 @@ class DialogInputHandler @Inject constructor(
     private fun onBulkContextMenuConfirm(state: DialogState.BulkContextMenu) {
         pendingContextReturn = ContextReturn.Bulk(state.gamePaths, state.options)
         when (state.options[state.selectedOption]) {
+            MENU_PIN_TOOL, MENU_UNPIN_TOOL -> {
+                val ids = state.gamePaths.mapNotNull { path ->
+                    val ref = resolvePathToRef(path) as? dev.cannoli.scorza.db.LibraryRef.App
+                    ref?.id
+                }
+                setToolsPinned(ids, state.options[state.selectedOption] == MENU_PIN_TOOL)
+            }
             MENU_REMOVE_FROM_RECENTS -> {
                 pendingContextReturn = null
                 nav.dialogState.value = DialogState.None
@@ -2047,7 +2057,9 @@ class DialogInputHandler @Inject constructor(
         } || (glState.isCollection && glState.isFavorites)
         return buildList {
             if (glState.platformTag == "recently_played") add(MENU_REMOVE_FROM_RECENTS)
-            add(if (isFav) MENU_REMOVE_FAVORITE else MENU_ADD_FAVORITE)
+            add(if (app?.type == AppType.TOOL) {
+                if (app.isPinned) MENU_UNPIN_TOOL else MENU_PIN_TOOL
+            } else if (isFav) MENU_REMOVE_FAVORITE else MENU_ADD_FAVORITE)
             if (isApk) {
                 if (app?.type == AppType.PORT) add(context.getString(dev.cannoli.scorza.R.string.steamgrid_action))
                 add(MENU_MANAGE_COLLECTIONS)
@@ -2498,6 +2510,10 @@ class DialogInputHandler @Inject constructor(
         }
         val rom = (item as? ListItem.RomItem)?.rom
         when {
+            selected == MENU_PIN_TOOL || selected == MENU_UNPIN_TOOL -> {
+                val app = (item as? ListItem.AppItem)?.app ?: return
+                if (app.type == AppType.TOOL) setToolsPinned(listOf(app.id), selected == MENU_PIN_TOOL)
+            }
             selected == MENU_ADD_FAVORITE || selected == MENU_REMOVE_FAVORITE -> {
                 ioScope.launch {
                     val ref = resolvePathToRef(path) ?: return@launch
@@ -2517,6 +2533,22 @@ class DialogInputHandler @Inject constructor(
             }
             selected == MENU_DELETE || selected == MENU_DELETE_GAME -> {
                 nav.dialogState.value = DialogState.DeleteConfirm(gameName = displayName)
+            }
+        }
+    }
+
+    private fun setToolsPinned(ids: List<Long>, pinned: Boolean) {
+        pendingContextReturn = null
+        nav.dialogState.value = DialogState.None
+        ioScope.launch {
+            val saved = appsRepository.setToolsPinned(ids, pinned)
+            withContext(Dispatchers.Main) {
+                if (saved) {
+                    if (nav.currentScreen == LauncherScreen.SystemList) launcherActions.rescanSystemList(scanDisk = false)
+                    else gameListViewModel.reload()
+                } else {
+                    nav.dialogState.value = DialogState.LaunchError(context.getString(dev.cannoli.scorza.R.string.tool_pin_limit))
+                }
             }
         }
     }

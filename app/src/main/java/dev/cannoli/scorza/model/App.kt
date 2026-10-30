@@ -9,6 +9,7 @@ data class App(
     val packageName: String,
     val lastPlayedAt: Long? = null,
     val artFile: File? = null,
+    val isPinned: Boolean = false,
 )
 
 enum class AppType { TOOL, PORT }

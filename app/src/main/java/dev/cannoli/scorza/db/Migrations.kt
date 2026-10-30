@@ -245,6 +245,9 @@ internal object Migrations {
             db.execSQL("DROP TABLE game_overrides")
             db.execSQL("ALTER TABLE game_overrides_v12 RENAME TO game_overrides")
         },
+        Migration(13) { db ->
+            db.execSQL("ALTER TABLE apps ADD COLUMN pin_order INTEGER")
+        },
     )
 
     val current: Int = all.maxOf { it.version }

@@ -381,7 +381,7 @@ class GameListViewModel @Inject constructor(
             try {
                 val appType = if (type == "tools") AppType.TOOL else AppType.PORT
                 val apps = appsRepository.all(appType)
-                val favAppIds = if (showFavoriteStars) collectionsRepository.favoriteAppIds() else emptySet()
+                val favAppIds = if (showFavoriteStars && appType != AppType.TOOL) collectionsRepository.favoriteAppIds() else emptySet()
                 val items = apps
                     .sortedBy { it.id !in favAppIds }
                     .map { ListItem.AppItem(it) }
@@ -762,6 +762,10 @@ class GameListViewModel @Inject constructor(
 
     private fun canReorderSwap(current: State, a: Int, b: Int): Boolean {
         val isApkList = current.platformTag == "tools" || current.platformTag == "ports"
+        if (current.platformTag == "tools") {
+            return (current.items[a] as? ListItem.AppItem)?.app?.isPinned ==
+                (current.items[b] as? ListItem.AppItem)?.app?.isPinned
+        }
         if (isApkList) return true
         val itemA = current.items[a]; val itemB = current.items[b]
         if ((itemA is ListItem.ChildCollectionItem) != (itemB is ListItem.ChildCollectionItem)) return false

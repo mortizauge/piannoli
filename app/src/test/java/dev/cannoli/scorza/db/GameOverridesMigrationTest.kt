@@ -23,6 +23,7 @@ class GameOverridesMigrationTest {
         val conn = BundledSQLiteDriver().open(file.absolutePath)
         conn.execSQL("PRAGMA foreign_keys = ON")
         conn.execSQL("CREATE TABLE platforms (tag TEXT PRIMARY KEY, display_name TEXT NOT NULL)")
+        conn.execSQL("CREATE TABLE apps (id INTEGER PRIMARY KEY)")
         conn.execSQL(
             """
             CREATE TABLE roms (

@@ -72,6 +72,23 @@ class GameListBookmarkTest {
         model.restoreBookmark(bookmark) { continuation.resume(Unit) }
     }
 
+    @Test fun `tools ignore Favorites ordering and cannot be reordered across pin boundary`() = runBlocking {
+        val pinned = ListItem.AppItem(dev.cannoli.scorza.model.App(
+            1, dev.cannoli.scorza.model.AppType.TOOL, "Pinned", "dev.pinned", isPinned = true))
+        val other = ListItem.AppItem(dev.cannoli.scorza.model.App(
+            2, dev.cannoli.scorza.model.AppType.TOOL, "Favorite", "dev.favorite"))
+        every { apps.all(dev.cannoli.scorza.model.AppType.TOOL) } returns listOf(pinned.app, other.app)
+        every { collections.favoriteAppIds() } returns setOf(2)
+        suspendCancellableCoroutine<Unit> { continuation ->
+            model.loadApkList("tools", "Tools") { continuation.resume(Unit) }
+        }
+        assertEquals(listOf(pinned, other), model.state.value.items)
+        assertTrue(model.state.value.favoriteAppIds.isEmpty())
+        model.enterReorderMode()
+        model.reorderMoveDown()
+        assertEquals(listOf(pinned, other), model.state.value.items)
+        assertEquals(0, model.state.value.selectedIndex)
+    }
 
     @Test fun `search preserves exact submitted keyboard text caret and selection`() {
         val keyboard = dev.cannoli.ui.components.KeyboardState(

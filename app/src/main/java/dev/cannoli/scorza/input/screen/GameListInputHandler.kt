@@ -6,6 +6,8 @@ import dagger.hilt.android.scopes.ActivityScoped
 import dev.cannoli.scorza.di.IoScope
 import dev.cannoli.scorza.input.LauncherActions
 import dev.cannoli.scorza.input.MENU_ADD_FAVORITE
+import dev.cannoli.scorza.input.MENU_PIN_TOOL
+import dev.cannoli.scorza.input.MENU_UNPIN_TOOL
 import dev.cannoli.scorza.input.MENU_DELETE_ART
 import dev.cannoli.scorza.input.MENU_DELETE_GAME
 import dev.cannoli.scorza.input.MENU_MANAGE_COLLECTIONS
@@ -186,7 +188,12 @@ class GameListInputHandler @Inject constructor(
                 val isApkList = glState.platformTag == "tools" || glState.platformTag == "ports"
                 val options = mutableListOf<String>()
                 if (glState.platformTag == "recently_played") options.add(MENU_REMOVE_FROM_RECENTS)
-                options.add(if (allFav) MENU_REMOVE_FAVORITE else MENU_ADD_FAVORITE)
+                val allTools = checkedItems.all {
+                    (it as? ListItem.AppItem)?.app?.type == dev.cannoli.scorza.model.AppType.TOOL
+                }
+                options.add(if (allTools) {
+                    if (checkedItems.all { (it as ListItem.AppItem).app.isPinned }) MENU_UNPIN_TOOL else MENU_PIN_TOOL
+                } else if (allFav) MENU_REMOVE_FAVORITE else MENU_ADD_FAVORITE)
                 if (glState.isCollection && glState.collectionId != null) {
                     options.add(MENU_REMOVE_FROM_COLLECTION)
                 }

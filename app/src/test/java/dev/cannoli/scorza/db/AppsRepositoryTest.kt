@@ -8,6 +8,9 @@ import dev.cannoli.scorza.settings.SettingsRepository
 import dev.cannoli.scorza.util.ArtworkLookup
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -25,14 +28,17 @@ class AppsRepositoryTest {
 
     private lateinit var root: File
     private lateinit var repo: AppsRepository
+    private lateinit var database: CannoliDatabase
+    private lateinit var paths: CannoliPathsProvider
 
     @Before fun setUp() {
         root = tmp.newFolder("cannoli")
         File(root, "Config").mkdirs()
         val settings = SettingsRepository(ApplicationProvider.getApplicationContext<Context>())
         settings.sdCardRoot = root.absolutePath
-        val paths = CannoliPathsProvider(settings)
-        repo = AppsRepository(CannoliDatabase(paths), ArtworkLookup(paths))
+        paths = CannoliPathsProvider(settings)
+        database = CannoliDatabase(paths)
+        repo = AppsRepository(database, ArtworkLookup(paths))
     }
 
     private fun writeArt(tag: String, fileName: String): File {
@@ -94,5 +100,52 @@ class AppsRepositoryTest {
         val byName = repo.all(AppType.TOOL).associateBy { it.displayName }
         assertEquals(art, byName["Termux"]?.artFile)
         assertNull(byName["No Art"]?.artFile)
+    }
+
+    @Test fun `pins persist at top independently of Favorites and unpin restores normal order`() {
+        val collections = CollectionsRepository(database)
+        val favorites = collections.create("Favorites", dev.cannoli.scorza.model.CollectionType.FAVORITES)
+        val alpha = repo.upsert(AppType.TOOL, "Alpha", "dev.alpha")
+        val beta = repo.upsert(AppType.TOOL, "Beta", "dev.beta")
+        val zulu = repo.upsert(AppType.TOOL, "Zulu", "dev.zulu")
+        collections.addMember(favorites, LibraryRef.App(alpha))
+        assertTrue(repo.setToolsPinned(listOf(beta), true))
+        assertTrue(repo.setToolsPinned(listOf(zulu), true))
+        assertEquals(listOf(zulu, beta, alpha), repo.all(AppType.TOOL).map { it.id })
+        assertEquals(setOf(alpha), collections.favoriteAppIds())
+        database.close()
+        database = CannoliDatabase(paths)
+        repo = AppsRepository(database, ArtworkLookup(paths))
+        assertTrue(repo.byId(zulu)!!.isPinned)
+        assertEquals(listOf(zulu, beta, alpha), repo.all(AppType.TOOL).map { it.id })
+        assertTrue(repo.setToolsPinned(listOf(zulu), false))
+        assertEquals(listOf(beta, alpha, zulu), repo.all(AppType.TOOL).map { it.id })
+        assertFalse(repo.byId(zulu)!!.isPinned)
+    }
+
+    @Test fun `five pin cap is atomic for bulk requests and unpinning frees a slot`() {
+        val ids = (1..7).map { repo.upsert(AppType.TOOL, "Tool $it", "dev.tool$it") }
+        assertTrue(repo.setToolsPinned(ids.take(4), true))
+        assertFalse(repo.setToolsPinned(ids.takeLast(2), true))
+        assertEquals(4, repo.all(AppType.TOOL).count { it.isPinned })
+        assertTrue(repo.setToolsPinned(listOf(ids[4], ids[4]), true))
+        assertTrue(repo.setToolsPinned(listOf(ids[4]), true))
+        assertFalse(repo.setToolsPinned(listOf(ids[5]), true))
+        assertTrue(repo.setToolsPinned(listOf(ids[0]), false))
+        assertTrue(repo.setToolsPinned(listOf(ids[5]), true))
+        assertEquals(5, repo.all(AppType.TOOL).count { it.isPinned })
+        val port = repo.upsert(AppType.PORT, "Port", "dev.port")
+        assertThrows(IllegalArgumentException::class.java) { repo.setToolsPinned(listOf(port), true) }
+        assertFalse(repo.byId(port)!!.isPinned)
+    }
+
+    @Test fun `manual ordering keeps pins together and deleting a pinned tool frees its slot`() {
+        val ids = (1..6).map { repo.upsert(AppType.TOOL, "Tool $it", "dev.tool$it") }
+        assertTrue(repo.setToolsPinned(ids.take(5), true))
+        repo.setOrder(ids)
+        assertEquals(ids, repo.all(AppType.TOOL).map { it.id })
+        repo.delete(ids.first())
+        assertTrue(repo.setToolsPinned(listOf(ids.last()), true))
+        assertEquals(ids.last(), repo.all(AppType.TOOL).first().id)
     }
 }

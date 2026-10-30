@@ -243,7 +243,10 @@ class SystemListInputHandler @Inject constructor(
             nav.pendingFghItem = item.item
             val menuName = item.displayName
             val options = buildList {
-                add(if (isFav) MENU_REMOVE_FAVORITE else MENU_ADD_FAVORITE)
+                val app = (item.item as? ListItem.AppItem)?.app
+                add(if (app?.type == dev.cannoli.scorza.model.AppType.TOOL) {
+                    if (app.isPinned) dev.cannoli.scorza.input.MENU_UNPIN_TOOL else dev.cannoli.scorza.input.MENU_PIN_TOOL
+                } else if (isFav) MENU_REMOVE_FAVORITE else MENU_ADD_FAVORITE)
                 if (item.item is dev.cannoli.scorza.model.ListItem.RomItem ||
                     (item.item as? dev.cannoli.scorza.model.ListItem.AppItem)?.app?.type == dev.cannoli.scorza.model.AppType.PORT
                 ) add(context.getString(dev.cannoli.scorza.R.string.steamgrid_action))

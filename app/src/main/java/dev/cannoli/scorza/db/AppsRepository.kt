@@ -13,13 +13,13 @@ class AppsRepository(
 ) {
     fun all(type: AppType? = null): List<App> = if (type != null) {
         db.queryAll(
-            "SELECT $COLUMNS FROM apps WHERE type = ? ORDER BY sort_order, display_name COLLATE NOCASE",
+            "SELECT $COLUMNS FROM apps WHERE type = ? ORDER BY $ORDER",
             type.name,
             mapper = ::rowToApp,
         )
     } else {
         db.queryAll(
-            "SELECT $COLUMNS FROM apps ORDER BY type, sort_order, display_name COLLATE NOCASE",
+            "SELECT $COLUMNS FROM apps ORDER BY type, $ORDER",
             mapper = ::rowToApp,
         )
     }
@@ -61,9 +61,27 @@ class AppsRepository(
 
     fun delete(appId: Long) = db.execute("DELETE FROM apps WHERE id = ?", appId)
 
+    fun setToolsPinned(appIds: List<Long>, pinned: Boolean): Boolean = db.transaction { conn ->
+        val tools = conn.queryAll("SELECT id, pin_order FROM apps WHERE type = 'TOOL'") {
+            it.getLong(0) to if (it.isNull(1)) null else it.getLong(1)
+        }.toMap()
+        val ids = appIds.distinct()
+        require(ids.all { it in tools }) { "Only tools can be pinned" }
+        val additions = ids.filter { tools[it] == null }
+        if (pinned && tools.values.count { it != null } + additions.size > 5) return@transaction false
+        var next = (tools.values.filterNotNull().maxOrNull() ?: 0L) + 1
+        for (id in ids) {
+            if (!pinned) conn.execute("UPDATE apps SET pin_order = NULL WHERE id = ?", id)
+            else if (tools[id] == null) conn.execute("UPDATE apps SET pin_order = ? WHERE id = ?", next++, id)
+        }
+        true
+    }
+
     fun setOrder(orderedIds: List<Long>) = db.transaction { conn ->
         orderedIds.forEachIndexed { index, id ->
-            conn.execute("UPDATE apps SET sort_order = ? WHERE id = ?", index.toLong(), id)
+            conn.execute(
+                "UPDATE apps SET sort_order = ?, pin_order = CASE WHEN pin_order IS NULL THEN NULL ELSE ? END WHERE id = ?",
+                index.toLong(), -index.toLong(), id)
         }
     }
 
@@ -77,10 +95,12 @@ class AppsRepository(
             packageName = stmt.getText(3),
             lastPlayedAt = if (stmt.isNull(4)) null else stmt.getLong(4),
             artFile = artwork.findByName(type.artTag, sanitizeFsName(displayName)),
+            isPinned = !stmt.isNull(5),
         )
     }
 
     private companion object {
-        const val COLUMNS = "id, type, display_name, package_name, last_played_at"
+        const val COLUMNS = "id, type, display_name, package_name, last_played_at, pin_order"
+        const val ORDER = "(pin_order IS NULL), pin_order DESC, sort_order, display_name COLLATE NOCASE"
     }
 }
