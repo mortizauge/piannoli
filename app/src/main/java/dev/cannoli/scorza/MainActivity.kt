@@ -65,6 +65,7 @@ import dev.cannoli.scorza.ui.LocalViewportInsets
 import dev.cannoli.scorza.ui.ViewportInsetsPx
 import dev.cannoli.scorza.ui.screens.BootErrorScreen
 import dev.cannoli.scorza.ui.screens.DialogState
+import dev.cannoli.scorza.ui.screens.KeyboardHost
 import dev.cannoli.scorza.ui.viewmodel.GameListViewModel
 import dev.cannoli.scorza.ui.viewmodel.InputTesterViewModel
 import dev.cannoli.scorza.ui.viewmodel.SettingsViewModel
@@ -72,6 +73,7 @@ import dev.cannoli.scorza.ui.viewmodel.SystemListViewModel
 import dev.cannoli.scorza.romm.sync.RomKeys
 import dev.cannoli.scorza.updater.UpdateManager
 import dev.cannoli.ui.theme.CannoliTheme
+import dev.cannoli.ui.components.collectAsStateWhileActive
 import javax.inject.Inject
 import javax.inject.Provider
 
@@ -84,6 +86,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
     @Inject lateinit var router: InputRouter
     @Inject lateinit var onboardingHandler: dev.cannoli.scorza.input.screen.OnboardingInputHandler
     @Inject lateinit var inputDispatcher: InputDispatcher
+    @Inject lateinit var menuSounds: dev.cannoli.scorza.util.MenuSounds
     @Inject lateinit var screenInputRegistry: dev.cannoli.scorza.input.runtime.ScreenInputRegistry
     @Inject lateinit var menuNavigationPoller: dev.cannoli.scorza.input.runtime.MenuNavigationPoller
     @Inject lateinit var stickAutoRepeat: dev.cannoli.scorza.input.runtime.StickAutoRepeat
@@ -97,6 +100,8 @@ class MainActivity : ComponentActivity(), ActivityActions {
     @Inject lateinit var setupCoordinator: SetupCoordinator
     @Inject lateinit var launchManager: Provider<LaunchManager>
     @Inject lateinit var launchState: dev.cannoli.scorza.launcher.LaunchState
+    @Inject lateinit var browseSession: dev.cannoli.scorza.navigation.BrowseSession
+    @Inject lateinit var romDirectoryWatcher: Provider<dev.cannoli.scorza.scanner.RomDirectoryWatcher>
     @Inject lateinit var installedCoreService: Provider<InstalledCoreService>
     @Inject lateinit var romsRepository: Provider<RomsRepository>
     @Inject lateinit var romScanner: Provider<RomScanner>
@@ -141,6 +146,23 @@ class MainActivity : ComponentActivity(), ActivityActions {
         }
     }
     private var coldStart = true
+    private var launcherResumed = false
+    private val launcherUiActive = kotlinx.coroutines.flow.MutableStateFlow(false)
+
+    private fun updateLauncherActivity() {
+        val active = launcherResumed && hasWindowFocus() && !LibretroActivity.isRunning
+        launcherUiActive.value = active
+        if (active) menuNavigationPoller.start() else {
+            menuNavigationPoller.stop()
+            stickAutoRepeat.stop()
+        }
+        if (isReady) romDirectoryWatcher.get().setLauncherActive(active)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        updateLauncherActivity()
+    }
 
     private val storagePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -209,12 +231,29 @@ class MainActivity : ComponentActivity(), ActivityActions {
 
         setContent {
             val boot by bootSequencer.state.collectAsState()
+            LaunchedEffect(boot) {
+                if (boot is BootState.Ready) updateLauncherActivity()
+            }
             val appSettings = if (boot is BootState.Ready) settingsViewModel.get().appSettings.collectAsState().value else null
             val themeFont = appSettings?.fontFamily ?: appFonts.mplus1Code
             dev.cannoli.scorza.i18n.ProvideLocalizedResources(appSettings?.languageTag) {
             CannoliTheme(fontFamily = themeFont, iconFontFamily = appFonts.mplus1Code) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     CompositionLocalProvider(
+                        dev.cannoli.ui.components.LocalUiActive provides launcherUiActive,
+                        dev.cannoli.ui.components.LocalScreenBackground provides dev.cannoli.ui.components.ScreenBackgroundStyle(
+                            appSettings?.backgroundImagePath ?: settings.backgroundImagePath,
+                            appSettings?.backgroundTint ?: settings.backgroundTint,
+                        ),
+                        dev.cannoli.ui.theme.LocalCannoliColors provides dev.cannoli.ui.theme.CannoliColors(
+                            highlight = dev.cannoli.ui.theme.hexToColor(settings.colorHighlight) ?: androidx.compose.ui.graphics.Color.White,
+                            text = dev.cannoli.ui.theme.hexToColor(settings.colorText) ?: androidx.compose.ui.graphics.Color.White,
+                            highlightText = dev.cannoli.ui.theme.hexToColor(settings.colorHighlightText) ?: androidx.compose.ui.graphics.Color.Black,
+                            accent = dev.cannoli.ui.theme.hexToColor(settings.colorAccent) ?: androidx.compose.ui.graphics.Color.White,
+                            title = dev.cannoli.ui.theme.hexToColor(settings.colorTitle) ?: androidx.compose.ui.graphics.Color.White,
+                            background = dev.cannoli.ui.theme.hexToColor(settings.colorBackground) ?: androidx.compose.ui.graphics.Color.Black,
+                            statusBar = dev.cannoli.ui.theme.hexToColor(settings.colorStatusBar) ?: androidx.compose.ui.graphics.Color.White,
+                        ),
                         LocalViewportInsets provides ViewportInsetsPx(
                             geometryWidthPct = settings.screenGeometryWidth,
                             geometryHeightPct = settings.screenGeometryHeight,
@@ -300,7 +339,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
         val itvm = inputTesterViewModel.get()
         val cvm = controllersViewModel.get()
         val updateInfo = updateManager.updateAvailable.collectAsState().value
-        val dlProgress = updateManager.downloadProgress.collectAsState().value
+        val dlProgress = updateManager.downloadProgress.collectAsStateWhileActive().value
         val dlError = updateManager.downloadError.collectAsState().value
         val navScreen = nav.currentScreen
         val navDialogState = nav.dialogState
@@ -349,6 +388,10 @@ class MainActivity : ComponentActivity(), ActivityActions {
             rommDownloader = rommDownloader,
             rommArtFetcher = rommArtFetcher,
             saveSyncStatus = syncStatus,
+            onKeyboardConfirm = { inputDispatcher.onStart() },
+            onKeyboardCancel = { inputDispatcher.onWest() },
+            onKeyboardHelp = { inputDispatcher.onMenu() },
+            onKeyboardTick = { menuSounds.play(dev.cannoli.scorza.util.MenuSound.TICK) },
         )
     }
 
@@ -381,7 +424,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
 
     private fun registerControllerOsd() {
         controllerBridge.onDeviceAdded = { device ->
-            if (!device.isBuiltIn) {
+            if (settings.controllerNotifications && !device.isBuiltIn) {
                 val port = portRouter.portFor(device.androidDeviceId)
                 if (port != null) {
                     val name = portRouter.mappingForPort(port)?.displayName?.takeIf { it.isNotEmpty() }
@@ -391,22 +434,25 @@ class MainActivity : ComponentActivity(), ActivityActions {
             }
         }
         controllerBridge.onDeviceRemoved = { departed ->
-            val msg = departed.port?.let {
-                getString(R.string.osd_controller_disconnected_port, it + 1, departed.displayName)
-            } ?: getString(R.string.osd_controller_disconnected, departed.displayName)
-            osdController.show(msg)
+            if (settings.controllerNotifications) {
+                val msg = departed.port?.let {
+                    getString(R.string.osd_controller_disconnected_port, it + 1, departed.displayName)
+                } ?: getString(R.string.osd_controller_disconnected, departed.displayName)
+                osdController.show(msg)
+            }
         }
     }
 
     @Suppress("DEPRECATION")
     override fun onResume() {
         super.onResume()
+        launcherResumed = true
         // Re-wire the dispatcher to launcher dispatch shape on each resume. LibretroActivity
         // overwrites these callbacks with IGM-specific wiring when it runs; we restore the
         // launcher's wiring when we come back.
         router.wire(inputDispatcher)
         registerControllerOsd()
-        menuNavigationPoller.start()
+        updateLauncherActivity()
         bootSequencer.advance()
         launchState.launching = false
         val justExited = launchState.lastLaunched
@@ -419,6 +465,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
             if (justExited != null) syncScheduler.syncNow()
         }
         if (!isReady) return
+        if (!LibretroActivity.isRunning) browseSession.clear()
         if (!coldStart) overridePendingTransition(0, 0)
         coldStart = false
         hideSystemUI()
@@ -438,10 +485,12 @@ class MainActivity : ComponentActivity(), ActivityActions {
         if (activeDialogState.value is DialogState.RommConnected && rommStore.token.isNullOrEmpty()) {
             activeDialogState.value = DialogState.None
         }
-        launcherActions.get().refreshLauncherLists()
+        launcherActions.get().refreshLauncherLists(scanDisk = false)
     }
 
     override fun onPause() {
+        launcherResumed = false
+        updateLauncherActivity()
         super.onPause()
         syncScheduler.stop()
         menuNavigationPoller.stop()
@@ -454,9 +503,13 @@ class MainActivity : ComponentActivity(), ActivityActions {
             nav.pendingRecentlyPlayedReorder = false
             gameListViewModel.get().moveSelectedToTop()
         }
+        if (isReady && (launchState.launching || launchState.lastLaunched != null)) {
+            browseSession.save()
+        }
     }
 
     override fun onDestroy() {
+        menuSounds.release()
         controllerBridge.onDeviceAdded = null
         controllerBridge.onDeviceRemoved = null
         controllerBridge.stop(this)
@@ -473,7 +526,8 @@ class MainActivity : ComponentActivity(), ActivityActions {
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        return true
+        val dialog = nav.dialogState.value
+        return if (dialog is KeyboardHost || dialog is DialogState.KeyboardHelp) super.dispatchTouchEvent(event) else true
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -494,6 +548,14 @@ class MainActivity : ComponentActivity(), ActivityActions {
             if (bootVal !is BootState.NeedsSetup && bootVal !is BootState.NeedsPermission) return true
         }
         val cs = nav.currentScreen
+        if (nav.dialogState.value is KeyboardHost &&
+            settings.keyboardType == dev.cannoli.scorza.settings.KeyboardType.SYSTEM &&
+            event.keyCode == KeyEvent.KEYCODE_BACK &&
+            !AndroidGamepadKeyNames.isGamepadEvent(event)
+        ) {
+            if (event.action == KeyEvent.ACTION_DOWN) inputDispatcher.onWest()
+            return true
+        }
         if (cs is LauncherScreen.EditButtons && editButtonsController.isListening
             && event.action == KeyEvent.ACTION_DOWN) {
             editButtonsController.captureRawKeyEvent(event.keyCode)
@@ -510,22 +572,48 @@ class MainActivity : ComponentActivity(), ActivityActions {
                     val currentScreenForKey = nav.currentScreen
                     if (currentScreenForKey is LauncherScreen.InputTester) {
                         inputTesterController.dispatchKey(event, down = event.action == KeyEvent.ACTION_DOWN)
-                    } else if (event.action == KeyEvent.ACTION_DOWN) {
+                    } else if (event.action == KeyEvent.ACTION_DOWN || event.action == KeyEvent.ACTION_UP) {
                         // KEYCODE_BACK is a default BTN_MENU binding, but handhelds that wire the menu
                         // button to GPIO deliver it keyboard-sourced from a device ControllerBridge never
                         // routes, so it has no PortRouter entry and can never resolve through the mapping.
-                        // Call onMenu() directly so it behaves like a mapped BTN_MENU. TV keeps back-nav.
+                        // Dispatch it as BTN_MENU so launcher remapping still applies. TV keeps back-nav.
                         dev.cannoli.scorza.util.InputLog.write(
                             "back key: isTv=$isTv -> ${if (isTv) "onBack" else "onMenu"}"
                         )
-                        if (isTv) inputDispatcher.onBack() else inputDispatcher.onMenu()
+                        if (isTv) {
+                            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) inputDispatcher.onBack()
+                        } else {
+                            inputDispatcher.handleMenuKey(
+                                pressed = event.action == KeyEvent.ACTION_DOWN,
+                                isRepeat = event.repeatCount > 0,
+                            )
+                        }
                     }
                     return true
                 }
             }
         }
+        if (usesPiannoliKeyboard() && (
+                AndroidGamepadKeyNames.isGamepadEvent(event) ||
+                    KeyEvent.isGamepadButton(event.keyCode) ||
+                    event.keyCode in listOf(
+                        KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
+                        KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
+                        KeyEvent.KEYCODE_DPAD_CENTER,
+                    )
+                )) {
+            when (event.action) {
+                KeyEvent.ACTION_DOWN -> onKeyDown(event.keyCode, event)
+                KeyEvent.ACTION_UP -> onKeyUp(event.keyCode, event)
+            }
+            return true
+        }
         return super.dispatchKeyEvent(event)
     }
+
+    private fun usesPiannoliKeyboard(): Boolean =
+        nav.dialogState.value is KeyboardHost &&
+            settings.keyboardType == dev.cannoli.scorza.settings.KeyboardType.PIANNOLI
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         val bootValOnKeyDown = bootSequencer.state.value
@@ -554,7 +642,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
                 KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { inputDispatcher.onStart(); return true }
             }
         }
-        if (inputDispatcher.handleKeyEvent(event)) {
+        if (inputDispatcher.handleKeyEvent(event, keyboardNavigation = usesPiannoliKeyboard())) {
             return true
         }
         // Onboarding wizard fallback: route raw D-pad / button keycodes when no device has been
@@ -586,7 +674,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
             inputTesterController.dispatchKey(event, down = false)
             return true
         }
-        if (inputDispatcher.handleKeyEvent(event)) {
+        if (inputDispatcher.handleKeyEvent(event, keyboardNavigation = usesPiannoliKeyboard())) {
             return true
         }
         if (bindingController.keyUp(keyCode)) {
@@ -611,6 +699,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
     private val triggerL2HeldDevices = mutableSetOf<Int>()
     private val triggerR2HeldDevices = mutableSetOf<Int>()
     private val bindingHatSync = dev.cannoli.scorza.input.HatKeySync()
+    private val keyboardHatSync = dev.cannoli.scorza.input.HatKeySync()
 
     private fun syncBindingTrigger(deviceId: Int, keyCode: Int, value: Float, held: MutableSet<Int>) {
         val wasHeld = deviceId in held
@@ -634,8 +723,25 @@ class MainActivity : ComponentActivity(), ActivityActions {
         val source = event.source
         val isJoystick =
             source and android.view.InputDevice.SOURCE_JOYSTICK == android.view.InputDevice.SOURCE_JOYSTICK ||
-            source and android.view.InputDevice.SOURCE_GAMEPAD == android.view.InputDevice.SOURCE_GAMEPAD
+            source and android.view.InputDevice.SOURCE_GAMEPAD == android.view.InputDevice.SOURCE_GAMEPAD ||
+            (usesPiannoliKeyboard() &&
+                source and android.view.InputDevice.SOURCE_DPAD == android.view.InputDevice.SOURCE_DPAD)
         if (!isJoystick) return super.dispatchGenericMotionEvent(event)
+
+        if (usesPiannoliKeyboard()) {
+            onGenericMotionEvent(event)
+            keyboardHatSync.sync(
+                event.deviceId,
+                event.getAxisValue(android.view.MotionEvent.AXIS_HAT_X),
+                event.getAxisValue(android.view.MotionEvent.AXIS_HAT_Y),
+                { inputDispatcher.handleKeyboardHat(event.deviceId, it, pressed = true) },
+                { inputDispatcher.handleKeyboardHat(event.deviceId, it, pressed = false) },
+            )
+            return true
+        }
+        keyboardHatSync.releaseAll(event.deviceId) {
+            inputDispatcher.handleKeyboardHat(event.deviceId, it, pressed = false)
+        }
 
         val currentScreenForMotion = nav.currentScreen
         if (currentScreenForMotion is LauncherScreen.ShortcutBinding) {

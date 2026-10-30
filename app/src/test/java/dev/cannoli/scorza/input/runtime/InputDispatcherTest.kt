@@ -8,12 +8,247 @@ import dev.cannoli.scorza.input.GlyphStyle
 import dev.cannoli.scorza.input.HatDirection
 import dev.cannoli.scorza.input.InputBinding
 import dev.cannoli.scorza.input.MappingSource
+import dev.cannoli.scorza.input.DialogPrecedence
+import dev.cannoli.scorza.input.ScreenInputHandler
+import dev.cannoli.scorza.input.PiannoliRemapping
+import dev.cannoli.ui.MenuAction
+import dev.cannoli.ui.ButtonStyle
+import dev.cannoli.ui.ButtonLabelSet
+import dev.cannoli.ui.ConfirmButton
+import dev.cannoli.scorza.util.MenuSound
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class InputDispatcherTest {
+
+    @Test fun keyboard_dpad_fallback_handles_unbound_and_unregistered_devices_without_changing_caret() {
+        val (dispatcher, _, _) = setup(westernTemplate().copy(bindings = emptyMap()))
+        var keyboard = dev.cannoli.ui.components.KeyboardState(text = "Mario", cursorPos = 2)
+        val dialog = object : DialogPrecedence {
+            override fun onRight(): Boolean {
+                keyboard = dev.cannoli.ui.components.KeyboardController.moveSelection(
+                    keyboard, dev.cannoli.ui.components.Direction.RIGHT)
+                return true
+            }
+        }
+        dispatcher.wireToRegistry(dialogHandler = dialog)
+        val original = keyboard
+        assertTrue(dispatcher.handleKeyboardDirectionForTest(7, android.view.KeyEvent.KEYCODE_DPAD_RIGHT,
+            android.view.KeyEvent.ACTION_DOWN))
+        assertEquals(original.keyCol + 1, keyboard.keyCol)
+        assertTrue(dispatcher.handleKeyboardDirectionForTest(999, android.view.KeyEvent.KEYCODE_DPAD_RIGHT,
+            android.view.KeyEvent.ACTION_DOWN))
+        assertEquals(original.keyCol + 2, keyboard.keyCol)
+        assertEquals(original.text, keyboard.text)
+        assertEquals(original.cursorPos, keyboard.cursorPos)
+    }
+
+    @Test fun keyboard_hat_bridge_moves_unbound_hat_once_and_skips_mapped_hat() {
+        val (dispatcher, _, _) = setup(westernTemplate().copy(bindings = emptyMap()))
+        var left = 0
+        var leftReleases = 0
+        dispatcher.onLeft = { left++ }
+        dispatcher.onLeftRelease = { leftReleases++ }
+        assertTrue(dispatcher.handleKeyboardHat(7, 21, pressed = true))
+        assertTrue(dispatcher.handleKeyboardHat(7, 21, pressed = false))
+        assertFalse(dispatcher.handleKeyboardHat(7, 21, pressed = false))
+        assertEquals(1, left)
+        assertEquals(1, leftReleases)
+
+        val mapping = westernTemplate().copy(bindings = westernTemplate().bindings +
+            (CanonicalButton.BTN_RIGHT to listOf(InputBinding.Hat(15, HatDirection.RIGHT))))
+        val (mapped, _, _) = setup(mapping)
+        var right = 0
+        mapped.onRight = { right++ }
+        mapped.handleMotionEventForTest(7, mapOf(15 to 1f))
+        assertTrue(mapped.handleKeyboardHat(7, 22, pressed = true))
+        assertEquals(1, right)
+    }
+
+    @Test fun keyboard_dpad_fallback_does_not_duplicate_mapped_keys_or_hat_navigation() {
+        val mapping = westernTemplate().copy(bindings = westernTemplate().bindings +
+            (CanonicalButton.BTN_RIGHT to listOf(InputBinding.Hat(15, HatDirection.RIGHT))))
+        val (dispatcher, _, _) = setup(mapping)
+        var up = 0
+        var right = 0
+        dispatcher.onUp = { up++ }
+        dispatcher.onRight = { right++ }
+        assertFalse(dispatcher.handleKeyboardDirectionForTest(7, 19, android.view.KeyEvent.ACTION_DOWN))
+        dispatcher.handleKeyEventForTest(7, 19, android.view.KeyEvent.ACTION_DOWN, 0)
+        assertEquals(1, up)
+        dispatcher.handleMotionEventForTest(7, mapOf(15 to 1f))
+        assertTrue(dispatcher.handleKeyboardDirectionForTest(7, 22, android.view.KeyEvent.ACTION_DOWN))
+        assertTrue(dispatcher.handleKeyboardDirectionForTest(7, 22, android.view.KeyEvent.ACTION_DOWN))
+        assertEquals(1, right)
+    }
+
+    @Test fun capture_receives_physical_button_before_remapping_and_swallows_repeat_and_release() {
+        val (dispatcher, _, _) = setup(westernTemplate())
+        val bindings = MenuAction.swap(emptyMap(), MenuAction.CONFIRM, MenuAction.SELECT)
+        val captured = mutableListOf<MenuAction>()
+        var listening = false
+        var confirms = 0
+        var releases = 0
+        val handler = object : ScreenInputHandler {
+            override fun onConfirm() { confirms++; listening = true }
+            override fun onConfirmUp() { releases++ }
+            override fun onCaptureButton(button: CanonicalButton, mapping: DeviceMapping): Boolean {
+                if (!listening) return false
+                PiannoliRemapping.remappableButton(button, mapping)?.let { captured += it }
+                listening = false
+                return true
+            }
+        }
+        dispatcher.wireToRegistry(screenResolver = { handler },
+            remap = { button, mapping -> PiannoliRemapping.translate(button, mapping, bindings) })
+        dispatcher.handleKeyEventForTest(7, 109, android.view.KeyEvent.ACTION_DOWN, 0)
+        dispatcher.handleKeyEventForTest(7, 109, android.view.KeyEvent.ACTION_UP, 0)
+        assertEquals(emptyList<MenuAction>(), captured)
+        dispatcher.handleKeyEventForTest(7, 109, android.view.KeyEvent.ACTION_DOWN, 0)
+        dispatcher.handleKeyEventForTest(7, 109, android.view.KeyEvent.ACTION_DOWN, 1)
+        dispatcher.handleKeyEventForTest(7, 109, android.view.KeyEvent.ACTION_UP, 0)
+        assertEquals(listOf(MenuAction.SELECT), captured)
+        assertEquals(1, confirms)
+        assertEquals(1, releases)
+    }
+
+    @Test fun remapped_confirm_select_and_back_keep_releases_repeats_and_legends_in_sync() {
+        val (dispatcher, _, _) = setup(westernTemplate())
+        val bindings = MenuAction.swap(emptyMap(), MenuAction.CONFIRM, MenuAction.SELECT)
+        val remapped = MenuAction.swap(bindings, MenuAction.BACK, MenuAction.CONFIRM)
+        val events = mutableListOf<String>()
+        val handler = object : ScreenInputHandler {
+            override fun onConfirm() { events += "confirm" }
+            override fun onConfirmUp() { events += "confirmUp" }
+            override fun onSelect() { events += "select" }
+            override fun onSelectUp() { events += "selectUp" }
+            override fun onBack() { events += "back" }
+        }
+        dispatcher.wireToRegistry(screenResolver = { handler },
+            remap = { button, mapping -> PiannoliRemapping.translate(button, mapping, remapped) })
+        fun key(code: Int, action: Int, repeat: Int = 0) =
+            dispatcher.handleKeyEventForTest(7, code, action, repeat)
+        key(109, android.view.KeyEvent.ACTION_DOWN)
+        key(109, android.view.KeyEvent.ACTION_UP)
+        key(96, android.view.KeyEvent.ACTION_DOWN)
+        key(96, android.view.KeyEvent.ACTION_UP)
+        key(97, android.view.KeyEvent.ACTION_DOWN)
+        key(97, android.view.KeyEvent.ACTION_DOWN, 1)
+        key(97, android.view.KeyEvent.ACTION_UP)
+        assertEquals(listOf("confirm", "confirmUp", "select", "selectUp", "back"), events)
+        val labels = ButtonStyle(ButtonLabelSet.REDMOND, ConfirmButton.EAST, remapped)
+        assertEquals("SELECT", labels.confirm)
+        assertEquals(ButtonLabelSet.REDMOND.south, labels.select)
+        assertEquals(ButtonLabelSet.REDMOND.east, labels.back)
+
+        dispatcher.wireToRegistry(screenResolver = { handler })
+        key(97, android.view.KeyEvent.ACTION_DOWN)
+        key(97, android.view.KeyEvent.ACTION_UP)
+        assertEquals(listOf("confirm", "confirmUp"), events.takeLast(2))
+    }
+
+    @Test fun axis_trigger_can_confirm_and_release_and_hardware_menu_follows_remapping() {
+        val mapping = westernTemplate().copy(bindings = westernTemplate().bindings +
+            (CanonicalButton.BTN_L2 to listOf(InputBinding.Axis(17, 0f, 0f, 1f, 0.5f))))
+        val (dispatcher, _, _) = setup(mapping)
+        val bindings = MenuAction.swap(emptyMap(), MenuAction.CONFIRM, MenuAction.L2)
+        val remapped = MenuAction.swap(bindings, MenuAction.SELECT, MenuAction.MENU)
+        val events = mutableListOf<String>()
+        val handler = object : ScreenInputHandler {
+            override fun onConfirm() { events += "confirm" }
+            override fun onConfirmUp() { events += "confirmUp" }
+            override fun onSelect() { events += "select" }
+            override fun onSelectUp() { events += "selectUp" }
+        }
+        dispatcher.wireToRegistry(screenResolver = { handler },
+            remap = { button, device -> PiannoliRemapping.translate(button, device, remapped) })
+        dispatcher.handleMotionEventForTest(7, mapOf(17 to 1f))
+        dispatcher.handleMotionEventForTest(7, mapOf(17 to 0f))
+        dispatcher.handleMenuKey(true)
+        dispatcher.handleMenuKey(false)
+        assertEquals(listOf("confirm", "confirmUp", "select", "selectUp"), events)
+    }
+
+    @Test fun held_action_keeps_its_release_when_live_bindings_change() {
+        val (dispatcher, _, _) = setup(westernTemplate())
+        var bindings = emptyMap<MenuAction, MenuAction>()
+        var releases = 0
+        val handler = object : ScreenInputHandler {
+            override fun onSelectUp() { releases++ }
+        }
+        dispatcher.wireToRegistry(screenResolver = { handler },
+            remap = { button, mapping -> PiannoliRemapping.translate(button, mapping, bindings) })
+        dispatcher.handleKeyEventForTest(7, 109, android.view.KeyEvent.ACTION_DOWN, 0)
+        bindings = MenuAction.swap(bindings, MenuAction.SELECT, MenuAction.BACK)
+        dispatcher.handleKeyEventForTest(7, 109, android.view.KeyEvent.ACTION_UP, 0)
+        assertEquals(1, releases)
+    }
+
+    @Test fun swaps_remain_bijective_and_respect_each_controllers_confirm_convention() {
+        var bindings = emptyMap<MenuAction, MenuAction>()
+        MenuAction.entries.forEach { action ->
+            MenuAction.entries.forEach { button ->
+                bindings = MenuAction.swap(bindings, action, button)
+                assertEquals(MenuAction.entries.toSet(), bindings.values.toSet())
+                assertEquals(MenuAction.entries.size, bindings.size)
+                assertEquals(button, bindings[action])
+            }
+        }
+        bindings = MenuAction.swap(emptyMap(), MenuAction.CONFIRM, MenuAction.NORTH)
+        listOf(westernTemplate(), nintendoTemplate()).forEach { mapping ->
+            assertEquals(mapping.menuConfirm, PiannoliRemapping.translate(CanonicalButton.BTN_NORTH, mapping, bindings))
+            assertEquals(CanonicalButton.BTN_NORTH, PiannoliRemapping.translate(mapping.menuConfirm, mapping, bindings))
+            assertEquals(CanonicalButton.BTN_UP, PiannoliRemapping.translate(CanonicalButton.BTN_UP, mapping, bindings))
+        }
+    }
+
+    @Test fun menu_navigation_confirm_and_back_emit_distinct_feedback_once_per_action() {
+        val (dispatcher, _, _) = setup(westernTemplate())
+        val sounds = mutableListOf<MenuSound>()
+        var confirms = 0
+        val handler = object : ScreenInputHandler {
+            override fun onConfirm() { confirms++ }
+        }
+        dispatcher.wireToRegistry(screenResolver = { handler }, onMenuSound = { sounds.add(it) })
+        dispatcher.onUp()
+        dispatcher.onDown()
+        dispatcher.onLeft()
+        dispatcher.onRight()
+        dispatcher.onConfirm()
+        dispatcher.onStart()
+        dispatcher.onNorth()
+        dispatcher.onNorthUp()
+        dispatcher.onBack()
+        dispatcher.onWest()
+        dispatcher.onUpRelease()
+        assertEquals(
+            listOf(MenuSound.TICK, MenuSound.TICK, MenuSound.TICK, MenuSound.TICK,
+                MenuSound.CONFIRM, MenuSound.CONFIRM, MenuSound.CONFIRM, MenuSound.BACK, MenuSound.BACK),
+            sounds,
+        )
+        assertEquals(1, confirms)
+    }
+
+    @Test fun consumed_dialog_action_still_sounds_and_gameplay_rewiring_removes_launcher_feedback() {
+        val (dispatcher, _, _) = setup(westernTemplate())
+        val sounds = mutableListOf<MenuSound>()
+        var dialogConfirms = 0
+        val dialog = object : DialogPrecedence {
+            override fun onConfirm(): Boolean { dialogConfirms++; return true }
+        }
+        dispatcher.wireToRegistry(dialogHandler = dialog, onMenuSound = { sounds.add(it) })
+        dispatcher.onConfirm()
+        assertEquals(1, dialogConfirms)
+        assertEquals(listOf(MenuSound.CONFIRM), sounds)
+        dispatcher.wireToRegistry()
+        dispatcher.onConfirm()
+        dispatcher.onDown()
+        dispatcher.onNorth()
+        dispatcher.onBack()
+        assertEquals(listOf(MenuSound.CONFIRM), sounds)
+    }
 
     private fun westernTemplate() = DeviceMapping(
         id = "western",
@@ -143,16 +378,29 @@ class InputDispatcherTest {
     }
 
     @Test
-    fun repeat_event_re_fires_callback_for_non_nav_canonicals() {
-        // Non-nav canonical (BTN_SOUTH) still repeats via the dispatcher. Nav canonicals
-        // (BTN_UP/DOWN/LEFT/RIGHT) intentionally do not -- MenuNavigationPoller drives those.
+    fun held_back_only_leaves_one_screen_until_released_for_either_button_layout() {
+        for ((mapping, keyCode) in listOf(westernTemplate() to 96, nintendoTemplate() to 97)) {
+            val (d, _, _) = setup(mapping)
+            var back = 0
+            d.onBack = { back++ }
+            d.handleKeyEventForTest(7, keyCode, android.view.KeyEvent.ACTION_DOWN, 0)
+            assertTrue(d.handleKeyEventForTest(7, keyCode, android.view.KeyEvent.ACTION_DOWN, 1))
+            assertTrue(d.handleKeyEventForTest(7, keyCode, android.view.KeyEvent.ACTION_MULTIPLE, 2))
+            assertEquals(1, back)
+            d.handleKeyEventForTest(7, keyCode, android.view.KeyEvent.ACTION_UP, 0)
+            d.handleKeyEventForTest(7, keyCode, android.view.KeyEvent.ACTION_DOWN, 0)
+            assertEquals(2, back)
+        }
+    }
+
+    @Test
+    fun confirm_repeats_are_preserved() {
         val (d, _, _) = setup(westernTemplate())
-        var back = 0
-        d.onBack = { back++ }  // western template: BTN_SOUTH -> back
-        d.handleKeyEventForTest(deviceId = 7, keyCode = 96, action = android.view.KeyEvent.ACTION_DOWN, repeatCount = 0)
-        d.handleKeyEventForTest(deviceId = 7, keyCode = 96, action = android.view.KeyEvent.ACTION_DOWN, repeatCount = 1)
-        d.handleKeyEventForTest(deviceId = 7, keyCode = 96, action = android.view.KeyEvent.ACTION_DOWN, repeatCount = 2)
-        assertEquals(3, back)
+        var confirms = 0
+        d.onConfirm = { confirms++ }
+        d.handleKeyEventForTest(7, 97, android.view.KeyEvent.ACTION_DOWN, 0)
+        d.handleKeyEventForTest(7, 97, android.view.KeyEvent.ACTION_DOWN, 1)
+        assertEquals(2, confirms)
     }
 
     @Test

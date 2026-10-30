@@ -30,6 +30,7 @@ import javax.inject.Inject
 
 @ActivityScoped
 class SystemListInputHandler @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
     private val nav: NavigationController,
     @IoScope private val ioScope: CoroutineScope,
     private val settings: SettingsRepository,
@@ -159,7 +160,6 @@ class SystemListInputHandler @Inject constructor(
         if (nav.navigating) return
         systemListViewModel.savePosition()
         when (val item = systemListViewModel.getSelectedItem()) {
-            is SystemListViewModel.ListItem.RecentlyPlayedItem -> {
                 nav.navigating = true
                 gameListViewModel.loadRecentlyPlayed {
                     launcherActions.scanResumableGames()
@@ -167,7 +167,6 @@ class SystemListInputHandler @Inject constructor(
                     nav.navigating = false
                 }
             }
-            is SystemListViewModel.ListItem.FavoritesItem -> {
                 nav.navigating = true
                 gameListViewModel.loadFavorites {
                     launcherActions.scanResumableGames()
@@ -175,7 +174,6 @@ class SystemListInputHandler @Inject constructor(
                     nav.navigating = false
                 }
             }
-            is SystemListViewModel.ListItem.CollectionsFolder -> {
                 nav.navigating = true
                 gameListViewModel.loadCollectionsList {
                     nav.screenStack.add(LauncherScreen.GameList)
@@ -190,7 +188,6 @@ class SystemListInputHandler @Inject constructor(
                     nav.navigating = false
                 }
             }
-            is SystemListViewModel.ListItem.CollectionItem -> {
                 nav.navigating = true
                 gameListViewModel.loadCollectionById(item.id) {
                     launcherActions.scanResumableGames()
@@ -243,6 +240,9 @@ class SystemListInputHandler @Inject constructor(
             val menuName = item.displayName
             val options = buildList {
                 add(if (isFav) MENU_REMOVE_FAVORITE else MENU_ADD_FAVORITE)
+                if (item.item is dev.cannoli.scorza.model.ListItem.RomItem ||
+                    (item.item as? dev.cannoli.scorza.model.ListItem.AppItem)?.app?.type == dev.cannoli.scorza.model.AppType.PORT
+                ) add(context.getString(dev.cannoli.scorza.R.string.steamgrid_action))
                 add(MENU_MANAGE_COLLECTIONS)
                 add(MENU_EMULATOR_OVERRIDE)
                 add(MENU_DELETE_GAME)
@@ -257,6 +257,14 @@ class SystemListInputHandler @Inject constructor(
             else -> return
         }
         val options = buildList {
+            if (item is SystemListViewModel.ListItem.PlatformItem || item is SystemListViewModel.ListItem.PortsFolder) {
+                add(context.getString(dev.cannoli.scorza.R.string.bulk_platform_games, name))
+                add(context.getString(dev.cannoli.scorza.R.string.scrape_system))
+                add(dev.cannoli.scorza.input.MENU_DELETE_ART)
+            }
+            if (item is SystemListViewModel.ListItem.PlatformItem) {
+                add(context.getString(dev.cannoli.scorza.R.string.filter_extensions))
+            }
             add(MENU_RENAME)
             if (item is SystemListViewModel.ListItem.PlatformItem && rommConnectionStore.isConfigured) {
                 add(MENU_DOWNLOAD_ART)

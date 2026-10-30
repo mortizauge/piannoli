@@ -13,6 +13,7 @@ import dev.cannoli.scorza.scanner.RomDirectoryWatcher
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -48,13 +49,14 @@ class SystemListScanTargetsTest {
     private lateinit var romsRepository: RomsRepository
     private val created = mutableListOf<SystemListViewModel>()
 
-    private fun viewModel(romDir: File, indexed: Map<String, Int>): SystemListViewModel {
+    private fun viewModel(romDir: File, indexed: Map<String, Int>, filters: Map<String, Set<String>> = emptyMap()): SystemListViewModel {
         romScanner = mockk(relaxed = true)
         romsRepository = mockk(relaxed = true)
         every { romsRepository.platformCounts() } returns indexed
         every { romsRepository.knownPlatformTags() } returns indexed.keys.toList()
 
         val paths = mockk<CannoliPathsProvider>()
+        every { paths.filteredExtensions(any()) } answers { filters[firstArg()] ?: emptySet() }
         every { paths.romDir } returns romDir
 
         val platformConfig = mockk<PlatformConfig>(relaxed = true)
@@ -105,6 +107,24 @@ class SystemListScanTargetsTest {
         assertEquals(listOf("GB", "SNES"), scanned.sorted())
     }
 
+    @Test fun `scan discovers alias folders and visits canonical system once`() {
+        val romDir = tmp.newFolder("Roms")
+        listOf("PS", "Ps1", "psx", "playstation", "PlayStation backup").forEach { File(romDir, it).mkdirs() }
+        val vm = viewModel(romDir, indexed = mapOf("PS" to 4))
+        assertEquals(listOf("PS"), scannedTags(vm, reconcileOrphans = false))
+    }
+
+    @Test fun `a fully filtered platform stays visible so exclusions can be undone`() {
+        val romDir = tmp.newFolder("Roms")
+        File(romDir, "GB").mkdirs()
+        val vm = viewModel(romDir, indexed = mapOf("GB" to 0), filters = mapOf("GB" to setOf("gb", "zip")))
+        val done = CountDownLatch(1)
+        vm.scan(scanDisk = false, onReady = { done.countDown() })
+        assertTrue(done.await(10, TimeUnit.SECONDS))
+        val platforms = vm.state.value.items.filterIsInstance<SystemListViewModel.ListItem.PlatformItem>()
+        assertEquals(listOf("GB"), platforms.map { it.platform.tag })
+    }
+
     @Test fun `an ordinary scan leaves an orphaned platform alone`() {
         val romDir = tmp.newFolder("Roms")
         File(romDir, "GB").mkdirs()
@@ -144,7 +164,31 @@ class SystemListScanTargetsTest {
         assertEquals(listOf("GB"), scanned)
     }
 
+    @Test fun `saved platform identity and viewport survive recreation and changed list ordering`() {
+        val romDir = tmp.newFolder("Roms")
+        val original = viewModel(romDir, indexed = linkedMapOf("GB" to 2, "SNES" to 4))
+        fun loadIndex(vm: SystemListViewModel) {
+            val done = CountDownLatch(1)
+            vm.scan(scanDisk = false, onReady = { done.countDown() })
+            assertTrue(done.await(10, TimeUnit.SECONDS))
+        }
+        loadIndex(original)
+        val gbIndex = original.state.value.items.indexOfFirst {
+            it is SystemListViewModel.ListItem.PlatformItem && it.platform.tag == "GB"
+        }
+        assertTrue(gbIndex >= 0)
+        original.setSelectedIndex(gbIndex)
+        original.firstVisibleIndex = 1
+        val saved = original.browsePosition()
+        val restored = viewModel(romDir, indexed = linkedMapOf("NES" to 1, "GB" to 9, "SNES" to 4))
+        loadIndex(restored)
+        restored.restoreBrowsePosition(saved)
+        assertEquals("GB", restored.getSelectedPlatformTag())
+        assertEquals(1, restored.firstVisibleIndex)
+        verify(exactly = 0) { romScanner.scanPlatform(any(), any()) }
+    }
+
     private companion object {
-        val KNOWN = setOf("GB", "SNES", "NES")
+        val KNOWN = setOf("GB", "SNES", "NES", "PS")
     }
 }

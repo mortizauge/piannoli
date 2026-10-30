@@ -54,6 +54,7 @@ class SettingsInputHandler @Inject constructor(
     @ApplicationContext private val context: Context,
     private val rommStore: dev.cannoli.scorza.romm.RommConnectionStore,
     private val cannoliPaths: CannoliPathsProvider,
+    private val scraper: dev.cannoli.scorza.scraper.ScraperController,
 ) : ScreenInputHandler {
 
     override fun onUp() {
@@ -97,6 +98,15 @@ class SettingsInputHandler @Inject constructor(
         }
 
         when (val key = settingsViewModel.enterSelected()) {
+            "remap:CONFIRM", "remap:BACK", "remap:NORTH", "remap:WEST", "remap:START", "remap:SELECT" ->
+                settingsViewModel.startRemapping()
+            "remap_piannoli" -> settingsViewModel.enterSubCategory("remap_piannoli", dev.cannoli.scorza.R.string.remap_piannoli)
+            "remap_reset" -> settingsViewModel.cycleSelected(1)
+            "artwork" -> settingsViewModel.enterSubCategory("artwork", dev.cannoli.scorza.R.string.settings_artwork)
+            "game_artwork" -> settingsViewModel.enterSubCategory("game_artwork", dev.cannoli.scorza.R.string.settings_game_artwork)
+            "system_artwork" -> settingsViewModel.enterSubCategory("system_artwork", dev.cannoli.scorza.R.string.setting_system_artwork)
+            "setup_scrapers" -> settingsViewModel.enterSubCategory("setup_scrapers", dev.cannoli.scorza.R.string.settings_setup_scrapers)
+            "steamgrid_setup" -> scraper.openSteamGridSetup()
             "integrations_ra" -> {
                 if (settings.raToken.isNotEmpty()) nav.dialogState.value = DialogState.RAAccount(username = settings.raUsername)
                 else settingsViewModel.enterSubCategory("retroachievements", dev.cannoli.scorza.R.string.settings_retroachievements)
@@ -203,6 +213,10 @@ class SettingsInputHandler @Inject constructor(
     }
 
     override fun onBack() {
+        if (settingsViewModel.state.value.remappingAction != null) {
+            settingsViewModel.cancelRemapping()
+            return
+        }
         if (settingsViewModel.state.value.inSubList) {
             settingsViewModel.save()
             settingsViewModel.exitSubList()
@@ -219,9 +233,27 @@ class SettingsInputHandler @Inject constructor(
             launcherActions.confirmRomDirectoryChange("")
             return
         }
+
         if (settingsViewModel.state.value.activeCategory == "screen_geometry") {
             settingsViewModel.resetScreenGeometry()
         }
+    }
+
+    override fun onCaptureButton(
+        button: dev.cannoli.scorza.input.CanonicalButton,
+        mapping: dev.cannoli.scorza.input.DeviceMapping,
+    ): Boolean {
+        if (settingsViewModel.state.value.remappingAction == null) return false
+        val physical = dev.cannoli.scorza.input.PiannoliRemapping.remappableButton(button, mapping)
+        if (physical != null) settingsViewModel.assignRemapping(physical)
+        else if (button in listOf(
+                dev.cannoli.scorza.input.CanonicalButton.BTN_UP,
+                dev.cannoli.scorza.input.CanonicalButton.BTN_DOWN,
+                dev.cannoli.scorza.input.CanonicalButton.BTN_LEFT,
+                dev.cannoli.scorza.input.CanonicalButton.BTN_RIGHT,
+                dev.cannoli.scorza.input.CanonicalButton.BTN_MENU,
+            )) settingsViewModel.cancelRemapping()
+        return true
     }
 
     private fun pageJump(direction: Int) {

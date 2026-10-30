@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -17,12 +18,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.SubcomposeAsyncImage
 import dev.cannoli.scorza.R
 import dev.cannoli.scorza.romm.sync.PreLaunchOutcome
 import dev.cannoli.scorza.romm.sync.SyncDirection
@@ -37,7 +40,6 @@ import dev.cannoli.scorza.ui.screens.KeyboardHost
 import dev.cannoli.scorza.romm.RommArtType
 import dev.cannoli.ui.ButtonStyle
 import dev.cannoli.ui.DPAD_HORIZONTAL
-import dev.cannoli.ui.START_GLYPH
 import dev.cannoli.ui.theme.CannoliIcons
 import dev.cannoli.ui.theme.LocalCannoliColors
 import dev.cannoli.ui.theme.LocalCannoliFont
@@ -61,6 +63,7 @@ import dev.cannoli.ui.components.OverlayScrim
 import dev.cannoli.ui.components.SectionedList
 import dev.cannoli.ui.components.RAAccountOverlay
 import dev.cannoli.ui.components.RALoggingInOverlay
+import dev.cannoli.ui.components.LoadingOverlay
 import dev.cannoli.ui.components.RommConnectedOverlay
 import dev.cannoli.ui.components.RommPairingOverlay
 import dev.cannoli.ui.components.RestartOverlay
@@ -90,45 +93,146 @@ fun DialogOverlay(
     // Only the Tools and Ports lists offer to drop a shortcut for an app that has gone missing,
     // and that depends on the list being viewed rather than on anything the dialog carries.
     appListPlatformTag: String? = null,
+    onKeyboardChange: ((dev.cannoli.ui.components.KeyboardState) -> Unit)? = null,
+    onKeyboardConfirm: () -> Unit = {},
+    onKeyboardCancel: () -> Unit = {},
+    onKeyboardHelp: () -> Unit = {},
+    useSystemKeyboard: Boolean = false,
 ) {
     val itemHeight = pillItemHeight(listLineHeight, listVerticalPadding)
     when (dialogState) {
-        is DialogState.ContextMenu -> {
+        is DialogState.ExtensionFilters -> ListDialogScreen(
+            backgroundImagePath = backgroundImagePath,
+            backgroundTint = backgroundTint,
+            title = dialogState.title,
+            listFontSize = listFontSize,
+            listLineHeight = listLineHeight,
+            rightBottomItems = listOf(buttonStyle.confirm to stringResource(R.string.filter_extension_action)),
+            buttonStyle = buttonStyle,
+        ) {
+            List(
+                items = dialogState.extensions,
+                selectedIndex = dialogState.selectedIndex,
+                itemHeight = itemHeight,
+            ) { _, extension, selected ->
+                androidx.compose.foundation.layout.Row(
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                ) {
+                    androidx.compose.material3.Checkbox(
+                        checked = extension in dialogState.excluded,
+                        onCheckedChange = null,
+                    )
+                    PillRowText(
+                        label = if (extension.isEmpty()) stringResource(R.string.filter_no_extension) else ".$extension",
+                        isSelected = selected,
+                        fontSize = listFontSize,
+                        lineHeight = listLineHeight,
+                        verticalPadding = listVerticalPadding,
+                    )
+                }
+            }
+            if (!dialogState.loading && dialogState.extensions.isEmpty()) {
+                androidx.compose.material3.Text(stringResource(R.string.filter_extensions_empty),
+                    color = dev.cannoli.ui.theme.LocalCannoliColors.current.text)
+            }
+        }
+        DialogState.ScraperOverwriteConfirm -> ConfirmOverlay(
+            message = stringResource(R.string.scraper_overwrite_confirm),
+            buttonStyle = buttonStyle,
+            confirmLabel = stringResource(R.string.scraper_overwrite),
+            backgroundImagePath = backgroundImagePath,
+            backgroundTint = backgroundTint,
+        )
+        is DialogState.ContextMenu, is DialogState.ScraperMenu -> {
+            val title: String
+            val options: List<String>
+            val selectedIndex: Int
+            if (dialogState is DialogState.ContextMenu) {
+                title = dialogState.gameName
+                options = dialogState.options
+                selectedIndex = dialogState.selectedOption
+            } else {
+                val menu = dialogState as DialogState.ScraperMenu
+                title = menu.title
+                options = menu.options
+                selectedIndex = menu.selectedIndex
+            }
+            val preview = (dialogState as? DialogState.ScraperMenu)?.previews?.getOrNull(selectedIndex)
             ListDialogScreen(
                 backgroundImagePath = backgroundImagePath,
                 backgroundTint = backgroundTint,
-                title = dialogState.gameName,
+                title = title,
                 listFontSize = listFontSize,
                 listLineHeight = listLineHeight,
-                fullWidth = dialogState.options.any { it.contains('\t') },
+                fullWidth = preview != null || options.any { it.contains('\t') },
                 rightBottomItems = emptyList(),
                 buttonStyle = buttonStyle
             ) {
-                List(
-                    items = dialogState.options,
-                    selectedIndex = dialogState.selectedOption,
-                    itemHeight = itemHeight
-                ) { _, option, isSelected ->
-                    val parts = option.split("\t", limit = 2)
-                    if (parts.size == 2) {
-                        PillRowKeyValue(
-                            label = parts[0],
-                            value = parts[1],
-                            isSelected = isSelected,
-                            fontSize = listFontSize,
-                            lineHeight = listLineHeight,
-                            verticalPadding = listVerticalPadding
-                        )
-                    } else {
-                        PillRowText(
-                            label = option,
-                            isSelected = isSelected,
-                            fontSize = listFontSize,
-                            lineHeight = listLineHeight,
-                            verticalPadding = listVerticalPadding
+                Row(modifier = Modifier.fillMaxSize()) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        List(
+                            items = options,
+                            selectedIndex = selectedIndex,
+                            itemHeight = itemHeight
+                        ) { _, option, isSelected ->
+                            val parts = option.split("\t", limit = 2)
+                            if (parts.size == 2) {
+                                PillRowKeyValue(
+                                    label = parts[0],
+                                    value = parts[1],
+                                    isSelected = isSelected,
+                                    fontSize = listFontSize,
+                                    lineHeight = listLineHeight,
+                                    verticalPadding = listVerticalPadding
+                                )
+                            } else {
+                                PillRowText(
+                                    label = option,
+                                    isSelected = isSelected,
+                                    fontSize = listFontSize,
+                                    lineHeight = listLineHeight,
+                                    verticalPadding = listVerticalPadding
+                                )
+                            }
+                        }
+                    }
+                    if (preview != null) {
+                        SubcomposeAsyncImage(
+                            model = preview,
+                            contentDescription = options.getOrNull(selectedIndex),
+                            modifier = Modifier.fillMaxWidth(0.4f).fillMaxHeight().padding(start = 12.dp),
+                            contentScale = ContentScale.Fit,
+                            loading = {
+                                Text(
+                                    stringResource(R.string.steamgrid_preview_loading),
+                                    color = LocalCannoliColors.current.text,
+                                )
+                            },
+                            error = {
+                                Text(
+                                    stringResource(R.string.steamgrid_preview_error),
+                                    color = LocalCannoliColors.current.text,
+                                )
+                            },
                         )
                     }
                 }
+            }
+        }
+
+        is DialogState.ScraperStatus -> {
+            if (dialogState.busy) {
+                LoadingOverlay(
+                    message = dialogState.message,
+                    buttonStyle = buttonStyle,
+                    title = stringResource(if (dialogState.bulk) R.string.bulk_scraping else dev.cannoli.ui.R.string.loading_title),
+                )
+            } else {
+                MessageOverlay(
+                    message = dialogState.message,
+                    buttonStyle = buttonStyle,
+                    buttonLabel = stringResource(R.string.label_back),
+                )
             }
         }
 
@@ -194,14 +298,25 @@ fun DialogOverlay(
                     }
                 }
             KeyboardOverlay(
+                useSystemKeyboard = useSystemKeyboard,
                 state = host.keyboard,
+                masked = dialogState is DialogState.ScraperInput &&
+                    dialogState.field in setOf(
+                        dev.cannoli.scorza.scraper.ScraperField.PASSWORD,
+                        dev.cannoli.scorza.scraper.ScraperField.API_KEY,
+                    ),
                 title = keyboardTitle,
-                buttonStyle = buttonStyle
+                buttonStyle = buttonStyle,
+                onStateChange = onKeyboardChange,
+                onConfirm = onKeyboardConfirm,
+                onCancel = onKeyboardCancel,
+                onHelp = onKeyboardHelp,
             )
         }
 
         is DialogState.KeyboardHelp -> {
             KeyboardHelpOverlay(
+                onClose = onKeyboardHelp,
                 layout = dialogState.layout,
                 titleFontSize = listFontSize,
                 titleLineHeight = listLineHeight,
@@ -603,7 +718,7 @@ fun DialogOverlay(
             dev.cannoli.scorza.ui.screens.RommArtResultsScreen(
                 results = dialogState.results,
                 selectedIndex = dialogState.selectedIndex,
-                backgroundImagePath = null,
+                backgroundImagePath = backgroundImagePath,
                 backgroundTint = backgroundTint,
                 listFontSize = listFontSize,
                 listLineHeight = listLineHeight,
@@ -626,7 +741,7 @@ fun DialogOverlay(
                 it.status == DownloadStatus.Queued || it.status is DownloadStatus.Downloading
             }
             ListDialogScreen(
-                backgroundImagePath = null,
+                backgroundImagePath = backgroundImagePath,
                 backgroundTint = backgroundTint,
                 title = stringResource(R.string.romm_download_queue),
                 listFontSize = listFontSize,
@@ -899,7 +1014,7 @@ fun DialogOverlay(
                 listFontSize = listFontSize,
                 listLineHeight = listLineHeight,
                 leftBottomItems = listOf(DPAD_HORIZONTAL to stringResource(R.string.label_change)),
-                rightBottomItems = listOf(START_GLYPH to stringResource(R.string.label_confirm)),
+                rightBottomItems = listOf(buttonStyle.start to stringResource(R.string.label_confirm)),
                 buttonStyle = buttonStyle,
             ) {
                 List(
@@ -1125,6 +1240,8 @@ private fun quickMenuLabel(row: dev.cannoli.scorza.ui.quickmenu.QuickMenuRow): S
     dev.cannoli.scorza.ui.quickmenu.QuickMenuRow.CONFLICTS -> stringResource(dev.cannoli.ui.R.string.conflicts_title)
     dev.cannoli.scorza.ui.quickmenu.QuickMenuRow.ERRORS -> stringResource(dev.cannoli.ui.R.string.sync_errors_title)
     dev.cannoli.scorza.ui.quickmenu.QuickMenuRow.KITCHEN -> stringResource(R.string.quick_menu_kitchen)
+    dev.cannoli.scorza.ui.quickmenu.QuickMenuRow.SCRAPING -> stringResource(R.string.bulk_all)
+    dev.cannoli.scorza.ui.quickmenu.QuickMenuRow.SCRAPE_SYSTEMS -> stringResource(R.string.bulk_systems)
     dev.cannoli.scorza.ui.quickmenu.QuickMenuRow.RESCAN -> stringResource(R.string.quick_menu_rescan)
     dev.cannoli.scorza.ui.quickmenu.QuickMenuRow.INFO -> stringResource(R.string.quick_menu_info)
 }
@@ -1267,27 +1384,29 @@ private fun ConfirmOverlay(
     buttonStyle: ButtonStyle,
     cancelLabel: String? = null,
     confirmLabel: String? = null,
+    backgroundImagePath: String? = dev.cannoli.ui.components.LocalScreenBackground.current.imagePath,
+    backgroundTint: Int = dev.cannoli.ui.components.LocalScreenBackground.current.tint,
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(androidx.compose.ui.graphics.Color.Black),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = message,
-            color = LocalCannoliColors.current.text,
-            fontFamily = LocalCannoliFont.current,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 32.dp)
-        )
-        BottomBar(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(screenPadding),
-            leftItems = listOf(buttonStyle.back to (cancelLabel ?: stringResource(R.string.label_cancel))),
-            rightItems = listOf(buttonStyle.confirm to (confirmLabel ?: stringResource(R.string.label_confirm)))
-        )
+    ScreenBackground(backgroundImagePath = backgroundImagePath, backgroundTint = backgroundTint) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = message,
+                color = LocalCannoliColors.current.text,
+                fontFamily = LocalCannoliFont.current,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 32.dp)
+            )
+            BottomBar(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(screenPadding),
+                leftItems = listOf(buttonStyle.back to (cancelLabel ?: stringResource(R.string.label_cancel))),
+                rightItems = listOf(buttonStyle.confirm to (confirmLabel ?: stringResource(R.string.label_confirm)))
+            )
+        }
     }
 }
 

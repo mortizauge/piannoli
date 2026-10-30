@@ -16,6 +16,9 @@ import dev.cannoli.scorza.model.Collection
 import dev.cannoli.scorza.model.CollectionType
 import dev.cannoli.scorza.model.GameSearchQuery
 import dev.cannoli.scorza.model.ListItem
+import dev.cannoli.scorza.navigation.BrowsePosition
+import dev.cannoli.scorza.navigation.CollectionBrowseParent
+import dev.cannoli.scorza.navigation.GameListBookmark
 import dev.cannoli.scorza.util.TextNormalizer
 import dev.cannoli.scorza.util.sortedNatural
 import dev.cannoli.ui.components.OsdController
@@ -108,6 +111,7 @@ class GameListViewModel @Inject constructor(
     @Volatile var showFavoriteStars: Boolean = true
 
     data class State(
+        val artworkRevision: Long = 0,
         val platformTag: String = "",
         val platformTags: List<String> = emptyList(),
         val breadcrumb: String = "",
@@ -198,6 +202,64 @@ class GameListViewModel @Inject constructor(
 
     fun savePosition(scrollIdx: Int = firstVisibleIndex) {
         _state.update { it.copy(scrollTarget = scrollIdx) }
+    }
+
+    fun bookmark(): GameListBookmark {
+        val current = _state.value
+        return GameListBookmark(
+            platformTag = current.platformTag,
+            platformTags = current.platformTags,
+            breadcrumb = current.breadcrumb,
+            collectionId = current.collectionId,
+            collectionsList = current.isCollectionsList,
+            globalSearch = current.globalSearchQuery,
+            search = current.searchTerm,
+            position = BrowsePosition(stableIdOf(current.items.getOrNull(current.selectedIndex)), current.selectedIndex, firstVisibleIndex),
+            folders = breadcrumbStack.toList(),
+            folderPositions = indexStack.map { (index, scroll) -> BrowsePosition(index = index, scroll = scroll) },
+            collectionParents = collectionStack.map { (id, index, scroll) -> CollectionBrowseParent(id, index, scroll) },
+            collectionsPosition = BrowsePosition(collectionsListSaved.id, collectionsListSaved.index, collectionsListSaved.scroll),
+            collectionsItemCount = collectionsListItemCount,
+        )
+    }
+
+    fun restoreBookmark(bookmark: GameListBookmark, onReady: () -> Unit) {
+        val done = {
+            breadcrumbStack.clear()
+            breadcrumbStack.addAll(bookmark.folders)
+            indexStack.clear()
+            indexStack.addAll(bookmark.folderPositions.map { it.index to it.scroll })
+            collectionStack.clear()
+            collectionStack.addAll(bookmark.collectionParents.map { Triple(it.id, it.index, it.scroll) })
+            val saved = bookmark.collectionsPosition
+            collectionsListSaved = SavedPos(saved.id, saved.index, saved.scroll)
+            collectionsListItemCount = bookmark.collectionsItemCount
+            _state.update { current ->
+                val items = applyItemFilter(current.allItems, bookmark.search)
+                val position = bookmark.position
+                val index = findIndexById(items, position.id)
+                    ?: position.index.coerceIn(0, items.lastIndex.coerceAtLeast(0))
+                val scroll = position.scroll.coerceIn(0, items.lastIndex.coerceAtLeast(0))
+                firstVisibleIndex = scroll
+                current.copy(items = items, searchTerm = bookmark.search, selectedIndex = index, scrollTarget = scroll)
+            }
+            onReady()
+        }
+        when {
+            bookmark.collectionId != null -> loadCollectionById(bookmark.collectionId) {
+                if (_state.value.collectionId == bookmark.collectionId) done()
+                else loadCollectionsList(onReady = done)
+            }
+            bookmark.collectionsList -> loadCollectionsList(onReady = done)
+            bookmark.globalSearch != null -> loadGlobalSearch(GameSearchQuery(bookmark.globalSearch), onReady = done)
+            bookmark.platformTag == "recently_played" -> loadRecentlyPlayed(done)
+            bookmark.platformTag in listOf("tools", "ports") -> loadApkList(bookmark.platformTag, bookmark.breadcrumb, done)
+            else -> {
+                breadcrumbStack.clear()
+                breadcrumbStack.addAll(bookmark.folders)
+                loadGames(bookmark.platformTag, bookmark.platformTags, bookmark.folders.takeIf { it.isNotEmpty() }?.joinToString(File.separator), onReady = done)
+            }
+        }
     }
 
     fun saveCollectionsPosition() {
@@ -455,6 +517,7 @@ class GameListViewModel @Inject constructor(
         val preserveId = stableIdOf(current.items.getOrNull(preserveIndex))
         val done: () -> Unit = {
             if (term != null) reapplySearch(term, preserveId, preserveIndex, preserveScroll, prevCount)
+            _state.update { it.copy(artworkRevision = it.artworkRevision + 1) }
             onReady()
         }
         if (current.isCollectionsList) {
@@ -479,7 +542,14 @@ class GameListViewModel @Inject constructor(
             }
         } else if (current.platformTag == "recently_played") {
             _state.value = current.copy(items = emptyList(), isLoading = true)
-            loadRecentlyPlayed(done)
+            loadRecentlyPlayed {
+                _state.update { state ->
+                    val index = findIndexById(state.items, preserveId)
+                        ?: preserveIndex.coerceIn(0, state.items.lastIndex.coerceAtLeast(0))
+                    state.copy(selectedIndex = index, scrollTarget = preserveScroll.coerceIn(0, state.items.lastIndex.coerceAtLeast(0)))
+                }
+                done()
+            }
         } else if (current.platformTags.isNotEmpty()) {
             loadGames(current.platformTag, current.platformTags, current.subfolderPath, preserveIndex, preserveScroll, prevCount, preserveId, done)
         } else if (current.isGlobalSearch && current.globalSearchQuery != null) {
@@ -587,7 +657,21 @@ class GameListViewModel @Inject constructor(
         }
     }
 
-    fun setSearch(term: String) {
+    private var submittedSearchKeyboard: dev.cannoli.ui.components.KeyboardState? = null
+
+    fun rememberSearchKeyboard(keyboard: dev.cannoli.ui.components.KeyboardState) {
+        submittedSearchKeyboard = keyboard
+    }
+
+    fun searchKeyboard(): dev.cannoli.ui.components.KeyboardState {
+        val term = (_state.value.searchTerm ?: _state.value.globalSearchQuery).orEmpty()
+        return submittedSearchKeyboard?.takeIf { it.text.trim() == term }
+            ?: dev.cannoli.ui.components.KeyboardState(text = term, cursorPos = term.length)
+    }
+
+    fun setSearch(term: String, keyboard: dev.cannoli.ui.components.KeyboardState? = null) {
+        if (_state.value.reorderMode || _state.value.multiSelectMode) return
+        submittedSearchKeyboard = keyboard
         _state.update {
             if (it.reorderMode || it.multiSelectMode) return@update it
             val t = term.trim()
@@ -596,6 +680,7 @@ class GameListViewModel @Inject constructor(
     }
 
     fun clearSearch() {
+        submittedSearchKeyboard = null
         _state.update { it.copy(searchTerm = null, items = it.allItems, selectedIndex = 0, scrollTarget = 0) }
     }
 

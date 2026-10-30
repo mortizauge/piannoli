@@ -23,7 +23,6 @@ import dev.cannoli.scorza.settings.SettingsRepository
 import dev.cannoli.scorza.input.PageJump
 import dev.cannoli.scorza.ui.screens.DialogState
 import dev.cannoli.scorza.ui.viewmodel.GameListViewModel
-import dev.cannoli.ui.components.KeyboardState
 import kotlinx.coroutines.CoroutineScope
 import javax.inject.Inject
 
@@ -136,12 +135,10 @@ class GameListInputHandler @Inject constructor(
         val glState = gameListViewModel.state.value
         if (glState.reorderMode || glState.multiSelectMode || glState.isCollectionsList) return
         nav.dialogState.value = DialogState.RenameInput(
-            gameName = "launcher_search",
+            gameName = if (glState.isGlobalSearch && glState.searchTerm == null)
+                "launcher_global_search" else "launcher_search",
             searchScope = glState.breadcrumb,
-            keyboard = KeyboardState(
-                text = glState.searchTerm ?: "",
-                cursorPos = (glState.searchTerm ?: "").length,
-            ),
+            keyboard = gameListViewModel.searchKeyboard(),
         )
     }
 
@@ -150,7 +147,8 @@ class GameListInputHandler @Inject constructor(
         when {
             gameListViewModel.isMultiSelectMode() -> gameListViewModel.cancelMultiSelect()
             gameListViewModel.isReorderMode() -> gameListViewModel.cancelReorder()
-            gameListViewModel.isSearching() -> gameListViewModel.clearSearch()
+            gameListViewModel.isSearching() -> onR1()
+            gameListViewModel.state.value.isGlobalSearch -> onR1()
             !nav.navigating -> {
                 val glState = gameListViewModel.state.value
                 if (!gameListViewModel.exitSubfolder()) {

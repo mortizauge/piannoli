@@ -14,14 +14,14 @@ class QuickMenuRowsTest {
 
     @Test fun `order is romm, kitchen, rescan, info`() {
         assertEquals(
-            listOf(QuickMenuRow.ROMM, QuickMenuRow.KITCHEN, QuickMenuRow.RESCAN, QuickMenuRow.INFO),
+            listOf(QuickMenuRow.ROMM, QuickMenuRow.KITCHEN, QuickMenuRow.SCRAPING, QuickMenuRow.SCRAPE_SYSTEMS, QuickMenuRow.RESCAN, QuickMenuRow.INFO),
             QuickMenuRow.visibleRows(rommPaired = true, kitchenRunning = true)
         )
     }
 
     @Test fun `without romm the rest still present in order`() {
         assertEquals(
-            listOf(QuickMenuRow.KITCHEN, QuickMenuRow.RESCAN, QuickMenuRow.INFO),
+            listOf(QuickMenuRow.KITCHEN, QuickMenuRow.SCRAPING, QuickMenuRow.SCRAPE_SYSTEMS, QuickMenuRow.RESCAN, QuickMenuRow.INFO),
             QuickMenuRow.visibleRows(rommPaired = false, kitchenRunning = false)
         )
     }

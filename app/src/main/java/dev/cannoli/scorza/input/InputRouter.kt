@@ -70,6 +70,7 @@ class InputRouter @Inject constructor(
     private val osdController: dev.cannoli.ui.components.OsdController,
     private val raPreloadController: dev.cannoli.scorza.ra.RaPreloadController,
     @IoScope private val ioScope: CoroutineScope,
+    private val menuSounds: dev.cannoli.scorza.util.MenuSounds,
 ) {
     var unregisterCoreQueryReceiver: () -> Unit = {}
 
@@ -86,8 +87,12 @@ class InputRouter @Inject constructor(
         // IGM wires without a resolver, which resets this so its registry-top dispatch is restored.
         dispatcher.wireToRegistry(
             dialogHandler = dialogHandler,
+            remap = { button, mapping -> PiannoliRemapping.translate(button, mapping, settings.piannoliBindings) },
             onSelectUpOverride = { onSelectUp() },
             screenResolver = { activeScreenHandler() },
+            onMenuSound = { sound ->
+                if (nav.currentScreen !is LauncherScreen.InputTester) menuSounds.play(sound)
+            },
         )
     }
 
@@ -241,7 +246,10 @@ class InputRouter @Inject constructor(
     }
 
     private fun raOfflinePlatformsHandler() = scrollable<LauncherScreen.RetroAchievementsOfflinePlatforms>(
-        onBack = { nav.pop() },
+        onBack = {
+            nav.pop()
+            nav.dialogState.value = returnDialog
+        },
         onConfirm = {
             val p = platforms.getOrNull(selectedIndex) ?: return@scrollable
             val entries = raOfflineStore().entries().filter { it.platformTag == p.tag }
@@ -476,6 +484,10 @@ class InputRouter @Inject constructor(
     )
 
     private fun creditsHandler() = scrollable<LauncherScreen.Credits>(
+        onBack = {
+            nav.pop()
+            nav.dialogState.value = returnDialog
+        },
         onConfirm = {
             val row = CREDITS_ROOT_ROWS.getOrNull(selectedIndex)
             if (row is CreditsRootRow.Category) {
@@ -517,6 +529,7 @@ class InputRouter @Inject constructor(
         onBack = {
             rommDownloader.clearFinished()
             nav.pop()
+            nav.dialogState.value = returnDialog
             launcherActions.refreshLauncherLists()
         },
         onR1 = {

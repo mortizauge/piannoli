@@ -1,6 +1,7 @@
 package dev.cannoli.scorza.ui.screens
 
 import android.graphics.BitmapFactory
+import android.util.LruCache
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,18 +15,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import dev.cannoli.scorza.ui.components.artworkClip
+import androidx.compose.ui.geometry.Size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.collectAsState
+import dev.cannoli.ui.components.collectAsStateWhileActive
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -53,8 +55,8 @@ import dev.cannoli.ui.components.listTitleSpacing
 import dev.cannoli.ui.components.pillItemHeight
 import dev.cannoli.ui.components.screenInsets
 import dev.cannoli.ui.theme.LocalCannoliColors
-import dev.cannoli.ui.theme.Radius
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.withContext
 
 @Composable
@@ -69,13 +71,18 @@ fun SystemListScreen(
     title: String = "",
     mainMenuQuit: Boolean = false,
     artWidth: Int = 40,
+    artRadius: Int = 25,
     artScale: ArtScale = ArtScale.FIT,
+    systemArtScale: ArtScale = ArtScale.FIT,
+    systemArtWidth: Int = 40,
+    systemArtRadius: Int = 0,
+    systemArtworkType: dev.cannoli.scorza.settings.SystemArtworkType = dev.cannoli.scorza.settings.SystemArtworkType.LOGO,
     resumableGames: Set<String> = emptySet(),
     swapPlayResume: Boolean = false,
     fiveGameHandheld: Boolean = false,
     buttonStyle: ButtonStyle = ButtonStyle(),
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWhileActive()
     val itemHeight = pillItemHeight(listLineHeight, listVerticalPadding)
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = state.scrollTarget.coerceAtLeast(0))
 
@@ -92,25 +99,53 @@ fun SystemListScreen(
     val collectionsLabel = stringResource(R.string.label_collections)
 
     val selectedItem = state.items.getOrNull(state.selectedIndex)
-    val artPath = (selectedItem as? ListItem.GameItem)?.artFile?.absolutePath
-    val selectedArt by produceState<ImageBitmap?>(null, artPath) {
-        value = if (artPath != null) {
-            withContext(Dispatchers.IO) {
-                try {
-                    val opts = BitmapFactory.Options()
-                    opts.inJustDecodeBounds = true
-                    BitmapFactory.decodeFile(artPath, opts)
-                    val maxDim = 1024
-                    var sampleSize = 1
-                    while (opts.outWidth / sampleSize > maxDim || opts.outHeight / sampleSize > maxDim) sampleSize *= 2
-                    opts.inJustDecodeBounds = false
-                    opts.inSampleSize = sampleSize
-                    BitmapFactory.decodeFile(artPath, opts)?.asImageBitmap()
-                } catch (_: Exception) { null }
-            }
-        } else null
+    val hasPlatforms = remember(state.items) {
+        state.items.any { it is ListItem.PlatformItem || it is ListItem.PortsFolder }
     }
-    val showArt = state.hasGameItems && selectedArt != null && artWidth > 0
+    val isSystemArtwork = selectedItem is ListItem.PlatformItem || selectedItem is ListItem.PortsFolder ||
+        (hasPlatforms && selectedItem !is ListItem.GameItem)
+    val selectedArtWidth = if (isSystemArtwork) systemArtWidth else artWidth
+    val selectedArtScale = if (isSystemArtwork) systemArtScale else artScale
+    val selectedArtRadius = if (isSystemArtwork) systemArtRadius else artRadius
+    val artworkRevision by dev.cannoli.scorza.scraper.SystemArtwork.revision.collectAsStateWhileActive()
+    val artworkCache = remember(artworkRevision) {
+        object : LruCache<String, ImageBitmap>(8 * 1024 * 1024) {
+            override fun sizeOf(key: String, value: ImageBitmap): Int = value.width * value.height * 4
+        }
+    }
+    val artPath = when (selectedItem) {
+        is ListItem.GameItem -> selectedItem.artFile?.absolutePath
+        is ListItem.PlatformItem -> viewModel.systemArtworkFile(selectedItem.platform.tag, systemArtworkType)?.absolutePath
+        is ListItem.PortsFolder -> viewModel.systemArtworkFile("PORTS", systemArtworkType)?.absolutePath
+        else -> null
+    }
+    val uiActive = dev.cannoli.ui.components.LocalUiActive.current
+    val selectedArt by key(artPath, artworkRevision) {
+        produceState<ImageBitmap?>(artPath?.let { artworkCache.get(it) }, uiActive) {
+            var loaded = false
+            uiActive.collectLatest { focused ->
+                if (!focused || loaded) return@collectLatest
+                value = if (artPath != null) {
+                    withContext(Dispatchers.IO) {
+                        try {
+                            artworkCache.get(artPath)?.let { return@withContext it }
+                            val opts = BitmapFactory.Options()
+                            opts.inJustDecodeBounds = true
+                            BitmapFactory.decodeFile(artPath, opts)
+                            val maxDim = 1024
+                            var sampleSize = 1
+                            while (opts.outWidth / sampleSize > maxDim || opts.outHeight / sampleSize > maxDim) sampleSize *= 2
+                            opts.inJustDecodeBounds = false
+                            opts.inSampleSize = sampleSize
+                            BitmapFactory.decodeFile(artPath, opts)?.asImageBitmap()?.also { artworkCache.put(artPath, it) }
+                        } catch (_: Exception) { null }
+                    }
+                } else null
+                loaded = true
+            }
+        }
+    }
+    val showArt = selectedArtWidth > 0 && (hasPlatforms || state.hasGameItems)
     val duplicateGameNames = remember(state.items) {
         state.items.asSequence()
             .filterIsInstance<ListItem.GameItem>()
@@ -171,7 +206,7 @@ fun SystemListScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxHeight()
-                        .then(if (showArt) Modifier.fillMaxWidth(1f - artWidth / 100f) else Modifier.fillMaxWidth())
+                        .then(if (showArt) Modifier.fillMaxWidth(1f - selectedArtWidth / 100f) else Modifier.fillMaxWidth())
                 ) {
                 List(
                     items = state.items,
@@ -239,7 +274,7 @@ fun SystemListScreen(
                         val art = selectedArt ?: return@Box
                         val artModifier: Modifier
                         val artContentScale: ContentScale
-                        when (artScale) {
+                        when (selectedArtScale) {
                             ArtScale.FIT -> { artModifier = Modifier.fillMaxSize(); artContentScale = ContentScale.Fit }
                             ArtScale.ORIGINAL -> { artModifier = Modifier.wrapContentSize(); artContentScale = ContentScale.None }
                             ArtScale.FIT_WIDTH -> { artModifier = Modifier.fillMaxWidth(); artContentScale = ContentScale.FillWidth }
@@ -248,7 +283,7 @@ fun SystemListScreen(
                         Image(
                             bitmap = art,
                             contentDescription = null,
-                            modifier = artModifier.clip(RoundedCornerShape(Radius.Lg)),
+                            modifier = artModifier.artworkClip(selectedArtRadius, Size(art.width.toFloat(), art.height.toFloat()), artContentScale),
                             contentScale = artContentScale,
                             filterQuality = FilterQuality.High
                         )

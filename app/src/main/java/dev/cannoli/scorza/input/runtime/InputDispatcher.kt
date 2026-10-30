@@ -4,6 +4,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import dev.cannoli.scorza.input.CanonicalButton
 import dev.cannoli.scorza.input.DeviceMapping
+import dev.cannoli.scorza.util.MenuSound
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -48,11 +49,37 @@ class InputDispatcher @Inject constructor(
     // IGM passes null so it falls back to registry top. Reset on every wireToRegistry call so the
     // last activity to wire wins (the IGM clears the launcher's resolver when it takes over).
     private var screenResolver: (() -> dev.cannoli.scorza.input.ScreenInputHandler)? = null
+    private var remap: (CanonicalButton, DeviceMapping) -> CanonicalButton = { button, _ -> button }
+    private val pressedActions = mutableMapOf<Pair<Int, CanonicalButton>, CanonicalButton>()
+    private val capturedButtons = mutableSetOf<Pair<Int, CanonicalButton>>()
+    private var menuKeyAction: CanonicalButton? = null
+    private var menuKeyCaptured = false
 
     private fun activeScreen(): dev.cannoli.scorza.input.ScreenInputHandler =
         screenResolver?.invoke() ?: screenInputRegistry.top
 
-    fun handleKeyEvent(event: KeyEvent): Boolean {
+    fun handleMenuKey(pressed: Boolean, isRepeat: Boolean = false) {
+        val mapping = activeMappingHolder.active.value ?: DEFAULT_MENU_MAPPING
+        if (menuKeyCaptured) {
+            if (!pressed) menuKeyCaptured = false
+            return
+        }
+        if (pressed && !isRepeat && activeScreen().onCaptureButton(CanonicalButton.BTN_MENU, mapping)) {
+            menuKeyCaptured = true
+            return
+        }
+        val button = menuKeyAction ?: remap(CanonicalButton.BTN_MENU, mapping)
+        if (pressed) {
+            menuKeyAction = button
+            if (!isRepeat || button != mapping.menuBack) dispatchMapped(button, mapping)
+        } else {
+            menuKeyAction = null
+            menuKeyCaptured = false
+            dispatchReleased(button, mapping)
+        }
+    }
+
+    fun handleKeyEvent(event: KeyEvent, keyboardNavigation: Boolean = false): Boolean {
         // Raw event hook: screens that need keycode/deviceId/repeatCount (binding capture,
         // shortcut chord capture) override onRawKeyDown/onRawKeyUp and can short-circuit before
         // canonical dispatch.
@@ -65,6 +92,7 @@ class InputDispatcher @Inject constructor(
             }
             if (consumed) return true
         }
+        if (keyboardNavigation && handleKeyboardDirectionForTest(event.deviceId, event.keyCode, event.action)) return true
         return handleKeyEventForTest(
             deviceId = event.deviceId,
             keyCode = event.keyCode,
@@ -73,10 +101,52 @@ class InputDispatcher @Inject constructor(
         )
     }
 
+    internal fun handleKeyboardDirectionForTest(deviceId: Int, keyCode: Int, action: Int): Boolean {
+        val direction = when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP -> CanonicalButton.BTN_UP
+            KeyEvent.KEYCODE_DPAD_DOWN -> CanonicalButton.BTN_DOWN
+            KeyEvent.KEYCODE_DPAD_LEFT -> CanonicalButton.BTN_LEFT
+            KeyEvent.KEYCODE_DPAD_RIGHT -> CanonicalButton.BTN_RIGHT
+            else -> return false
+        }
+        val mapping = portRouter.mappingFor(deviceId)
+        val hasKeyBinding = mapping?.bindings?.values?.any { bindings ->
+            bindings.any { it is dev.cannoli.scorza.input.InputBinding.Button && it.keyCode == keyCode }
+        } == true
+        if (hasKeyBinding) return false
+        // Hat motion may already have dispatched this direction and owns its held repeat.
+        if (portRouter.evaluatorFor(deviceId)?.currentlyPressed()?.contains(direction) == true) return true
+        when (action) {
+            KeyEvent.ACTION_DOWN, KeyEvent.ACTION_MULTIPLE -> dispatchMapped(direction, DEFAULT_MENU_MAPPING)
+            KeyEvent.ACTION_UP -> dispatchReleased(direction, DEFAULT_MENU_MAPPING)
+        }
+        return true
+    }
+
     fun handleMotionEvent(event: MotionEvent): Boolean {
         val device = event.device ?: return false
         val axisValues = device.motionRanges.associate { it.axis to event.getAxisValue(it.axis) }
         return handleMotionEventForTest(event.deviceId, axisValues)
+    }
+
+    private val bridgedKeyboardHat = mutableSetOf<Pair<Int, CanonicalButton>>()
+
+    /**
+     * Pads like the Xbox controller report the D-pad only as hat axes. The launcher normally
+     * relies on Android synthesizing D-pad keys from unhandled hat motion, but the Piannoli
+     * keyboard consumes motion, so hat directions are bridged here unless the mapping already
+     * pressed the same direction.
+     */
+    fun handleKeyboardHat(deviceId: Int, keyCode: Int, pressed: Boolean): Boolean {
+        val direction = dev.cannoli.scorza.input.HatKeys.canonicalFor(keyCode) ?: return false
+        val key = deviceId to direction
+        if (!pressed) {
+            return bridgedKeyboardHat.remove(key) && dispatchReleased(direction, DEFAULT_MENU_MAPPING)
+        }
+        if (portRouter.evaluatorFor(deviceId)?.currentlyPressed()?.contains(direction) == true) return true
+        bridgedKeyboardHat.add(key)
+        dev.cannoli.scorza.util.InputLog.write("keyboard hat id=$deviceId -> ${direction.name}")
+        return dispatchMapped(direction, DEFAULT_MENU_MAPPING)
     }
 
     internal fun handleKeyEventForTest(deviceId: Int, keyCode: Int, action: Int, repeatCount: Int): Boolean {
@@ -88,19 +158,23 @@ class InputDispatcher @Inject constructor(
                 val isRepeat = action == KeyEvent.ACTION_MULTIPLE || repeatCount > 0
                 if (isRepeat) {
                     val direct = evaluator.canonicalsHeldByKeyCode(keyCode)
+                    if (direct.any { deviceId to it in capturedButtons }) return true
                     val fallback = if (direct.isEmpty()) dpadFallbackForRepeat(evaluator, keyCode) else emptyList()
                     val canonicals = (if (direct.isNotEmpty()) direct else fallback)
-                        .filter { it !in NAV_CANONICALS }
+                        .map { pressedActions[deviceId to it] ?: remap(it, mapping) }
+                        .filter { it !in NAV_CANONICALS && it != mapping.menuBack }
                     // Nav auto-repeat is driven by MenuNavigationPoller (held-state poll on
                     // PortRouter). Android keycode auto-repeats for nav buttons are dropped here
                     // so pads that emit both hat motion and synthesized KEYCODE_DPAD_* (GameSir
                     // Pocket Taco) do not double-navigate.
-                    if (canonicals.isEmpty()) return false
+                    if (canonicals.isEmpty()) return direct.any {
+                        (pressedActions[deviceId to it] ?: remap(it, mapping)) == mapping.menuBack
+                    }
                     maybeActivate(deviceId)
                     activeMappingHolder.set(mapping)
                     var fired = false
                     for (canonical in canonicals) {
-                        if (dispatchPressed(canonical, mapping)) fired = true
+                        if (dispatchMapped(canonical, mapping)) fired = true
                     }
                     fired
                 } else {
@@ -119,7 +193,11 @@ class InputDispatcher @Inject constructor(
                     activeMappingHolder.set(mapping)
                     var fired = false
                     for (delta in deltas) {
-                        if (delta is CanonicalEvent.Pressed && dispatchPressed(delta.button, mapping)) fired = true
+                        if (delta is CanonicalEvent.Pressed) {
+                            if (captureButton(deviceId, delta.button, mapping)) { fired = true; continue }
+                            val mapped = pressedActions.getOrPut(deviceId to delta.button) { remap(delta.button, mapping) }
+                            if (dispatchMapped(mapped, mapping)) fired = true
+                        }
                     }
                     fired
                 }
@@ -130,18 +208,9 @@ class InputDispatcher @Inject constructor(
                 var fired = false
                 for (delta in deltas) {
                     if (delta !is CanonicalEvent.Released) continue
-                    when (delta.button) {
-                        CanonicalButton.BTN_SELECT -> { onSelectUp(); fired = true }
-                        CanonicalButton.BTN_NORTH -> { onNorthUp(); fired = true }
-                        CanonicalButton.BTN_SOUTH, CanonicalButton.BTN_EAST -> {
-                            if (mapping.menuConfirm == delta.button) { onConfirmUp(); fired = true }
-                        }
-                        CanonicalButton.BTN_UP -> { onUpRelease(); fired = true }
-                        CanonicalButton.BTN_DOWN -> { onDownRelease(); fired = true }
-                        CanonicalButton.BTN_LEFT -> { onLeftRelease(); fired = true }
-                        CanonicalButton.BTN_RIGHT -> { onRightRelease(); fired = true }
-                        else -> {}
-                    }
+                    if (capturedButtons.remove(deviceId to delta.button)) { fired = true; continue }
+                    val mapped = pressedActions.remove(deviceId to delta.button) ?: remap(delta.button, mapping)
+                    if (dispatchReleased(mapped, mapping)) fired = true
                 }
                 fired
             }
@@ -159,16 +228,13 @@ class InputDispatcher @Inject constructor(
             if (delta is CanonicalEvent.Pressed) {
                 maybeActivate(deviceId)
                 activeMappingHolder.set(mapping)
-                if (dispatchPressed(delta.button, mapping)) fired = true
+                if (captureButton(deviceId, delta.button, mapping)) { fired = true; continue }
+                val mapped = pressedActions.getOrPut(deviceId to delta.button) { remap(delta.button, mapping) }
+                if (dispatchMapped(mapped, mapping)) fired = true
             } else if (delta is CanonicalEvent.Released) {
-                when (delta.button) {
-                    CanonicalButton.BTN_SELECT -> { onSelectUp(); fired = true }
-                    CanonicalButton.BTN_UP -> { onUpRelease(); fired = true }
-                    CanonicalButton.BTN_DOWN -> { onDownRelease(); fired = true }
-                    CanonicalButton.BTN_LEFT -> { onLeftRelease(); fired = true }
-                    CanonicalButton.BTN_RIGHT -> { onRightRelease(); fired = true }
-                    else -> {}
-                }
+                if (capturedButtons.remove(deviceId to delta.button)) { fired = true; continue }
+                val mapped = pressedActions.remove(deviceId to delta.button) ?: remap(delta.button, mapping)
+                if (dispatchReleased(mapped, mapping)) fired = true
             }
         }
         return fired
@@ -178,6 +244,13 @@ class InputDispatcher @Inject constructor(
         if (!portRouter.isActivated(deviceId)) {
             portRouter.activate(deviceId, clock())
         }
+
+    }
+
+    private fun captureButton(deviceId: Int, button: CanonicalButton, mapping: DeviceMapping): Boolean {
+        if (!activeScreen().onCaptureButton(button, mapping)) return false
+        capturedButtons.add(deviceId to button)
+        return true
     }
 
     private fun dpadFallbackForRepeat(evaluator: PortEvaluator, keyCode: Int): List<CanonicalButton> {
@@ -191,7 +264,21 @@ class InputDispatcher @Inject constructor(
         return if (evaluator.currentlyPressed().contains(canonical)) listOf(canonical) else emptyList()
     }
 
-    private fun dispatchPressed(canonical: CanonicalButton, mapping: DeviceMapping): Boolean {
+    private fun dispatchReleased(button: CanonicalButton, mapping: DeviceMapping): Boolean {
+        when (button) {
+            mapping.menuConfirm -> onConfirmUp()
+            CanonicalButton.BTN_SELECT -> onSelectUp()
+            CanonicalButton.BTN_NORTH -> onNorthUp()
+            CanonicalButton.BTN_UP -> onUpRelease()
+            CanonicalButton.BTN_DOWN -> onDownRelease()
+            CanonicalButton.BTN_LEFT -> onLeftRelease()
+            CanonicalButton.BTN_RIGHT -> onRightRelease()
+            else -> return false
+        }
+        return true
+    }
+
+    private fun dispatchMapped(canonical: CanonicalButton, mapping: DeviceMapping): Boolean {
         when (canonical) {
             CanonicalButton.BTN_UP -> onUp()
             CanonicalButton.BTN_DOWN -> onDown()
@@ -239,20 +326,27 @@ class InputDispatcher @Inject constructor(
         dialogHandler: dev.cannoli.scorza.input.DialogPrecedence? = null,
         onSelectUpOverride: (() -> Unit)? = null,
         screenResolver: (() -> dev.cannoli.scorza.input.ScreenInputHandler)? = null,
+        onMenuSound: (MenuSound) -> Unit = {},
+        remap: (CanonicalButton, DeviceMapping) -> CanonicalButton = { button, _ -> button },
     ) {
         this.screenResolver = screenResolver
+        this.remap = remap
+        pressedActions.clear()
+        capturedButtons.clear()
+        menuKeyAction = null
         fun screen(): dev.cannoli.scorza.input.ScreenInputHandler = activeScreen()
-        onUp = { if (dialogHandler?.onUp() != true) screen().onUp() }
-        onDown = { if (dialogHandler?.onDown() != true) screen().onDown() }
-        onLeft = { if (dialogHandler?.onLeft() != true) screen().onLeft() }
-        onRight = { if (dialogHandler?.onRight() != true) screen().onRight() }
+        fun sounding(sound: MenuSound, action: () -> Unit): () -> Unit = { onMenuSound(sound); action() }
+        onUp = sounding(MenuSound.TICK) { if (dialogHandler?.onUp() != true) screen().onUp() }
+        onDown = sounding(MenuSound.TICK) { if (dialogHandler?.onDown() != true) screen().onDown() }
+        onLeft = sounding(MenuSound.TICK) { if (dialogHandler?.onLeft() != true) screen().onLeft() }
+        onRight = sounding(MenuSound.TICK) { if (dialogHandler?.onRight() != true) screen().onRight() }
         onUpRelease = { screen().onUpRelease() }
         onDownRelease = { screen().onDownRelease() }
         onLeftRelease = { screen().onLeftRelease() }
         onRightRelease = { screen().onRightRelease() }
-        onConfirm = { if (dialogHandler?.onConfirm() != true) screen().onConfirm() }
-        onBack = { if (dialogHandler?.onBack() != true) screen().onBack() }
-        onStart = { if (dialogHandler?.onStart() != true) screen().onStart() }
+        onConfirm = sounding(MenuSound.CONFIRM) { if (dialogHandler?.onConfirm() != true) screen().onConfirm() }
+        onBack = sounding(MenuSound.BACK) { if (dialogHandler?.onBack() != true) screen().onBack() }
+        onStart = sounding(MenuSound.CONFIRM) { if (dialogHandler?.onStart() != true) screen().onStart() }
         onSelect = { if (dialogHandler?.onSelect() != true) screen().onSelect() }
         onSelectUp = onSelectUpOverride ?: {
             dialogHandler?.cancelSelectHold()
@@ -260,18 +354,25 @@ class InputDispatcher @Inject constructor(
         }
         onConfirmUp = { if (dialogHandler?.onConfirmUp() != true) screen().onConfirmUp() }
         onNorthUp = { if (dialogHandler?.onNorthUp() != true) screen().onNorthUp() }
-        onNorth = { if (dialogHandler?.onNorth() != true) screen().onNorth() }
-        onWest = { if (dialogHandler?.onWest() != true) screen().onWest() }
-        onL1 = { if (dialogHandler?.onL1() != true) screen().onL1() }
-        onR1 = { if (dialogHandler?.onR1() != true) screen().onR1() }
+        onNorth = sounding(MenuSound.CONFIRM) { if (dialogHandler?.onNorth() != true) screen().onNorth() }
+        onWest = sounding(MenuSound.BACK) { if (dialogHandler?.onWest() != true) screen().onWest() }
+        onL1 = sounding(MenuSound.TICK) { if (dialogHandler?.onL1() != true) screen().onL1() }
+        onR1 = sounding(MenuSound.TICK) { if (dialogHandler?.onR1() != true) screen().onR1() }
         onL2 = { if (dialogHandler?.onL2() != true) screen().onL2() }
         onR2 = { if (dialogHandler?.onR2() != true) screen().onR2() }
         onL3 = { if (dialogHandler?.onL3() != true) screen().onL3() }
         onR3 = { if (dialogHandler?.onR3() != true) screen().onR3() }
-        onMenu = { if (dialogHandler?.onMenu() != true) screen().onMenu() }
+        onMenu = sounding(MenuSound.CONFIRM) { if (dialogHandler?.onMenu() != true) screen().onMenu() }
     }
 
     companion object {
+        private val DEFAULT_MENU_MAPPING = DeviceMapping(
+            id = "menu-key",
+            displayName = "Menu key",
+            match = dev.cannoli.scorza.input.DeviceMatchRule(),
+            bindings = emptyMap(),
+            source = dev.cannoli.scorza.input.MappingSource.ANDROID_DEFAULT,
+        )
         private val NAV_CANONICALS = setOf(
             CanonicalButton.BTN_UP,
             CanonicalButton.BTN_DOWN,

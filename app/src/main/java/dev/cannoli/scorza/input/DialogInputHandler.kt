@@ -97,6 +97,8 @@ class DialogInputHandler @Inject constructor(
     private val saveSyncStatusHolder: dev.cannoli.scorza.romm.sync.SaveSyncStatusHolder,
     private val osdController: dev.cannoli.ui.components.OsdController,
     private val rommDevicePairing: dev.cannoli.scorza.romm.RommDevicePairing,
+    private val scraper: dev.cannoli.scorza.scraper.ScraperController,
+    private val bulkScraper: dev.cannoli.scorza.scraper.BulkScraperController,
 ) : DialogPrecedence {
     private val applyingConflicts = java.util.concurrent.atomic.AtomicBoolean(false)
     private val quickMenuRebuild = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -153,6 +155,7 @@ class DialogInputHandler @Inject constructor(
     override fun onMenu(): Boolean {
         val ds = nav.dialogState.value
         if (ds is KeyboardHost) {
+            if (settings.keyboardType == dev.cannoli.scorza.settings.KeyboardType.SYSTEM) return true
             nav.dialogState.value = DialogState.KeyboardHelp(ds, ds.keyboard.layout)
             return true
         }
@@ -218,6 +221,7 @@ class DialogInputHandler @Inject constructor(
     }
 
     private sealed interface ContextReturn {
+        data class Direct(val dialog: DialogState.ContextMenu) : ContextReturn
         data class Single(val gameName: String, val options: List<String>, val selectedOption: Int = 0) : ContextReturn
         data class Bulk(val gamePaths: List<String>, val options: List<String>) : ContextReturn
     }
@@ -230,7 +234,10 @@ class DialogInputHandler @Inject constructor(
         val ds = nav.dialogState.value
         if (ds == DialogState.None) return false
         when (ds) {
+            is DialogState.ExtensionFilters -> if (ds.extensions.isNotEmpty())
+                nav.dialogState.value = ds.copy(selectedIndex = Math.floorMod(ds.selectedIndex - 1, ds.extensions.size))
             is DialogState.ContextMenu,
+            is DialogState.ScraperMenu,
             is DialogState.BulkContextMenu,
             is DialogState.SaveSyncConflict,
             is DialogState.SaveSyncStaleBlock -> {
@@ -317,7 +324,10 @@ class DialogInputHandler @Inject constructor(
         val ds = nav.dialogState.value
         if (ds == DialogState.None) return false
         when (ds) {
+            is DialogState.ExtensionFilters -> if (ds.extensions.isNotEmpty())
+                nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex + 1) % ds.extensions.size)
             is DialogState.ContextMenu,
+            is DialogState.ScraperMenu,
             is DialogState.BulkContextMenu,
             is DialogState.SaveSyncConflict,
             is DialogState.SaveSyncStaleBlock -> {
@@ -408,6 +418,7 @@ class DialogInputHandler @Inject constructor(
         val ds = nav.dialogState.value
         if (ds == DialogState.None) return false
         when (ds) {
+            is DialogState.ScraperMenu -> if (ds.bulk) bulkScraper.cycle(ds)
             is DialogState.Kitchen -> {
                 if (ds.urls.size > 1) {
                     val newIdx = (ds.selectedIndex - 1 + ds.urls.size) % ds.urls.size
@@ -444,6 +455,7 @@ class DialogInputHandler @Inject constructor(
         val ds = nav.dialogState.value
         if (ds == DialogState.None) return false
         when (ds) {
+            is DialogState.ScraperMenu -> if (ds.bulk) bulkScraper.cycle(ds)
             is DialogState.Kitchen -> {
                 if (ds.urls.size > 1) {
                     val newIdx = (ds.selectedIndex + 1) % ds.urls.size
@@ -480,12 +492,25 @@ class DialogInputHandler @Inject constructor(
         val ds = nav.dialogState.value
         if (ds == DialogState.None) return false
         when (ds) {
+            is DialogState.ExtensionFilters -> ds.extensions.getOrNull(ds.selectedIndex)?.let { extension ->
+                nav.dialogState.value = ds.copy(excluded =
+                    if (extension in ds.excluded) ds.excluded - extension else ds.excluded + extension)
+            }
+            DialogState.ScraperOverwriteConfirm -> scraper.confirmOverwrite()
+            is DialogState.ScraperMenu -> if (ds.bulk) bulkScraper.confirm(ds) else scraper.confirm(ds)
+            is DialogState.ScraperStatus -> if (!ds.busy) {
+                if (ds.bulk) bulkScraper.back() else scraper.back()
+            }
             is DialogState.ContextMenu -> onContextMenuConfirm(ds)
             is DialogState.BulkContextMenu -> onBulkContextMenuConfirm(ds)
             is DialogState.DeleteConfirm -> onDeleteConfirm(ds)
-            is KeyboardHost -> when (val r = KeyboardController.press(ds.keyboard)) {
-                is KeyboardPress.Update -> nav.dialogState.value = ds.withKeyboard(r.state)
-                KeyboardPress.Confirm -> dispatchKeyboardConfirm(ds)
+            is KeyboardHost -> {
+                if (settings.keyboardType == dev.cannoli.scorza.settings.KeyboardType.SYSTEM) {
+                    dispatchKeyboardConfirm(ds)
+                } else when (val r = KeyboardController.press(ds.keyboard)) {
+                    is KeyboardPress.Update -> nav.dialogState.value = ds.withKeyboard(r.state)
+                    KeyboardPress.Confirm -> dispatchKeyboardConfirm(ds)
+                }
             }
             is DialogState.QuitConfirm -> {
                 activityActions.finishAffinity()
@@ -596,13 +621,20 @@ class DialogInputHandler @Inject constructor(
                 when (ds.rows.getOrNull(ds.selectedIndex)) {
                     dev.cannoli.scorza.ui.quickmenu.QuickMenuRow.ROMM -> {
                         nav.dialogState.value = DialogState.None
-                        nav.push(dev.cannoli.scorza.navigation.LauncherScreen.RommPlatformList())
+                        nav.push(dev.cannoli.scorza.navigation.LauncherScreen.RommPlatformList(returnDialog = ds))
                     }
                     dev.cannoli.scorza.ui.quickmenu.QuickMenuRow.DOWNLOADS -> nav.dialogState.value = DialogState.RommDownloads(fromQuickMenu = true)
                     dev.cannoli.scorza.ui.quickmenu.QuickMenuRow.SYNC_HISTORY -> openSyncHistory()
                     dev.cannoli.scorza.ui.quickmenu.QuickMenuRow.CONFLICTS -> openConflictsMenu(fromSaveSyncMenu = false)
                     dev.cannoli.scorza.ui.quickmenu.QuickMenuRow.ERRORS -> openSyncErrors(fromSaveSyncMenu = false)
                     dev.cannoli.scorza.ui.quickmenu.QuickMenuRow.KITCHEN -> launcherActions.openKitchen(fromQuickMenu = true)
+                    dev.cannoli.scorza.ui.quickmenu.QuickMenuRow.SCRAPING -> bulkScraper.open {
+                        openQuickMenu(dev.cannoli.scorza.ui.quickmenu.QuickMenuRow.SCRAPING)
+                    }
+                    dev.cannoli.scorza.ui.quickmenu.QuickMenuRow.SCRAPE_SYSTEMS ->
+                        bulkScraper.openSystems(systemListViewModel.state.value.platforms) {
+                            openQuickMenu(dev.cannoli.scorza.ui.quickmenu.QuickMenuRow.SCRAPE_SYSTEMS)
+                        }
                     dev.cannoli.scorza.ui.quickmenu.QuickMenuRow.RESCAN -> launcherActions.rescanWithProgress()
                     dev.cannoli.scorza.ui.quickmenu.QuickMenuRow.INFO -> {
                         val urls = dev.cannoli.scorza.server.KitchenManager.getUrls(hasVpn = hasActiveVpn())
@@ -1102,17 +1134,31 @@ class DialogInputHandler @Inject constructor(
         val ds = nav.dialogState.value
         if (ds == DialogState.None) return false
         when (ds) {
+            is DialogState.ExtensionFilters -> {
+                if (ds.excluded == settings.filteredExtensions(ds.tag)) {
+                    nav.dialogState.value = ds.origin
+                } else {
+                    settings.setFilteredExtensions(ds.tag, ds.excluded)
+                    nav.dialogState.value = ds.origin
+                    systemListViewModel.refreshFilteredPlatform(ds.tag)
+                }
+            }
+            DialogState.ScraperOverwriteConfirm -> scraper.back()
+            is DialogState.ScraperMenu -> if (ds.bulk) bulkScraper.back() else scraper.back()
+            is DialogState.ScraperStatus -> if (ds.bulk) bulkScraper.back() else scraper.back()
             is DialogState.KeyboardHelp -> nav.dialogState.value = ds.restore
-            is KeyboardHost -> nav.dialogState.value = ds.withKeyboard(KeyboardController.backspace(ds.keyboard))
+            is KeyboardHost -> if (settings.keyboardType == dev.cannoli.scorza.settings.KeyboardType.PIANNOLI) {
+                nav.dialogState.value = ds.withKeyboard(KeyboardController.backspace(ds.keyboard))
+            } else {
+                cancelKeyboard(ds)
+            }
             is DialogState.ColorPicker -> {
                 val entries = settingsViewModel.getColorEntries()
                 updateColorListOnStack(ds.settingKey, entries)
                 nav.dialogState.value = DialogState.None
             }
             is DialogState.HexColorInput -> {
-                if (ds.currentHex.isNotEmpty()) {
-                    nav.dialogState.value = ds.copy(currentHex = ds.currentHex.dropLast(1))
-                }
+                launcherActions.openColorPicker(ds.settingKey)
             }
             is DialogState.ContextMenu, is DialogState.BulkContextMenu -> {
                 pendingContextReturn = null
@@ -1165,9 +1211,6 @@ class DialogInputHandler @Inject constructor(
             }
             is DialogState.RAAccount -> {
                 nav.dialogState.value = DialogState.None
-                // Only pop when the RA credential sub-list is active (post-login); when opened
-                // directly from the Integrations list, dismissing must stay in Integrations.
-                if (settingsViewModel.state.value.activeCategory == "retroachievements") settingsViewModel.exitSubList()
             }
             is DialogState.RALoggingIn -> {
                 nav.dialogState.value = DialogState.None
@@ -1197,7 +1240,7 @@ class DialogInputHandler @Inject constructor(
                 if (ds.fromQuickMenu) {
                     openQuickMenu(dev.cannoli.scorza.ui.quickmenu.QuickMenuRow.DOWNLOADS)
                 } else {
-                    nav.dialogState.value = DialogState.None
+                    nav.dialogState.value = DialogState.RommActionsMenu(hasDownloads = true)
                 }
             }
             is DialogState.RommArtResults -> {
@@ -1249,6 +1292,7 @@ class DialogInputHandler @Inject constructor(
                             host = rommStore.host,
                             username = rommStore.username,
                             version = rommStore.serverVersion,
+                            fromSettingsMenu = ds.fromSettingsMenu,
                         )
                     dev.cannoli.scorza.ui.screens.RommConfirmAction.CANCEL_DOWNLOAD ->
                         nav.dialogState.value = DialogState.RommDownloads(fromQuickMenu = ds.fromQuickMenu)
@@ -1313,7 +1357,7 @@ class DialogInputHandler @Inject constructor(
             }
             is DialogState.About -> {
                 nav.dialogState.value = DialogState.None
-                nav.screenStack.add(LauncherScreen.Credits())
+                nav.screenStack.add(LauncherScreen.Credits(returnDialog = ds))
             }
             is DialogState.Kitchen -> {
                 dev.cannoli.scorza.server.KitchenManager.stop(context)
@@ -1335,6 +1379,9 @@ class DialogInputHandler @Inject constructor(
                     currentHex = currentHex
                 )
             }
+            is DialogState.HexColorInput -> {
+                nav.dialogState.value = ds.copy(currentHex = ds.currentHex.dropLast(1))
+            }
             is DialogState.RommDownloads -> if (rommDownloader.queue.activeCount() >= 2) {
                 nav.dialogState.value = DialogState.RommConfirm(dev.cannoli.scorza.ui.screens.RommConfirmAction.CANCEL_ALL, fromQuickMenu = ds.fromQuickMenu)
             }
@@ -1347,14 +1394,7 @@ class DialogInputHandler @Inject constructor(
         val ds = nav.dialogState.value
         if (ds == DialogState.None) return false
         when (ds) {
-            is DialogState.RenameInput,
-            is DialogState.CollectionRenameInput -> {
-                restoreContextMenu()
-            }
-            is DialogState.NewCollectionInput,
-            is DialogState.NewFolderInput -> {
-                nav.dialogState.value = DialogState.None
-            }
+            is KeyboardHost -> cancelKeyboard(ds)
             is DialogState.HexColorInput -> {
                 launcherActions.openColorPicker(ds.settingKey)
             }
@@ -1374,15 +1414,36 @@ class DialogInputHandler @Inject constructor(
                     .groupBy { it.platformTag }
                     .map { (tag, list) -> LauncherScreen.RaOfflinePlatform(tag, platformResolver.getDisplayName(tag), list.size) }
                     .sortedBy { it.name.lowercase() }
-                nav.screenStack.add(LauncherScreen.RetroAchievementsOfflinePlatforms(platforms = platforms))
+                nav.screenStack.add(LauncherScreen.RetroAchievementsOfflinePlatforms(platforms = platforms, returnDialog = ds))
                 return true
             }
             is DialogState.RommConnected -> {
-                nav.dialogState.value = DialogState.RommConfirm(dev.cannoli.scorza.ui.screens.RommConfirmAction.DISCONNECT)
+                nav.dialogState.value = DialogState.RommConfirm(
+                    dev.cannoli.scorza.ui.screens.RommConfirmAction.DISCONNECT,
+                    fromSettingsMenu = ds.fromSettingsMenu,
+                )
             }
             else -> {}
         }
         return true
+    }
+
+    private fun cancelKeyboard(ds: KeyboardHost) {
+        when (ds) {
+            is DialogState.ScraperInput -> scraper.back()
+            is DialogState.RenameInput -> when {
+                ds.gameName == "romm_device_name" ->
+                    returnToSaveSyncMenu(dev.cannoli.scorza.ui.components.RommSaveSyncRow.TOGGLE)
+                nav.currentScreen is LauncherScreen.Settings ||
+                    nav.currentScreen is LauncherScreen.ControllerDetail ||
+                    nav.currentScreen is LauncherScreen.SaveSlots ||
+                    ds.gameName.startsWith("launcher_") ||
+                    ds.gameName.startsWith("romm_") -> nav.dialogState.value = DialogState.None
+                else -> restoreContextMenu()
+            }
+            is DialogState.CollectionRenameInput -> restoreContextMenu()
+            else -> nav.dialogState.value = DialogState.None
+        }
     }
 
     override fun onSelect(): Boolean {
@@ -1470,7 +1531,53 @@ class DialogInputHandler @Inject constructor(
                 onFghContextMenuConfirm(fghItem, state)
             } else {
                 when (state.options[state.selectedOption]) {
+                    context.getString(dev.cannoli.scorza.R.string.filter_extensions) -> {
+                        val tag = systemListViewModel.getSelectedPlatformTag() ?: return
+                        val pending = DialogState.ExtensionFilters(tag,
+                            context.getString(dev.cannoli.scorza.R.string.filter_extensions),
+                            emptyList(), settings.filteredExtensions(tag), state, loading = true)
+                        nav.dialogState.value = pending
+                        ioScope.launch {
+                            try {
+                                val extensions = romDirectoryWalker.presentExtensions(tag)
+                                withContext(Dispatchers.Main) {
+                                    if (nav.dialogState.value === pending)
+                                        nav.dialogState.value = pending.copy(extensions = extensions, loading = false)
+                                }
+                            } catch (e: java.io.IOException) {
+                                withContext(Dispatchers.Main) {
+                                    if (nav.dialogState.value === pending)
+                                        nav.dialogState.value = DialogState.LaunchError(e.message.orEmpty())
+                                }
+                            }
+                        }
+                    }
+                    context.getString(dev.cannoli.scorza.R.string.scrape_system) -> {
+                        systemListViewModel.getSelectedPlatformTag()?.let { scraper.openSystem(it, state.gameName) }
+                    }
+                    MENU_DELETE_ART -> {
+                        val tag = systemListViewModel.getSelectedPlatformTag() ?: return
+                        val type = settings.systemArtworkType
+                        ioScope.launch {
+                            try {
+                                systemListViewModel.deleteSystemArtwork(tag, type)
+                                withContext(Dispatchers.Main) {
+                                    if (nav.dialogState.value === state) nav.dialogState.value = DialogState.None
+                                }
+                            } catch (e: java.io.IOException) {
+                                withContext(Dispatchers.Main) {
+                                    nav.dialogState.value = DialogState.LaunchError(
+                                        context.getString(dev.cannoli.scorza.R.string.system_artwork_delete_failed))
+                                }
+                            }
+                        }
+                    }
+                    context.getString(dev.cannoli.scorza.R.string.bulk_platform_games, state.gameName) -> {
+                        val tag = systemListViewModel.getSelectedPlatformTag()
+                        if (tag != null) bulkScraper.open(tag) { nav.dialogState.value = state }
+                    }
                     MENU_RENAME -> {
+                        pendingContextReturn = ContextReturn.Direct(state)
                         val renameTitle = when (systemListViewModel.getSelectedItem()) {
                             is SystemListViewModel.ListItem.PlatformItem -> dev.cannoli.ui.R.string.keyboard_title_rename_platform
                             is SystemListViewModel.ListItem.CollectionItem -> dev.cannoli.ui.R.string.keyboard_title_rename_collection
@@ -1513,6 +1620,10 @@ class DialogInputHandler @Inject constructor(
         pendingContextReturn = ContextReturn.Single(state.gameName, state.options, state.selectedOption)
         val selected = state.options[state.selectedOption]
         when {
+            selected == context.getString(dev.cannoli.scorza.R.string.steamgrid_action) -> {
+                if (rom != null) scraper.open(rom)
+                else if (app?.type == AppType.PORT) scraper.openPort(app)
+            }
             selected == MENU_REMOVE_FROM_RECENTS -> {
                 pendingContextReturn = null
                 nav.dialogState.value = DialogState.None
@@ -1561,6 +1672,7 @@ class DialogInputHandler @Inject constructor(
                 pendingContextReturn = null
                 if (rom != null) {
                     rom.artFile?.delete()
+                    artworkLookup.invalidate(rom.platformTag)
                     scanner.markLauncherMutation(rom.platformTag)
                 } else if (app != null) {
                     artworkLookup.deleteArt(app.type.artTag, sanitizeFsName(app.displayName))
@@ -1831,15 +1943,18 @@ class DialogInputHandler @Inject constructor(
                 ?: (systemListViewModel.getSelectedItem() as? SystemListViewModel.ListItem.GameItem)?.item
             if (item is ListItem.SubfolderItem) {
                 val tag = gameListViewModel.state.value.platformTag
-                val dir = File(romDir(), "$tag${File.separator}${item.path}")
-                val prefix = relativeRomPath(dir)
-                if (prefix == null) {
-                    nav.dialogState.value = DialogState.None
-                    return
-                }
                 ioScope.launch {
-                    dir.deleteRecursively()
-                    romsRepository.deleteRomsUnderPrefix(tag, prefix)
+                    for (dir in romDirectoryWalker.categoryDirectories(tag, item.path)) {
+                        val prefix = relativeRomPath(dir) ?: continue
+                        if (!dir.deleteRecursively()) {
+                            withContext(Dispatchers.Main) {
+                                nav.dialogState.value = DialogState.LaunchError(
+                                    context.getString(dev.cannoli.scorza.R.string.rename_error_directory))
+                            }
+                            return@launch
+                        }
+                        romsRepository.deleteRomsUnderPrefix(tag, prefix)
+                    }
                     scanner.markLauncherMutation(tag)
                     gameListViewModel.reload()
                     launcherActions.rescanSystemList()
@@ -1930,11 +2045,15 @@ class DialogInputHandler @Inject constructor(
             if (glState.platformTag == "recently_played") add(MENU_REMOVE_FROM_RECENTS)
             add(if (isFav) MENU_REMOVE_FAVORITE else MENU_ADD_FAVORITE)
             if (isApk) {
+                if (app?.type == AppType.PORT) add(context.getString(dev.cannoli.scorza.R.string.steamgrid_action))
                 add(MENU_MANAGE_COLLECTIONS)
                 add(MENU_RENAME)
                 if (app?.artFile != null) add(MENU_DELETE_ART)
                 add(MENU_REMOVE)
             } else {
+                if (rom != null) {
+                    add(context.getString(dev.cannoli.scorza.R.string.steamgrid_action))
+                }
                 addAll(gameContextOptions.map { menuItem ->
                     when {
                         menuItem == MENU_EMULATOR_OVERRIDE && rom != null -> {
@@ -2032,6 +2151,7 @@ class DialogInputHandler @Inject constructor(
 
     fun restoreContextMenu() {
         when (val ret = pendingContextReturn) {
+            is ContextReturn.Direct -> nav.dialogState.value = ret.dialog
             is ContextReturn.Single -> {
                 val item = gameListViewModel.getSelectedItem()
                 if (item != null) {
@@ -2064,6 +2184,7 @@ class DialogInputHandler @Inject constructor(
 
     private fun dispatchKeyboardConfirm(ds: KeyboardHost) {
         when (ds) {
+            is DialogState.ScraperInput -> scraper.submit(ds)
             is DialogState.RenameInput -> onRenameConfirm(ds)
             is DialogState.NewCollectionInput -> onNewCollectionConfirm(ds)
             is DialogState.CollectionRenameInput -> onCollectionRenameConfirm(ds)
@@ -2211,7 +2332,7 @@ class DialogInputHandler @Inject constructor(
         }
         if (state.gameName == "launcher_search") {
             val term = state.currentName.trim()
-            if (term.isBlank()) gameListViewModel.clearSearch() else gameListViewModel.setSearch(term)
+            if (term.isBlank()) gameListViewModel.clearSearch() else gameListViewModel.setSearch(term, state.keyboard)
             nav.dialogState.value = DialogState.None
             return
         }
@@ -2252,9 +2373,10 @@ class DialogInputHandler @Inject constructor(
             // Keep the keyboard up until results are ready so the screen underneath never flashes,
             // then dismiss it and reveal the populated results in the same frame.
             nav.navigating = true
+            gameListViewModel.rememberSearchKeyboard(state.keyboard)
             gameListViewModel.loadGlobalSearch(dev.cannoli.scorza.model.GameSearchQuery(term)) {
                 launcherActions.scanResumableGames()
-                nav.screenStack.add(LauncherScreen.GameList)
+                if (nav.currentScreen != LauncherScreen.GameList) nav.screenStack.add(LauncherScreen.GameList)
                 nav.dialogState.value = DialogState.None
                 nav.navigating = false
             }
@@ -2307,18 +2429,20 @@ class DialogInputHandler @Inject constructor(
             }
             if (item is ListItem.SubfolderItem) {
                 val tag = gameListViewModel.state.value.platformTag
-                val oldDir = File(romDir(), "$tag${File.separator}${item.path}")
-                val newDir = File(oldDir.parentFile, newName)
-                val oldPrefix = relativeRomPath(oldDir)
-                val ok = oldDir.renameTo(newDir)
-                if (ok) {
-                    val newPrefix = relativeRomPath(newDir)
-                    if (oldPrefix != null && newPrefix != null) {
-                        romsRepository.updateRomPathsUnderPrefix(tag, oldPrefix, newPrefix)
+                try {
+                    val moves = romDirectoryWalker.renameCategory(tag, item.path, newName)
+                    if (moves != null) {
+                        for (move in moves) {
+                            romsRepository.updateRomPathsUnderPrefix(tag, move.oldRelPath, move.newRelPath)
+                        }
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            nav.dialogState.value = DialogState.RenameResult(false, context.getString(dev.cannoli.scorza.R.string.rename_error_directory))
+                        }
                     }
-                } else {
+                } catch (e: java.io.IOException) {
                     withContext(Dispatchers.Main) {
-                        nav.dialogState.value = DialogState.RenameResult(false, context.getString(dev.cannoli.scorza.R.string.rename_error_directory))
+                        nav.dialogState.value = DialogState.LaunchError(e.message.orEmpty())
                     }
                 }
                 scanner.markLauncherMutation(tag)
@@ -2354,6 +2478,14 @@ class DialogInputHandler @Inject constructor(
 
     private fun onFghContextMenuConfirm(item: ListItem, state: DialogState.ContextMenu) {
         val selected = state.options[state.selectedOption]
+        if (selected == context.getString(dev.cannoli.scorza.R.string.steamgrid_action)) {
+            when (item) {
+                is ListItem.RomItem -> scraper.open(item.rom)
+                is ListItem.AppItem -> if (item.app.type == AppType.PORT) scraper.openPort(item.app)
+                else -> Unit
+            }
+            return
+        }
         val path = item.recentKey() ?: return
         val displayName = when (item) {
             is ListItem.RomItem -> item.rom.displayName

@@ -20,12 +20,15 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
+import dev.cannoli.scorza.ui.components.artworkClip
+import androidx.compose.ui.geometry.Size
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import coil.compose.AsyncImage
 import dev.cannoli.ui.theme.CannoliIcons
 import dev.cannoli.ui.theme.LocalCannoliColors
-import dev.cannoli.ui.theme.Radius
 import dev.cannoli.scorza.romm.LocalState
 import dev.cannoli.scorza.romm.RommArtUrl
 import dev.cannoli.scorza.ui.viewmodel.RommGameRow
@@ -51,6 +54,7 @@ fun RommGameListScreen(
     scrollTarget: Int,
     host: String,
     artWidth: Int,
+    artRadius: Int = 25,
     artType: dev.cannoli.scorza.romm.RommArtType = dev.cannoli.scorza.romm.RommArtType.NONE,
     multiSelect: Boolean = false,
     checkedIds: Set<Int> = emptySet(),
@@ -143,11 +147,13 @@ fun RommGameListScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             if (coverUrl != null) {
+                                var artworkSize by remember(coverUrl) { mutableStateOf(Size.Unspecified) }
                                 AsyncImage(
                                     model = coverUrl,
                                     contentDescription = null,
                                     imageLoader = imageLoader,
-                                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(Radius.Lg)),
+                                    modifier = Modifier.fillMaxSize().artworkClip(artRadius, artworkSize, ContentScale.Fit),
+                                    onSuccess = { artworkSize = it.painter.intrinsicSize },
                                     contentScale = ContentScale.Fit,
                                 )
                             }
@@ -164,7 +170,7 @@ fun RommGameListScreen(
                 },
                 rightItems = if (multiSelect) listOf(
                     buttonStyle.confirm to stringResource(R.string.label_toggle),
-                    dev.cannoli.ui.START_GLYPH to stringResource(R.string.label_download),
+                    buttonStyle.start to stringResource(R.string.label_download),
                 ) else listOf(
                     buttonStyle.confirm to stringResource(R.string.label_select),
                 ),

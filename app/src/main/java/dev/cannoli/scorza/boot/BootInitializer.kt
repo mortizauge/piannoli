@@ -62,6 +62,7 @@ class BootInitializer @Inject constructor(
     private val launchManager: LaunchManager,
     private val launcherActions: LauncherActions,
     private val setupCoordinator: SetupCoordinator,
+    private val browseSession: dev.cannoli.scorza.navigation.BrowseSession,
 ) {
 
     suspend fun run(onPhase: (BootPhase, Float, String) -> Unit): BootResult {
@@ -78,6 +79,8 @@ class BootInitializer @Inject constructor(
         dev.cannoli.scorza.util.ErrorLog.init(root.absolutePath)
         setupCoordinator.logStorageDiagnostics()
         platformConfig.load()
+        val bookmark = browseSession.pending()
+        val scanDisk = settings.scanLibraryAutomatically
         // Backfill only. Fills platforms that have no stored choice and never touches one the
         // user made, so it is safe to run on every boot rather than only on first run.
         platformConfig.seedUnsetPlatforms(context.packageManager)
@@ -97,7 +100,7 @@ class BootInitializer @Inject constructor(
             onProgress = ImportProgress { progress, label ->
                 onPhase(importPhase, progress, label)
             },
-            scanDisk = settings.scanLibraryAutomatically,
+            scanDisk = scanDisk,
         )
 
         val result = withContext(Dispatchers.IO) { importer.run() }
@@ -153,14 +156,17 @@ class BootInitializer @Inject constructor(
             nav.screenStack.add(LauncherScreen.SystemList)
         }
 
-        val shouldScanDisk = settings.scanLibraryAutomatically
         return suspendCancellableCoroutine { cont ->
             launcherActions.rescanSystemList(
-                scanDisk = shouldScanDisk,
+                scanDisk = scanDisk,
                 onProgress = { tag, current, total ->
                     onPhase(BootPhase.LIBRARY_REFRESH, current.toFloat() / total.coerceAtLeast(1), tag)
                 },
-                onComplete = { cont.resume(BootResult.Success) },
+                onComplete = {
+                    if (bookmark != null) {
+                        browseSession.restore(bookmark) { if (cont.isActive) cont.resume(BootResult.Success) }
+                    } else if (cont.isActive) cont.resume(BootResult.Success)
+                },
             )
         }
     }

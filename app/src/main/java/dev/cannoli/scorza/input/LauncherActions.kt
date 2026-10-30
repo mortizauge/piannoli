@@ -140,9 +140,9 @@ class LauncherActions @Inject constructor(
         )
     }
 
-    fun refreshLauncherLists() {
+    fun refreshLauncherLists(scanDisk: Boolean = true) {
         if (systemListViewModel.state.value.isLoading) return
-        rescanSystemList()
+        rescanSystemList(scanDisk = scanDisk)
         if (nav.currentScreen is LauncherScreen.GameList) {
             gameListViewModel.reload { scanResumableGames() }
         }
@@ -307,7 +307,7 @@ class LauncherActions @Inject constructor(
             is SystemListViewModel.ListItem.PlatformItem -> {
                 ioScope.launch {
                     platformConfig.setDisplayName(item.platform.tag, newName)
-                    rescanSystemList()
+                    rescanSystemList(scanDisk = false)
                 }
             }
             is SystemListViewModel.ListItem.ToolsFolder -> {

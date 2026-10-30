@@ -2,6 +2,7 @@ package dev.cannoli.scorza.ui.viewmodel
 
 import dagger.hilt.android.scopes.ActivityScoped
 import dev.cannoli.scorza.config.PlatformConfig
+import dev.cannoli.scorza.config.PlatformFolders
 import dev.cannoli.scorza.db.AppsRepository
 import dev.cannoli.scorza.db.CollectionsRepository
 import dev.cannoli.scorza.db.RecentlyPlayedRepository
@@ -11,6 +12,7 @@ import dev.cannoli.scorza.db.ScanScheduler
 import dev.cannoli.scorza.di.CannoliPathsProvider
 import dev.cannoli.scorza.model.AppType
 import dev.cannoli.scorza.model.Platform
+import dev.cannoli.scorza.navigation.BrowsePosition
 import dev.cannoli.scorza.scanner.RomDirectoryWatcher
 import dev.cannoli.scorza.settings.ContentMode
 import kotlinx.coroutines.CoroutineScope
@@ -39,6 +41,22 @@ class SystemListViewModel @Inject constructor(
     private val scanScheduler: ScanScheduler,
 ) {
     private val romDirectory: File get() = cannoliPaths.romDir
+    fun systemArtworkFile(tag: String, type: dev.cannoli.scorza.settings.SystemArtworkType): File? =
+        dev.cannoli.scorza.scraper.SystemArtwork.file(cannoliPaths.root, tag, type)
+
+    suspend fun deleteSystemArtwork(tag: String, type: dev.cannoli.scorza.settings.SystemArtworkType) {
+        withContext(Dispatchers.IO) {
+            dev.cannoli.scorza.scraper.SystemArtwork.delete(cannoliPaths.root, tag, type)
+        }
+    }
+
+    fun refreshFilteredPlatform(tag: String) {
+        scope.launch(Dispatchers.IO) {
+            scanScheduler.markLauncherMutation(tag)
+            scanScheduler.runNow(tag)
+            withContext(Dispatchers.Main) { rebuildFromDb() }
+        }
+    }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     init {
@@ -153,6 +171,34 @@ class SystemListViewModel @Inject constructor(
         _state.update { it.copy(scrollTarget = scrollIdx) }
     }
 
+    fun browsePosition(): BrowsePosition {
+        val current = _state.value
+        return BrowsePosition(browseId(current.items.getOrNull(current.selectedIndex)), current.selectedIndex, firstVisibleIndex)
+    }
+
+    fun restoreBrowsePosition(position: BrowsePosition) {
+        _state.update { current ->
+            val max = current.items.lastIndex.coerceAtLeast(0)
+            val index = position.id?.let { id -> current.items.indexOfFirst { browseId(it) == id }.takeIf { it >= 0 } }
+                ?: position.index.coerceIn(0, max)
+            val scroll = position.scroll.coerceIn(0, max)
+            firstVisibleIndex = scroll
+            current.copy(selectedIndex = index, scrollTarget = scroll)
+        }
+    }
+
+    private fun browseId(item: ListItem?): String? = when (item) {
+        is ListItem.PlatformItem -> "platform:${item.platform.tag}"
+        is ListItem.CollectionItem -> "collection:${item.id}"
+        is ListItem.GameItem -> item.recentKey
+        ListItem.RecentlyPlayedItem -> "recent"
+        ListItem.FavoritesItem -> "favorites"
+        ListItem.CollectionsFolder -> "collections"
+        is ListItem.ToolsFolder -> "tools"
+        is ListItem.PortsFolder -> "ports"
+        null -> null
+    }
+
     fun scan(showRecentlyPlayed: Boolean = true, showFavorites: Boolean = true, contentMode: ContentMode = ContentMode.PLATFORMS, fghCollectionId: Long? = null, toolsName: String = "Tools", portsName: String = "Ports", scanDisk: Boolean = true, reconcileOrphans: Boolean = false, onProgress: ((tag: String, current: Int, total: Int) -> Unit)? = null, onReady: () -> Unit = {}) {
         val prev = _state.value
         val prevItemCount = prev.items.size
@@ -170,12 +216,12 @@ class SystemListViewModel @Inject constructor(
                     withContext(Dispatchers.Main) { onProgress?.invoke(tag, current, total) }
                 }
             }
-            val knownTagsInDb = romsRepository.knownPlatformTags()
+            val knownTagsInDb = romsRepository.knownPlatformTags().map(PlatformFolders::canonicalTag).distinct()
             val watcherTags = knownTagsInDb
                 .filter { it != TAG_TOOLS && it != TAG_PORTS && platformConfig.isKnownTag(it) }
             romDirectoryWatcher.start(romDirectory, watcherTags)
             val countsByTag = romsRepository.platformCounts().mapKeys { it.key.uppercase() }
-            val knownTags = (knownTagsInDb + countsByTag.keys).distinct()
+            val knownTags = (knownTagsInDb + countsByTag.keys.map(PlatformFolders::canonicalTag)).distinct()
                 .filter { it != TAG_TOOLS && it != TAG_PORTS }
 
             val allPlatforms = knownTags
@@ -234,7 +280,9 @@ class SystemListViewModel @Inject constructor(
             val reorderableItems = mutableListOf<ListItem>()
             when (contentMode) {
                 ContentMode.PLATFORMS -> {
-                    groupedPlatforms.filter { it.gameCount > 0 }.sortedBy { it.displayName }.forEach {
+                    groupedPlatforms.filter { platform ->
+                        platform.gameCount > 0 || platform.allTags.any { cannoliPaths.filteredExtensions(it).isNotEmpty() }
+                    }.sortedBy { it.displayName }.forEach {
                         reorderableItems.add(ListItem.PlatformItem(it))
                     }
                 }
@@ -300,8 +348,8 @@ class SystemListViewModel @Inject constructor(
     ) {
         if (!romDirectory.exists()) return
         val tagDirs = romDirectory.listFiles { f -> f.isDirectory && !f.name.startsWith(".") } ?: return
-        val onDisk = tagDirs.map { it.name.uppercase() }
-        val orphaned = if (reconcileOrphans) romsRepository.platformCounts().keys.map { it.uppercase() } else emptyList()
+        val onDisk = tagDirs.map { PlatformFolders.canonicalTag(it.name) }
+        val orphaned = if (reconcileOrphans) romsRepository.platformCounts().keys.map(PlatformFolders::canonicalTag) else emptyList()
         val known = (onDisk + orphaned).distinct().filter { platformConfig.isKnownTag(it) }
         known.forEachIndexed { i, tag ->
             onProgress?.invoke(tag, i, known.size)
@@ -333,7 +381,11 @@ class SystemListViewModel @Inject constructor(
     }
 
     fun getSelectedPlatformTag(): String? {
-        return (getSelectedItem() as? ListItem.PlatformItem)?.platform?.tag
+        return when (val item = getSelectedItem()) {
+            is ListItem.PlatformItem -> item.platform.tag
+            is ListItem.PortsFolder -> "PORTS"
+            else -> null
+        }
     }
 
     fun getPlatformTags(): List<String> =

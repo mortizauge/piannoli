@@ -1,7 +1,7 @@
 package dev.cannoli.scorza.ui.quickmenu
 
 enum class QuickMenuRow {
-    ROMM, DOWNLOADS, SYNC_HISTORY, CONFLICTS, ERRORS, KITCHEN, RESCAN, INFO;
+    ROMM, DOWNLOADS, SYNC_HISTORY, CONFLICTS, ERRORS, KITCHEN, SCRAPING, SCRAPE_SYSTEMS, RESCAN, INFO;
 
     companion object {
         fun visibleRows(rommPaired: Boolean, kitchenRunning: Boolean, saveSyncEnabled: Boolean = false, pendingConflicts: Int = 0, syncErrors: Int = 0, downloadCount: Int = 0): List<QuickMenuRow> =
@@ -12,6 +12,8 @@ enum class QuickMenuRow {
                 if (rommPaired && pendingConflicts > 0) add(CONFLICTS)
                 if (rommPaired && saveSyncEnabled && syncErrors > 0) add(ERRORS)
                 add(KITCHEN)
+                add(SCRAPING)
+                add(SCRAPE_SYSTEMS)
                 add(RESCAN)
                 add(INFO)
             }

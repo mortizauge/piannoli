@@ -13,18 +13,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import dev.cannoli.scorza.ui.components.artworkClip
+import androidx.compose.ui.geometry.Size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.collectAsState
+import dev.cannoli.ui.components.collectAsStateWhileActive
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -41,7 +41,6 @@ import dev.cannoli.scorza.settings.ArtScale
 import dev.cannoli.scorza.ui.viewmodel.GameListViewModel
 import dev.cannoli.ui.ButtonStyle
 import dev.cannoli.ui.STAR
-import dev.cannoli.ui.START_GLYPH
 import dev.cannoli.ui.components.BottomBar
 import dev.cannoli.ui.components.ConfirmOverlay
 import dev.cannoli.ui.components.LaunchErrorDialog
@@ -57,8 +56,8 @@ import dev.cannoli.ui.components.listTitleSpacing
 import dev.cannoli.ui.components.pillItemHeight
 import dev.cannoli.ui.components.screenInsets
 import dev.cannoli.ui.theme.LocalCannoliColors
-import dev.cannoli.ui.theme.Radius
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.withContext
 
 private fun ListItem.rowDisplayName(showStar: Boolean): String = when (this) {
@@ -99,10 +98,11 @@ fun GameListScreen(
     resumableGames: Set<String> = emptySet(),
     swapPlayResume: Boolean = false,
     artWidth: Int = 40,
+    artRadius: Int = 25,
     artScale: ArtScale = ArtScale.FIT,
     buttonStyle: ButtonStyle = ButtonStyle(),
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWhileActive()
     val itemHeight = pillItemHeight(listLineHeight, listVerticalPadding)
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = state.scrollTarget.coerceAtLeast(0))
 
@@ -119,22 +119,28 @@ fun GameListScreen(
     val hasResumeState = resumeKey != null && resumableGames.contains(resumeKey)
 
     val artPath = selected?.artPath
-    val selectedArt by produceState<ImageBitmap?>(null, artPath) {
-        value = if (artPath != null) {
-            withContext(Dispatchers.IO) {
-                try {
-                    val opts = BitmapFactory.Options()
-                    opts.inJustDecodeBounds = true
-                    BitmapFactory.decodeFile(artPath, opts)
-                    val maxDim = 1024
-                    var sampleSize = 1
-                    while (opts.outWidth / sampleSize > maxDim || opts.outHeight / sampleSize > maxDim) sampleSize *= 2
-                    opts.inJustDecodeBounds = false
-                    opts.inSampleSize = sampleSize
-                    BitmapFactory.decodeFile(artPath, opts)?.asImageBitmap()
-                } catch (_: Exception) { null }
-            }
-        } else null
+    val uiActive = dev.cannoli.ui.components.LocalUiActive.current
+    val selectedArt by produceState<ImageBitmap?>(null, artPath, state.artworkRevision, uiActive) {
+        var loaded = false
+        uiActive.collectLatest { focused ->
+            if (!focused || loaded) return@collectLatest
+            value = if (artPath != null) {
+                withContext(Dispatchers.IO) {
+                    try {
+                        val opts = BitmapFactory.Options()
+                        opts.inJustDecodeBounds = true
+                        BitmapFactory.decodeFile(artPath, opts)
+                        val maxDim = 1024
+                        var sampleSize = 1
+                        while (opts.outWidth / sampleSize > maxDim || opts.outHeight / sampleSize > maxDim) sampleSize *= 2
+                        opts.inJustDecodeBounds = false
+                        opts.inSampleSize = sampleSize
+                        BitmapFactory.decodeFile(artPath, opts)?.asImageBitmap()
+                    } catch (_: Exception) { null }
+                }
+            } else null
+            loaded = true
+        }
     }
 
     val inFavoritesCollection = state.isCollection && state.isFavorites
@@ -267,7 +273,7 @@ fun GameListScreen(
                                 Image(
                                     bitmap = art,
                                     contentDescription = null,
-                                    modifier = artModifier.clip(RoundedCornerShape(Radius.Lg)),
+                                    modifier = artModifier.artworkClip(artRadius, Size(art.width.toFloat(), art.height.toFloat()), artContentScale),
                                     contentScale = artContentScale,
                                     filterQuality = FilterQuality.High
                                 )
@@ -296,7 +302,7 @@ fun GameListScreen(
             val rightItems = if (state.items.isEmpty()) {
                 emptyList()
             } else if (state.multiSelectMode) {
-                listOf(buttonStyle.confirm to actionLabel, START_GLYPH to stringResource(R.string.label_confirm))
+                listOf(buttonStyle.confirm to actionLabel, buttonStyle.start to stringResource(R.string.label_confirm))
             } else if (hasResumeState && swapPlayResume) {
                 listOf(buttonStyle.north to actionLabel, buttonStyle.confirm to resumeLabel)
             } else {
@@ -314,4 +320,3 @@ fun GameListScreen(
         }
     }
 }
-

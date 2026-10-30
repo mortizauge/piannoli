@@ -98,6 +98,7 @@ class LibretroActivity : ComponentActivity(), LauncherSettingsHost {
     private var es3Supported: Boolean = true
 
     private fun startVsyncPacer() {
+        if (!menuHostResumed || (::renderer.isInitialized && renderer.paused)) return
         val view = glSurfaceView ?: return
         if (vsyncCallback != null) return
         val choreographer = android.view.Choreographer.getInstance()
@@ -484,10 +485,33 @@ class LibretroActivity : ComponentActivity(), LauncherSettingsHost {
         )
     }
 
-    private fun push(screen: IGMScreen) { screenStack.add(screen) }
+    private var menuHostResumed = false
+    private val menuUiActive = kotlinx.coroutines.flow.MutableStateFlow(false)
+
+    private fun updateMenuPolling() {
+        menuUiActive.value = menuHostResumed && hasWindowFocus()
+        if (!::menuNavigationPoller.isInitialized) return
+        if (screenStack.isNotEmpty() && menuUiActive.value) {
+            menuNavigationPoller.start()
+        } else {
+            menuNavigationPoller.stop()
+            if (::stickAutoRepeat.isInitialized) stickAutoRepeat.stop()
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        updateMenuPolling()
+    }
+
+    private fun push(screen: IGMScreen) {
+        screenStack.add(screen)
+        updateMenuPolling()
+    }
 
     private fun pop() {
         if (screenStack.isNotEmpty()) screenStack.removeAt(screenStack.lastIndex)
+        updateMenuPolling()
     }
 
     private fun replaceTop(screen: IGMScreen) {
@@ -649,7 +673,11 @@ class LibretroActivity : ComponentActivity(), LauncherSettingsHost {
         setContent {
             CannoliTheme(fontFamily = fontFamily, iconFontFamily = appFonts.mplus1Code) {
                 CompositionLocalProvider(
+                    dev.cannoli.ui.components.LocalUiActive provides menuUiActive,
                     LocalCannoliColors provides colors,
+                    dev.cannoli.ui.components.LocalScreenBackground provides dev.cannoli.ui.components.ScreenBackgroundStyle(
+                        settings.backgroundImagePath, settings.backgroundTint
+                    ),
                     dev.cannoli.scorza.input.screen.compose.LocalScreenInputRegistry provides screenInputRegistry,
                 ) {
                     if (missingBios.isNotEmpty()) {
@@ -1696,6 +1724,7 @@ class LibretroActivity : ComponentActivity(), LauncherSettingsHost {
 
     private fun closeAll() {
         screenStack.clear()
+        updateMenuPolling()
         if (::stickAutoRepeat.isInitialized) stickAutoRepeat.stop()
         for (set in portPressedKeys) set.clear()
         triggerL2HeldDevices.clear()
@@ -2834,6 +2863,8 @@ class LibretroActivity : ComponentActivity(), LauncherSettingsHost {
     }
 
     override fun onPause() {
+        menuHostResumed = false
+        updateMenuPolling()
         super.onPause()
         if (::sessionLog.isInitialized) sessionLog.log("onPause")
         if (!loading && !cleaned && screenStack.isEmpty()) openMenu()
@@ -2867,17 +2898,22 @@ class LibretroActivity : ComponentActivity(), LauncherSettingsHost {
 
     @Suppress("DEPRECATION")
     override fun onResume() {
-        super.onResume(); overridePendingTransition(0, 0); glSurfaceView?.onResume(); startVsyncPacer(); goFullscreen()
+        super.onResume()
+        menuHostResumed = true
+        overridePendingTransition(0, 0)
+        glSurfaceView?.onResume()
+        startVsyncPacer()
+        goFullscreen()
         if (::sessionLog.isInitialized) sessionLog.log("onResume")
         autoSavedOnStop = false
         if (::inputDispatcher.isInitialized) {
             wireDispatcherForIGM()
-            menuNavigationPoller.start()
+            updateMenuPolling()
         }
         if (::controllerBridge.isInitialized) {
             controllerBridge.onDeviceAdded = { device ->
                 val port = portRouter.portFor(device.androidDeviceId)
-                if (!device.isBuiltIn) {
+                if (settings.controllerNotifications && !device.isBuiltIn) {
                     val portLabel = port?.let { "P${it + 1}" } ?: "-"
                     val name = port?.let { portRouter.mappingForPort(it)?.displayName?.takeIf { n -> n.isNotEmpty() } }
                         ?: device.name.ifEmpty { getString(R.string.device_controller) }
@@ -2889,10 +2925,12 @@ class LibretroActivity : ComponentActivity(), LauncherSettingsHost {
                 }
             }
             controllerBridge.onDeviceRemoved = { departed ->
-                val msg = departed.port?.let {
-                    getString(R.string.osd_controller_disconnected_port, it + 1, departed.displayName)
-                } ?: getString(R.string.osd_controller_disconnected, departed.displayName)
-                showOsd(msg)
+                if (settings.controllerNotifications) {
+                    val msg = departed.port?.let {
+                        getString(R.string.osd_controller_disconnected_port, it + 1, departed.displayName)
+                    } ?: getString(R.string.osd_controller_disconnected, departed.displayName)
+                    showOsd(msg)
+                }
                 val port = departed.port
                 if (port != null && ::runner.isInitialized && !loading) {
                     runner.setInput(port, diagonalLock.filter(port, 0, activeAllowDiagonals))

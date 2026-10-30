@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import dev.cannoli.ui.components.collectAsStateWhileActive
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -52,6 +53,7 @@ import dev.cannoli.scorza.ui.components.CreditsCategoryOverlay
 import dev.cannoli.scorza.ui.components.CreditsOverlay
 import dev.cannoli.scorza.ui.components.creditsItemCount
 import dev.cannoli.scorza.ui.components.DialogOverlay
+import dev.cannoli.ui.components.screenBackground
 import dev.cannoli.scorza.ui.components.ListDialogScreen
 import dev.cannoli.scorza.ui.effectiveViewportPadding
 import dev.cannoli.scorza.ui.screens.ColorEntry
@@ -306,7 +308,11 @@ sealed class LauncherScreen {
         override val itemCount: Int get() = ShortcutAction.entries.size
         override fun withScroll(selectedIndex: Int, scrollTarget: Int) = copy(selectedIndex = selectedIndex, scrollTarget = scrollTarget)
     }
-    data class Credits(override val selectedIndex: Int = 0, override val scrollTarget: Int = 0) : LauncherScreen(), ScrollableScreen {
+    data class Credits(
+        override val selectedIndex: Int = 0,
+        override val scrollTarget: Int = 0,
+        val returnDialog: DialogState = DialogState.None,
+    ) : LauncherScreen(), ScrollableScreen {
         override val itemCount: Int get() = CREDITS_ROOT_ROWS.size
         override fun withScroll(selectedIndex: Int, scrollTarget: Int) = copy(selectedIndex = selectedIndex, scrollTarget = scrollTarget)
     }
@@ -322,6 +328,7 @@ sealed class LauncherScreen {
         override val selectedIndex: Int = 0,
         override val scrollTarget: Int = 0,
         override val itemCount: Int = 0,
+        val returnDialog: DialogState = DialogState.None,
     ) : LauncherScreen(), ScrollableScreen {
         override fun withScroll(selectedIndex: Int, scrollTarget: Int) = copy(selectedIndex = selectedIndex, scrollTarget = scrollTarget)
     }
@@ -401,6 +408,7 @@ sealed class LauncherScreen {
         val platforms: List<RaOfflinePlatform> = emptyList(),
         override val selectedIndex: Int = 0,
         override val scrollTarget: Int = 0,
+        val returnDialog: DialogState = DialogState.None,
     ) : LauncherScreen(), ScrollableScreen {
         override val itemCount: Int get() = platforms.size
         override fun withScroll(selectedIndex: Int, scrollTarget: Int) = copy(selectedIndex = selectedIndex, scrollTarget = scrollTarget)
@@ -502,9 +510,13 @@ fun AppNavGraph(
     rommDownloader: dev.cannoli.scorza.romm.download.RommDownloader? = null,
     rommArtFetcher: dev.cannoli.scorza.romm.art.RommArtFetcher? = null,
     saveSyncStatus: dev.cannoli.ui.components.SaveSyncStatus = dev.cannoli.ui.components.SaveSyncStatus.DISABLED,
+    onKeyboardConfirm: () -> Unit = {},
+    onKeyboardCancel: () -> Unit = {},
+    onKeyboardHelp: () -> Unit = {},
+    onKeyboardTick: () -> Unit = {},
 ) {
-    val dialog by dialogState.collectAsState()
-    val appSettings by settingsViewModel.appSettings.collectAsState()
+    val dialog by dialogState.collectAsStateWhileActive()
+    val appSettings by settingsViewModel.appSettings.collectAsStateWhileActive()
 
     val pillScale = pillScaleFor(appSettings.textSize.sp)
     val listFontSize = appSettings.textSize.sp.sp
@@ -513,6 +525,7 @@ fun AppNavGraph(
     val labels = dev.cannoli.ui.ButtonStyle(
         activeMapping.labelSet(dev.cannoli.ui.ButtonLabelSet.PLUMBER),
         activeMapping.confirmButton(),
+        appSettings.piannoliBindings,
     )
 
     val labelContext = androidx.compose.ui.platform.LocalContext.current
@@ -549,6 +562,9 @@ fun AppNavGraph(
     )
     CompositionLocalProvider(
         LocalCannoliColors provides cannoliColors,
+        dev.cannoli.ui.components.LocalScreenBackground provides dev.cannoli.ui.components.ScreenBackgroundStyle(
+            appSettings.backgroundImagePath, appSettings.backgroundTint
+        ),
         LocalStatusBarLeftEdge provides statusBarLeftEdge,
         LocalScaleFactor provides scaleFactor,
         LocalCannoliTypography provides cannoliTypography,
@@ -602,10 +618,15 @@ fun AppNavGraph(
                     title = appSettings.title,
                     mainMenuQuit = appSettings.mainMenuQuit,
                     artWidth = appSettings.artWidth,
+                    artRadius = appSettings.artRadius,
                     artScale = appSettings.artScale,
                     resumableGames = resumableGames,
                     swapPlayResume = appSettings.swapPlayResume,
                     fiveGameHandheld = appSettings.contentMode == dev.cannoli.scorza.settings.ContentMode.FIVE_GAME_HANDHELD,
+                    systemArtworkType = appSettings.systemArtworkType,
+                    systemArtScale = appSettings.systemArtScale,
+                    systemArtWidth = appSettings.systemArtWidth,
+                    systemArtRadius = appSettings.systemArtRadius,
                     buttonStyle = labels,
                 )
             }
@@ -623,6 +644,7 @@ fun AppNavGraph(
                     resumableGames = resumableGames,
                     swapPlayResume = appSettings.swapPlayResume,
                     artWidth = appSettings.artWidth,
+                    artRadius = appSettings.artRadius,
                     artScale = appSettings.artScale,
                     buttonStyle = labels,
                 )
@@ -1156,7 +1178,7 @@ fun AppNavGraph(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.92f)),
+                            .screenBackground(),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(
@@ -1551,7 +1573,7 @@ fun AppNavGraph(
                 }
                 val showCollectionsRow = collections.isNotEmpty()
                 val syncStatus = rommBrowseViewModel?.syncStatus?.collectAsState()?.value
-                val syncProgress = rommBrowseViewModel?.syncProgress?.collectAsState()?.value
+                val syncProgress = rommBrowseViewModel?.syncProgress?.collectAsStateWhileActive()?.value
                 var emptyMessage: String? = null
                 var syncFraction: Float? = null
                 if (platforms.isEmpty()) {
@@ -1613,7 +1635,7 @@ fun AppNavGraph(
                     if (!loading && currentScreen.itemCount != games.size) nav?.replaceTop(currentScreen.copy(itemCount = games.size))
                 }
                 val loader = rommImageLoader
-                val queueItems = rommDownloader?.queue?.state?.collectAsState()?.value ?: emptyList()
+                val queueItems = rommDownloader?.queue?.state?.collectAsStateWhileActive()?.value ?: emptyList()
                 val doneForPlatform = queueItems.count {
                     it.tag == currentScreen.platform.cannoliTag &&
                         it.status == dev.cannoli.scorza.romm.download.DownloadStatus.Done
@@ -1633,6 +1655,7 @@ fun AppNavGraph(
                         scrollTarget = currentScreen.scrollTarget,
                         host = rommHost,
                         artWidth = appSettings.artWidth,
+                        artRadius = appSettings.artRadius,
                         artType = rommArtType,
                         multiSelect = multiSelect,
                         checkedIds = checkedIds,
@@ -1758,7 +1781,7 @@ fun AppNavGraph(
                 androidx.compose.runtime.LaunchedEffect(loading, games.size) {
                     if (!loading && currentScreen.itemCount != games.size) nav?.replaceTop(currentScreen.copy(itemCount = games.size))
                 }
-                val queueItems = rommDownloader?.queue?.state?.collectAsState()?.value ?: emptyList()
+                val queueItems = rommDownloader?.queue?.state?.collectAsStateWhileActive()?.value ?: emptyList()
                 val doneCount = queueItems.count {
                     it.status == dev.cannoli.scorza.romm.download.DownloadStatus.Done
                 }
@@ -1778,6 +1801,7 @@ fun AppNavGraph(
                         scrollTarget = currentScreen.scrollTarget,
                         host = rommHost,
                         artWidth = appSettings.artWidth,
+                        artRadius = appSettings.artRadius,
                         artType = rommArtType,
                         multiSelect = multiSelect,
                         checkedIds = checkedIds,
@@ -1819,6 +1843,7 @@ fun AppNavGraph(
                         scrollTarget = currentScreen.scrollTarget,
                         host = rommHost,
                         artWidth = appSettings.artWidth,
+                        artRadius = appSettings.artRadius,
                         artType = rommArtType,
                         imageLoader = loader,
                         backgroundImagePath = appSettings.backgroundImagePath,
@@ -1867,7 +1892,7 @@ fun AppNavGraph(
             }
             is LauncherScreen.RommGameDetail -> {
                 val loader = rommImageLoader
-                val downloads = rommDownloader?.queue?.state?.collectAsState()?.value ?: emptyList()
+                val downloads = rommDownloader?.queue?.state?.collectAsStateWhileActive()?.value ?: emptyList()
                 val downloaded = downloads.any {
                     it.rommId == currentScreen.game.id && it.status == dev.cannoli.scorza.romm.download.DownloadStatus.Done
                 }
@@ -1897,11 +1922,11 @@ fun AppNavGraph(
 
         // Hoisted full-screen dialog rendering: every screen gets the keyboard / full-screen
         // overlays for free, so a new screen can never silently capture input with nothing drawn.
-        val overlayDownloads = rommDownloader?.queue?.state?.collectAsState()?.value ?: emptyList()
+        val overlayDownloads = rommDownloader?.queue?.state?.collectAsStateWhileActive()?.value ?: emptyList()
         if (dialog is DialogState.RommDownloads && overlayDownloads.isEmpty()) {
             androidx.compose.runtime.LaunchedEffect(Unit) { nav?.dialogState?.value = DialogState.None }
         }
-        val artState = rommArtFetcher?.state?.collectAsState()?.value
+        val artState = rommArtFetcher?.state?.collectAsStateWhileActive()?.value
         androidx.compose.runtime.LaunchedEffect(artState) {
             val finished = artState as? dev.cannoli.scorza.romm.art.ArtFetchState.Finished
             if (finished != null && dialog !is DialogState.RommArtResults) {
@@ -1923,10 +1948,21 @@ fun AppNavGraph(
             downloads = overlayDownloads,
             updateAvailable = updateAvailable,
             buttonStyle = labels,
-            appListPlatformTag = gameListViewModel?.state?.collectAsState()?.value?.platformTag,
+            appListPlatformTag = gameListViewModel?.state?.collectAsStateWhileActive()?.value?.platformTag,
+            onKeyboardChange = { keyboard ->
+                val host = nav?.dialogState?.value as? KeyboardHost
+                if (host != null) {
+                    if (host.keyboard != keyboard) onKeyboardTick()
+                    nav.dialogState.value = host.withKeyboard(keyboard)
+                }
+            },
+            onKeyboardConfirm = onKeyboardConfirm,
+            onKeyboardCancel = onKeyboardCancel,
+            onKeyboardHelp = onKeyboardHelp,
+            useSystemKeyboard = appSettings.keyboardType == dev.cannoli.scorza.settings.KeyboardType.SYSTEM,
         )
 
-        val systemListState = systemListViewModel?.state?.collectAsState()?.value
+        val systemListState = systemListViewModel?.state?.collectAsStateWhileActive()?.value
         val hideForDialog = dialog is DialogState.About
                 || dialog is DialogState.Kitchen
                 || dialog is DialogState.UpdateDownload
@@ -1942,7 +1978,7 @@ fun AppNavGraph(
         val artRunning = appSettings.showDownloads &&
                 rommArtFetcher?.state?.collectAsState()?.value == dev.cannoli.scorza.romm.art.ArtFetchState.Running
         val activeDownloadCount = if (appSettings.showDownloads) {
-            rommDownloader?.queue?.state?.collectAsState()?.value?.count {
+            rommDownloader?.queue?.state?.collectAsStateWhileActive()?.value?.count {
                 it.status == dev.cannoli.scorza.romm.download.DownloadStatus.Queued || it.status is dev.cannoli.scorza.romm.download.DownloadStatus.Downloading
             } ?: 0
         } else 0
