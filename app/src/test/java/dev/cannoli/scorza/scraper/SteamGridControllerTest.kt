@@ -477,7 +477,7 @@ class SteamGridControllerTest {
             setupCoordinator = mockk(), inputTesterController = mockk(), updateManager = mockk(),
             intentAuditor = mockk(), settingsViewModel = viewModel, launcherActions = mockk(relaxed = true),
             activityActions = mockk(), emulatorMappingBuilder = mockk(), context = context,
-            rommStore = mockk(), cannoliPaths = mockk(), scraper = controller,
+            rommStore = mockk(), cannoliPaths = mockk(), scraper = controller, artworkStore = mockk(),
         )
         viewModel.setCategoryIndex(viewModel.state.value.categories.indexOfFirst { it.key == "display" })
         handler.onConfirm()

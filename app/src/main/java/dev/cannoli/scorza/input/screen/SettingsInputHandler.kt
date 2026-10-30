@@ -55,6 +55,7 @@ class SettingsInputHandler @Inject constructor(
     private val rommStore: dev.cannoli.scorza.romm.RommConnectionStore,
     private val cannoliPaths: CannoliPathsProvider,
     private val scraper: dev.cannoli.scorza.scraper.ScraperController,
+    private val artworkStore: dev.cannoli.scorza.scraper.ScrapedArtworkStore,
 ) : ScreenInputHandler {
 
     override fun onUp() {
@@ -363,11 +364,44 @@ class SettingsInputHandler @Inject constructor(
         val appType = if (state.type == "tools") AppType.TOOL else AppType.PORT
         ioScope.launch {
             val keep = selected.map { it.second }.toSet()
-            appsRepository.all(appType).forEach { app ->
+            val existing = appsRepository.all(appType)
+            val existingPackages = existing.map { it.packageName }.toSet()
+            existing.forEach { app ->
                 if (app.packageName !in keep) appsRepository.delete(app.id)
             }
-            selected.forEach { (name, pkg) -> appsRepository.upsert(appType, name, pkg) }
+            val iconFailures = mutableListOf<String>()
+            selected.forEach { (name, pkg) ->
+                val id = appsRepository.upsert(appType, name, pkg)
+                if (pkg !in existingPackages) {
+                    try {
+                        val icon = if (pkg == ApkLauncher.VIRTUAL_TV_SETTINGS_PACKAGE) {
+                            val info = context.packageManager.resolveActivity(
+                                Intent(android.provider.Settings.ACTION_SETTINGS), 0)
+                                ?: throw PackageManager.NameNotFoundException(pkg)
+                            info.loadIcon(context.packageManager)
+                        } else context.packageManager.getApplicationIcon(pkg)
+                        artworkStore.installAppIcon(dev.cannoli.scorza.model.App(id, appType, name, pkg), icon)
+                    } catch (e: PackageManager.NameNotFoundException) {
+                        android.util.Log.w("Artwork", "Cannot load app icon for $pkg", e)
+                        iconFailures.add(name)
+                    } catch (e: SecurityException) {
+                        android.util.Log.w("Artwork", "Cannot access app icon for $pkg", e)
+                        iconFailures.add(name)
+                    } catch (e: dev.cannoli.scorza.scraper.ScraperException) {
+                        if (e.error != dev.cannoli.scorza.scraper.ScraperError.EXISTING_ARTWORK) {
+                            android.util.Log.w("Artwork", "Cannot save app icon for $pkg", e)
+                            iconFailures.add(name)
+                        }
+                    }
+                }
+            }
             launcherActions.rescanSystemList()
+            if (iconFailures.isNotEmpty()) {
+                withContext(Dispatchers.Main) {
+                    nav.dialogState.value = DialogState.LaunchError(context.getString(
+                        dev.cannoli.scorza.R.string.app_icon_artwork_failed, iconFailures.joinToString(", ")))
+                }
+            }
         }
         nav.pop()
     }

@@ -240,7 +240,7 @@ class ScrapedArtworkStoreTest {
         assertFalse(category.exists())
     }
 
-
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
     @Test fun `Android icons become discoverable tool and port artwork without replacing existing art`() {
         for (type in dev.cannoli.scorza.model.AppType.entries) {
             val app = dev.cannoli.scorza.model.App(1, type, "Game: Deluxe", "dev.game")

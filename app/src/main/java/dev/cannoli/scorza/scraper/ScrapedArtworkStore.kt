@@ -3,6 +3,8 @@ package dev.cannoli.scorza.scraper
 import android.graphics.BitmapFactory
 import dev.cannoli.scorza.di.CannoliPathsProvider
 import dev.cannoli.scorza.model.Rom
+import dev.cannoli.scorza.model.App
+import dev.cannoli.scorza.model.artTag
 import dev.cannoli.scorza.util.ArtworkLookup
 import java.io.File
 import java.io.IOException
@@ -68,6 +70,27 @@ class ScrapedArtworkStore @Inject constructor(
     fun installPort(app: dev.cannoli.scorza.model.App, bytes: ByteArray, overwrite: Boolean = false): File {
         require(app.type == dev.cannoli.scorza.model.AppType.PORT)
         return install("PORTS", dev.cannoli.scorza.romm.download.sanitizeFsName(app.displayName), false, bytes, overwrite)
+    }
+
+    fun installAppIcon(app: App, icon: android.graphics.drawable.Drawable): File {
+        val tag = app.type.artTag
+        val basename = dev.cannoli.scorza.romm.download.sanitizeFsName(app.displayName)
+        artwork.invalidate(tag)
+        artwork.findByName(tag, basename)?.let { return it }
+        val bitmap = android.graphics.Bitmap.createBitmap(256, 256, android.graphics.Bitmap.Config.ARGB_8888)
+        val bounds = android.graphics.Rect(icon.bounds)
+        try {
+            icon.setBounds(0, 0, bitmap.width, bitmap.height)
+            icon.draw(android.graphics.Canvas(bitmap))
+            val output = java.io.ByteArrayOutputStream()
+            if (!bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output)) {
+                throw ScraperException(ScraperError.STORAGE)
+            }
+            return install(tag, basename, false, output.toByteArray(), overwrite = false)
+        } finally {
+            icon.bounds = bounds
+            bitmap.recycle()
+        }
     }
 
     private fun install(tag: String, basename: String, embedded: Boolean, bytes: ByteArray, overwrite: Boolean): File {
