@@ -124,6 +124,11 @@ class RomsRepository(
 
     fun allRomsForPlatform(platformTag: String): List<Rom> = romsForPlatform(platformTag.uppercase())
 
+    fun romsForScraping(platformTag: String, includeSubfolders: Boolean): List<Rom> {
+        val roms = allRomsForPlatform(platformTag)
+        return if (includeSubfolders) roms else partitionForSubfolder(roms, null).first
+    }
+
     private fun romsForPlatform(platformTag: String): List<Rom> = db.queryAll(
         "$BASE_SELECT WHERE platform_tag = ? ORDER BY sort_key",
         platformTag, mapper = ::rowToRom,

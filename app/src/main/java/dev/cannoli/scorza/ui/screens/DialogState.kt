@@ -50,6 +50,36 @@ data class ColorEntry(val key: String, @androidx.annotation.StringRes val labelR
 
 sealed interface DialogState {
     data object None : DialogState
+    data class ExtensionFilters(
+        val tag: String,
+        val title: String,
+        val extensions: List<String>,
+        val excluded: Set<String>,
+        val origin: ContextMenu,
+        val selectedIndex: Int = 0,
+        val loading: Boolean = false,
+    ) : DialogState
+    data object ScraperOverwriteConfirm : DialogState
+    data class ScraperMenu(
+        val title: String,
+        val options: List<String>,
+        val selectedIndex: Int = 0,
+        val previews: List<String?> = emptyList(),
+        val bulk: Boolean = false,
+    ) : DialogState
+    data class ScraperStatus(val message: String, val busy: Boolean = false, val bulk: Boolean = false) : DialogState
+    data class ScraperInput(
+        val field: dev.cannoli.scorza.scraper.ScraperField,
+        override val keyboard: KeyboardState = KeyboardState(),
+    ) : DialogState, KeyboardHost {
+        override val titleRes: Int get() = when (this.field) {
+            dev.cannoli.scorza.scraper.ScraperField.QUERY -> dev.cannoli.scorza.R.string.scraper_query
+            dev.cannoli.scorza.scraper.ScraperField.USERNAME -> dev.cannoli.scorza.R.string.scraper_username
+            dev.cannoli.scorza.scraper.ScraperField.PASSWORD -> dev.cannoli.scorza.R.string.scraper_password
+            dev.cannoli.scorza.scraper.ScraperField.API_KEY -> dev.cannoli.scorza.R.string.steamgrid_api_key
+        }
+        override fun withKeyboard(keyboard: KeyboardState) = copy(keyboard = keyboard)
+    }
     // romId is set only when the emulator that failed came from a per-game override, so
     // recovery edits the mapping that actually failed instead of the platform-wide one.
     data class MissingCore(
@@ -158,7 +188,12 @@ sealed interface DialogState {
         val syncErrors: Int = 0,
         val hasBackups: Boolean = false,
     ) : DialogState
-    data class RommConfirm(val action: RommConfirmAction, val downloadKey: String? = null, val fromQuickMenu: Boolean = false) : DialogState
+    data class RommConfirm(
+        val action: RommConfirmAction,
+        val downloadKey: String? = null,
+        val fromQuickMenu: Boolean = false,
+        val fromSettingsMenu: Boolean = false,
+    ) : DialogState
     data class RommPlatformToggle(val items: List<RommPlatformToggleItem>, val selectedIndex: Int = 0) : DialogState
     data class RommCollectionToggle(val items: List<RommCollectionToggleItem>, val selectedIndex: Int = 0) : DialogState
     data class SyncHistory(val entries: List<SyncHistoryRow>, val selectedIndex: Int = 0, val fromSaveSyncMenu: Boolean = false) : DialogState
@@ -213,6 +248,9 @@ interface KeyboardHost {
 }
 
 fun DialogState.withMenuDelta(delta: Int): DialogState? = when (this) {
+    is DialogState.ScraperMenu -> {
+        if (options.isEmpty()) null else copy(selectedIndex = (selectedIndex + delta).mod(options.size))
+    }
     is DialogState.ContextMenu -> {
         if (options.isEmpty()) null
         else copy(selectedOption = (selectedOption + delta).mod(options.size))
