@@ -32,7 +32,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "dev.cannoli.scorza"
+        applicationId = "dev.piannoli.don"
         minSdk = 28
         targetSdk = 36
         versionCode = 1
