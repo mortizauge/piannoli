@@ -141,10 +141,10 @@ class AtomicRename(private val piannoliRoot: File, private val walker: RomDirect
             newStateDir.parentFile?.mkdirs()
             if (newStateDir.isDirectory && newStateDir.list()?.isEmpty() == true) newStateDir.delete()
             if (!stateSubDir.renameTo(newStateDir)) throw Exception("Failed to move state dir")
-            newStateDir.listFiles()?.forEach { f ->
+            newStateDir.walkTopDown().filter { it.isFile }.forEach { f ->
                 if (f.name.startsWith(oldBaseName)) {
                     val renamed = newBaseName + f.name.substring(oldBaseName.length)
-                    if (!f.renameTo(File(newStateDir, renamed))) throw Exception("Failed to rename ${f.name}")
+                    if (!f.renameTo(File(f.parentFile, renamed))) throw Exception("Failed to rename ${f.name}")
                 }
             }
         }

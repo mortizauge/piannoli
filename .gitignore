@@ -15,9 +15,14 @@ app/src/main/jniLibs/
 *.spv
 romm_cache.db
 
-# Populated by scripts/fetch-autoconfig.sh from the CannoliHQ fork of
-# libretro/retroarch-joypad-autoconfig. Not tracked in git.
+# Populated by scripts/fetch-autoconfig.sh from libretro/retroarch-joypad-autoconfig.
 app/src/main/assets/autoconfig/
+scripts/.autoconfig-source/
+
+# Removed engine submodules may contain local edits; keep their working trees, not the build.
+app/src/main/cpp/third_party/rcheevos/
+app/src/main/cpp/third_party/speexdsp/
+piannoli-igm/build/
 
 # Bytecode from the scripts/ test suite.
 __pycache__/

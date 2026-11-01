@@ -14,7 +14,6 @@ import dev.piannoli.scorza.db.importer.ImportResult
 import dev.piannoli.scorza.db.importer.Importer
 import dev.piannoli.scorza.di.PiannoliPathsProvider
 import dev.piannoli.scorza.di.IoScope
-import dev.piannoli.scorza.input.BindingController
 import dev.piannoli.scorza.input.LauncherActions
 import dev.piannoli.scorza.launcher.InstalledCoreService
 import dev.piannoli.scorza.launcher.LaunchManager
@@ -56,7 +55,6 @@ class BootInitializer @Inject constructor(
     private val settingsViewModel: SettingsViewModel,
     private val collectionsRepository: CollectionsRepository,
     private val updateManager: UpdateManager,
-    private val bindingController: BindingController,
     private val nav: NavigationController,
     private val launchManager: LaunchManager,
     private val launcherActions: LauncherActions,
@@ -110,6 +108,7 @@ class BootInitializer @Inject constructor(
 
         ioScope.launch {
             installedCoreService.queryAllPackages()
+            platformConfig.seedUnsetPlatforms(context.packageManager, installedCoreService.configuredCores())
         }
 
         withContext(Dispatchers.Main) {
@@ -123,32 +122,6 @@ class BootInitializer @Inject constructor(
             }
             // updateAvailable -> settingsViewModel.updateInfo is now pushed lifecycle-bound
             // from MainActivity.ReadyNavGraph so it cancels on Activity destroy.
-
-            bindingController.onProgress = { keys, elapsedMs ->
-                val cs = nav.currentScreen
-                if (cs is LauncherScreen.ShortcutBinding) {
-                    nav.replaceTop(cs.copy(heldKeys = keys, countdownMs = elapsedMs))
-                }
-            }
-            bindingController.onCommit = { chord ->
-                val cs = nav.currentScreen
-                if (cs is LauncherScreen.ShortcutBinding) {
-                    val action = dev.piannoli.igm.ShortcutAction.entries.getOrNull(cs.selectedIndex)
-                    if (action != null) {
-                        val cleared = cs.shortcuts.filterValues { it != chord }
-                        nav.replaceTop(cs.copy(
-                            shortcuts = cleared + (action to chord),
-                            listening = false, heldKeys = emptySet(), countdownMs = 0,
-                        ))
-                    }
-                }
-            }
-            bindingController.onCancel = {
-                val cs = nav.currentScreen
-                if (cs is LauncherScreen.ShortcutBinding && cs.listening) {
-                    nav.replaceTop(cs.copy(listening = false, heldKeys = emptySet(), countdownMs = 0))
-                }
-            }
 
             nav.screenStack.clear()
             nav.screenStack.add(LauncherScreen.SystemList)

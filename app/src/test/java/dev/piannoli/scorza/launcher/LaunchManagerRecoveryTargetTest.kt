@@ -57,7 +57,6 @@ class LaunchManagerRecoveryTargetTest {
             delfinoLauncher = mockk(relaxed = true),
             launchState = mockk(relaxed = true),
             activeMappingHolder = activeMappingHolder,
-            atomicRename = mockk(relaxed = true),
             installedCoreService = installedCoreService,
             gameOverrides = gameOverrides,
         )

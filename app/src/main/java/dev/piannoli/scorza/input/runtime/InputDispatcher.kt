@@ -381,11 +381,9 @@ class InputDispatcher @Inject constructor(
 
     /**
      * Wires the dispatcher's canonical-event callbacks to its [ScreenInputRegistry]. Every
-     * subscriber Activity (MainActivity for the launcher, LibretroActivity for the IGM) calls
-     * this once during initialization so the two contexts share one wiring path and cannot drift.
+     * frontend activity calls this during initialization to share one wiring path.
      *
-     * [dialogHandler] is consulted before the registry's top handler. Pass null on the IGM
-     * (no dialog layer) and the launcher's DialogInputHandler on the launcher. The handler
+     * [dialogHandler] is consulted before the registry's top handler. The handler
      * returns true to consume the event; on false, dispatch falls through to the screen handler.
      *
      * The launcher passes [onSelectUpOverride] because it owns select-hold nav-flag state that

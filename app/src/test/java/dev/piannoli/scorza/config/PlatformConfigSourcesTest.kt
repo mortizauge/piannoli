@@ -29,10 +29,10 @@ class PlatformConfigSourcesTest {
         assertFalse(EmulatorSource.Standalone in sources)
     }
 
-    @Test fun `installed-only Internal options omit unbundled cores and includeAll surfaces them as unavailable`() {
+    @Test fun `installed-only RetroArch options omit missing cores and includeAll surfaces them as unavailable`() {
         val pc = config()
-        val installedOnly = pc.emulatorOptionsForSource("NES", EmulatorSource.Internal, includeAll = false)
-        val all = pc.emulatorOptionsForSource("NES", EmulatorSource.Internal, includeAll = true)
+        val installedOnly = pc.emulatorOptionsForSource("NES", EmulatorSource.RetroArch, includeAll = false)
+        val all = pc.emulatorOptionsForSource("NES", EmulatorSource.RetroArch, includeAll = true)
         assertTrue(all.size >= installedOnly.size)
         all.filter { opt -> installedOnly.none { it.coreId == opt.coreId } }
             .forEach { assertEquals(CoreAvailability.UNAVAILABLE, it.availability) }

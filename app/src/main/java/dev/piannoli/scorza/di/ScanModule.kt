@@ -8,7 +8,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dev.piannoli.scorza.config.CoreInfoRepository
 import dev.piannoli.scorza.config.PlatformConfig
-import dev.piannoli.scorza.launcher.LaunchManager
 import java.io.File
 import javax.inject.Singleton
 
@@ -33,9 +32,8 @@ object ScanModule {
         @ApplicationContext context: Context,
         coreInfo: CoreInfoRepository,
     ): PlatformConfig {
-        val bundledCoresDir = LaunchManager.extractBundledCores(context)
         return PlatformConfig(
-            { paths.root }, context.assets, coreInfo, bundledCoresDir,
+            { paths.root }, context.assets, coreInfo,
             context.getString(dev.piannoli.scorza.R.string.value_empty_override),
             context.getString(dev.piannoli.scorza.R.string.value_needs_setup),
         )

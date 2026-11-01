@@ -5,6 +5,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class RaConnectClientTest {
@@ -15,6 +16,21 @@ class RaConnectClientTest {
             clientProvider = { ok },
             userAgent = "Piannoli/test",
         )
+    }
+
+    @Test fun passwordLogin_usesManagedEndpointAndRequiresSuccessfulToken() {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setBody("""{"Success":true,"User":"Bob","Token":"tok"}"""))
+        server.enqueue(MockResponse().setBody("""{"Success":false,"Error":"Invalid credentials"}"""))
+        server.enqueue(MockResponse().setBody("""{"Success":true,"User":"Bob"}"""))
+        server.start()
+        val client = client(server)
+        assertEquals(RaConnectClient.Login("Bob", "tok"), client.loginWithPassword("bob", "a&b"))
+        val request = server.takeRequest()
+        assertTrue(request.body.readUtf8().contains("p=a%26b"))
+        assertNull(client.loginWithPassword("bob", "wrong"))
+        assertNull(client.loginWithPassword("bob", "missing-token"))
+        server.shutdown()
     }
 
     @Test

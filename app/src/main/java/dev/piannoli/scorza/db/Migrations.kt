@@ -232,7 +232,7 @@ internal object Migrations {
                 INSERT INTO game_overrides_v12 (rom_id, source, core_id, app_package)
                 SELECT rom_id,
                        CASE
-                         WHEN runner = 'Internal' THEN 'Internal'
+                         WHEN runner IN ('Internal', 'Built-in', 'BUILTIN', 'Builtin', 'BuiltIn') THEN 'Internal'
                          WHEN runner IN ('Standalone', 'App') THEN 'Standalone'
                          WHEN runner IS NOT NULL AND runner <> '' THEN 'RetroArch'
                          WHEN app_package IS NOT NULL THEN 'Standalone'
@@ -253,6 +253,13 @@ internal object Migrations {
             db.execSQL("ALTER TABLE apps ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0")
             db.execSQL("CREATE INDEX roms_hidden ON roms(is_hidden) WHERE is_hidden = 1")
             db.execSQL("CREATE INDEX apps_hidden ON apps(is_hidden) WHERE is_hidden = 1")
+        },
+        Migration(15) { db ->
+            // Run at the storage-gated database open, not during eager Hilt construction.
+            // Only remove obsolete choices; legacy states and save-sync records stay intact.
+            db.execSQL(
+                "DELETE FROM game_overrides WHERE source IN ('Internal', 'Built-in', 'BUILTIN', 'Builtin', 'BuiltIn')"
+            )
         },
     )
 

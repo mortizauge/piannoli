@@ -12,6 +12,19 @@ class RaConnectClient(
     private val userAgent: String = "Piannoli",
 ) {
     data class RawResponse(val code: Int, val body: String)
+    data class Login(val username: String, val token: String)
+
+    fun loginWithPassword(username: String, password: String): Login? {
+        val response = post(FormBody.Builder().add("r", "login2").add("u", username)
+            .add("p", password).build())
+        if (response.code !in 200..299) return null
+        return try {
+            val json = JSONObject(response.body)
+            val token = json.optString("Token")
+            val name = json.optString("User", username)
+            if (!json.optBoolean("Success") || token.isBlank() || name.isBlank()) null else Login(name, token)
+        } catch (_: org.json.JSONException) { null }
+    }
 
     fun login2(username: String, token: String): RawResponse =
         post(FormBody.Builder().add("r", "login2").add("u", username).add("t", token).build())

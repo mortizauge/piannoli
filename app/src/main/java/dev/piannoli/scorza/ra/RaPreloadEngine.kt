@@ -7,7 +7,7 @@ import dev.piannoli.scorza.model.Rom
  * Android-free orchestration for offline preload: resolve the game id, fetch and store the set, and
  * mark the rom as cached. Extracted from RaPreloadController so the result handling, the
  * setRaCachedGameId side-effect, and bulk counting are unit-testable without a Context. The hasher
- * is injectable so tests can avoid the native rcheevos binding.
+ * is injectable; identification does not load a native engine.
  */
 class RaPreloadEngine(
     private val store: RaOfflineStore,
@@ -23,11 +23,10 @@ class RaPreloadEngine(
             val consoleId = RaConsoles.MAP[rom.platformTag.uppercase()]
             if (consoleId != null) {
                 hash = hasher(rom.path.absolutePath, consoleId)
-                if (hash != null) {
-                    val resolved = client.resolveGameId(username, token, hash)
-                    if (resolved < 0) return RaOfflinePreloader.Result.Failure("offline")
-                    gameId = resolved
-                }
+                if (hash == null) return RaOfflinePreloader.Result.Failure("identification")
+                val resolved = client.resolveGameId(username, token, hash)
+                if (resolved < 0) return RaOfflinePreloader.Result.Failure("offline")
+                gameId = resolved
             }
         }
         val result = refresh(client, rom.path.absolutePath, rom.platformTag, gameId, hash)

@@ -4,7 +4,6 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import dev.piannoli.scorza.settings.GlobalOverridesManager
 import dev.piannoli.scorza.settings.SettingsRepository
 import dev.piannoli.scorza.util.ArtworkLookup
 import dev.piannoli.scorza.util.AtomicRename
@@ -20,9 +19,6 @@ object AppModule {
     fun provideScraperProvider(provider: dev.piannoli.scorza.scraper.ScreenScraperProvider): dev.piannoli.scorza.scraper.ScraperProvider =
         provider
 
-    @Provides @Singleton
-    fun provideGlobalOverridesManager(settings: SettingsRepository): GlobalOverridesManager =
-        GlobalOverridesManager { settings.sdCardRoot }
 
     @Provides @Singleton
     fun provideAtomicRename(settings: SettingsRepository, walker: RomDirectoryWalker, artwork: ArtworkLookup): AtomicRename =

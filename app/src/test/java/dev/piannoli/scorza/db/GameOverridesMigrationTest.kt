@@ -4,6 +4,7 @@ import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.execSQL
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -59,11 +60,10 @@ class GameOverridesMigrationTest {
             }
     }
 
-    private fun sourceOf(conn: SQLiteConnection, romId: Long): String =
+    private fun sourceOf(conn: SQLiteConnection, romId: Long): String? =
         conn.prepare("SELECT source FROM game_overrides WHERE rom_id = ?").use { stmt ->
             stmt.bindLong(1, romId)
-            stmt.step()
-            stmt.getText(0)
+            if (stmt.step()) stmt.getText(0) else null
         }
 
     @Test fun `every legacy runner caption converts to the right source`() {
@@ -76,10 +76,14 @@ class GameOverridesMigrationTest {
         seed(conn, 6, null, "App", "com.fastemulator.gba")
         seed(conn, 7, null, null, "com.fastemulator.gba")
         seed(conn, 8, "nestopia_libretro", null, null)
+        seed(conn, 9, "nestopia_libretro", "Built-in", null)
+        seed(conn, 10, "nestopia_libretro", "BUILTIN", null)
 
         Migrations.applyFrom(conn, 11)
 
-        assertEquals("Internal", sourceOf(conn, 1))
+        assertNull(sourceOf(conn, 1))
+        assertNull(sourceOf(conn, 9))
+        assertNull(sourceOf(conn, 10))
         assertEquals("RetroArch", sourceOf(conn, 2))
         assertEquals("RetroArch", sourceOf(conn, 3))
         assertEquals("RetroArch", sourceOf(conn, 4))
@@ -120,7 +124,7 @@ class GameOverridesMigrationTest {
 
     @Test fun `the cascade still works after the rewrite`() {
         val conn = v11Connection("cascade")
-        seed(conn, 1, "nestopia_libretro", "Internal", null)
+        seed(conn, 1, "nestopia_libretro", "RicottaArch", null)
         Migrations.applyFrom(conn, 11)
         conn.execSQL("DELETE FROM roms WHERE id = 1")
         conn.prepare("SELECT COUNT(*) FROM game_overrides").use {
@@ -133,6 +137,7 @@ class GameOverridesMigrationTest {
     @Test fun `migration 14 adds persistent hidden flags defaulting to visible`() {
         val conn = v11Connection("hidden")
         conn.execSQL("ALTER TABLE apps ADD COLUMN pin_order INTEGER")
+        conn.execSQL("ALTER TABLE game_overrides ADD COLUMN source TEXT")
         conn.execSQL("INSERT INTO roms (id, path, platform_tag) VALUES (1, 'NES/game.nes', 'NES')")
         conn.execSQL("INSERT INTO apps (id) VALUES (1)")
         conn.execSQL("PRAGMA user_version = 13")

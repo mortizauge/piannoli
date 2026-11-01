@@ -2,19 +2,21 @@ package dev.piannoli.scorza.ui.components
 
 import androidx.compose.material3.Text
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
-import java.util.concurrent.atomic.AtomicInteger
+import dev.piannoli.scorza.settings.ArtScale
+import java.util.Collections
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
-import org.junit.Assert.assertEquals
 import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -27,106 +29,70 @@ import org.robolectric.annotation.Config
 class SelectedArtworkTest {
     @get:Rule val compose = createAndroidComposeRule<androidx.activity.ComponentActivity>()
     private val workerScope = CoroutineScope(SupervisorJob())
+    private val decoded: MutableList<String> = Collections.synchronizedList(mutableListOf())
+    private val cache = ListArtworkCache(
+        decoder = { request: ArtworkRequest -> decoded += request.path; request.path },
+        sizeOf = String::length,
+        scope = workerScope,
+        dispatcher = Dispatchers.IO,
+    )
+    private val paths = listOf("a", "b", "c")
+    private val active = MutableStateFlow(true)
 
     @After fun cancelWorker() = workerScope.cancel()
 
-    @Test fun `cached selection replaces previous art on first composition without placeholder`() {
-        val path = mutableStateOf("first")
-        val active = MutableStateFlow(true)
-        val decoded = AtomicInteger()
+    private fun window(selected: Int, revision: Long = 0L) = artworkWindow(paths.size, selected) {
+        ArtworkRequest(paths[it], revision, 100, 100, ArtScale.FIT)
+    }
+
+    private fun awaitText(text: String) = compose.waitUntil(5_000) {
+        compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
+    }
+
+    @Test fun `prefetched neighbour shows on first composition and selection changes keep the list cache`() {
+        val selected = mutableIntStateOf(0)
         val displayed = mutableListOf<String?>()
-        val loader = SelectionArtworkLoader(
-            decoder = { value: String -> decoded.incrementAndGet(); value },
-            sizeOf = String::length,
-            scope = workerScope,
-            dispatcher = Dispatchers.IO,
-        )
         compose.setContent {
-            val art by rememberSelectedArtwork(path.value, 0L, true, active, loader)
+            val art = rememberListArtwork("list", window(selected.intValue), active, cache)
             SideEffect { displayed.add(art) }
             Text(art ?: "placeholder")
         }
-        compose.waitUntil(5_000) {
-            compose.onAllNodesWithText("first").fetchSemanticsNodes().isNotEmpty()
-        }
-        compose.runOnIdle { path.value = "second" }
-        compose.waitUntil(5_000) {
-            compose.onAllNodesWithText("second").fetchSemanticsNodes().isNotEmpty()
-        }
-        compose.runOnIdle { displayed.clear(); path.value = "first" }
-        compose.onNodeWithText("first").assertExists()
+        awaitText("a")
+        compose.waitUntil(5_000) { decoded.size == 3 }
+        compose.runOnIdle { displayed.clear(); selected.intValue = 2 }
+        compose.onNodeWithText("c").assertExists()
         compose.runOnIdle {
             assertTrue(displayed.isNotEmpty())
-            assertTrue(displayed.all { it == "first" })
-            active.value = false
-            path.value = "second"
+            assertTrue(displayed.all { it == "c" })
         }
-        compose.onNodeWithText("placeholder").assertExists()
-        compose.runOnIdle { active.value = true }
-        compose.onNodeWithText("second").assertExists()
-        assertEquals(2, decoded.get())
+        assertEquals(listOf("a", "b", "c"), decoded.toList())
     }
 
-    @Test fun `selection and revision changes clear old art even while inactive`() {
-        val path = mutableStateOf<String?>("first")
-        val revision = mutableStateOf(0L)
-        val active = MutableStateFlow(true)
-        val decoded = AtomicInteger()
-        val loader = SelectionArtworkLoader(
-            decoder = { value: String -> "$value-${decoded.incrementAndGet()}" },
-            sizeOf = String::length,
-            scope = workerScope,
-            dispatcher = Dispatchers.IO,
-        )
+    @Test fun `changing list identity or leaving the list drops its artwork`() {
+        val list = mutableStateOf("first")
+        val shown = mutableStateOf(true)
         compose.setContent {
-            val art by rememberSelectedArtwork(path.value, revision.value, true, active, loader)
-            Text(art ?: "placeholder")
+            if (shown.value) Text(rememberListArtwork(list.value, window(0), active, cache) ?: "placeholder")
         }
-        compose.waitUntil(5_000) {
-            compose.onAllNodesWithText("first-1").fetchSemanticsNodes().isNotEmpty()
-        }
-        compose.runOnIdle { active.value = false; path.value = "second" }
-        compose.onNodeWithText("placeholder").assertExists()
-        compose.onNodeWithText("first-1").assertDoesNotExist()
-        compose.runOnIdle { active.value = true }
-        compose.waitUntil(5_000) {
-            compose.onAllNodesWithText("second-2").fetchSemanticsNodes().isNotEmpty()
-        }
-        compose.runOnIdle { active.value = false; revision.value++ }
-        compose.onNodeWithText("placeholder").assertExists()
-        compose.runOnIdle { active.value = true }
-        compose.waitUntil(5_000) {
-            compose.onAllNodesWithText("second-3").fetchSemanticsNodes().isNotEmpty()
-        }
-        compose.runOnIdle { path.value = null }
-        compose.onNodeWithText("placeholder").assertExists()
-        assertEquals(3, decoded.get())
+        awaitText("a")
+        compose.waitUntil(5_000) { decoded.size == 3 }
+        compose.runOnIdle { list.value = "second" }
+        compose.waitForIdle()
+        compose.waitUntil(5_000) { decoded.size == 6 }
+        compose.runOnIdle { shown.value = false }
+        compose.runOnIdle { assertNull(cache.peek(window(0).selected!!)) }
     }
 
-    @Test fun `hidden artwork does not load and disabling clears loaded image`() {
-        val enabled = mutableStateOf(false)
-        val active = MutableStateFlow(true)
-        val decoded = AtomicInteger()
-        val loader = SelectionArtworkLoader(
-            decoder = { value: String -> decoded.incrementAndGet(); value },
-            sizeOf = String::length,
-            scope = workerScope,
-            dispatcher = Dispatchers.IO,
-        )
-        compose.setContent {
-            val art by rememberSelectedArtwork("art", 0L, enabled.value, active, loader)
-            Text(art ?: "placeholder")
-        }
+    @Test fun `hidden artwork and paused UI start no decode`() {
+        val list = mutableStateOf<String?>(null)
+        compose.setContent { Text(rememberListArtwork(list.value, window(1), active, cache) ?: "placeholder") }
         compose.onNodeWithText("placeholder").assertExists()
-        assertEquals(0, decoded.get())
-        compose.runOnIdle { enabled.value = true }
-        compose.waitUntil(5_000) {
-            compose.onAllNodesWithText("art").fetchSemanticsNodes().isNotEmpty()
-        }
-        compose.runOnIdle { enabled.value = false }
+        compose.runOnIdle { active.value = false; list.value = "list" }
         compose.onNodeWithText("placeholder").assertExists()
-        compose.runOnIdle { enabled.value = true }
-        compose.onNodeWithText("art").assertExists()
-        assertEquals(1, decoded.get())
+        assertEquals(0, decoded.size)
+        compose.runOnIdle { active.value = true }
+        awaitText("b")
+        compose.runOnIdle { list.value = null }
+        compose.onNodeWithText("placeholder").assertExists()
     }
 }

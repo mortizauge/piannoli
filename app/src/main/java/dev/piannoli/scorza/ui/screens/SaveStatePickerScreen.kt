@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import dev.piannoli.igm.PolaroidFrame
 import dev.piannoli.scorza.R
-import dev.piannoli.scorza.libretro.SaveSlotManager
+import dev.piannoli.scorza.launcher.SaveSlotManager
 import dev.piannoli.scorza.model.Rom
 import dev.piannoli.ui.ButtonStyle
 import dev.piannoli.ui.components.BottomBar

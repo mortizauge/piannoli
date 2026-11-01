@@ -15,7 +15,10 @@ import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.rememberLazyListState
 import dev.piannoli.scorza.ui.components.artworkClip
 import dev.piannoli.scorza.ui.components.artworkStatusBarPadding
-import dev.piannoli.scorza.ui.components.rememberSelectedArtwork
+import dev.piannoli.scorza.ui.components.ArtworkRequest
+import dev.piannoli.scorza.ui.components.artworkPanelSize
+import dev.piannoli.scorza.ui.components.artworkWindow
+import dev.piannoli.scorza.ui.components.rememberListArtwork
 import dev.piannoli.scorza.ui.components.SystemArtworkPanel
 import androidx.compose.ui.geometry.Size
 import androidx.compose.material3.MaterialTheme
@@ -24,7 +27,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import dev.piannoli.ui.components.collectAsStateWhileActive
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.FilterQuality
@@ -118,11 +125,29 @@ fun SystemListScreen(
     }
     // An assigned image keeps priority even while decoding or if corrupt; only absent files use defaults.
     val categoryArtwork = defaultCategoryArtwork.takeIf { artPath == null }
-    val selectedArt by rememberSelectedArtwork(
-        artPath, artworkRevision, selectedArtWidth > 0,
-        if (isSystemArtwork) dev.piannoli.scorza.ui.components.ArtworkKind.SYSTEM
-        else dev.piannoli.scorza.ui.components.ArtworkKind.GAME,
-    )
+    var artRowSize by remember { mutableStateOf(IntSize.Zero) }
+    val artworkTopPadding = if (fiveGameHandheld && title.isEmpty()) pillItemHeight(listLineHeight, 4.dp) + 8.dp else 0.dp
+    val gameArtPanel = artworkPanelSize(artRowSize, artWidth, artworkTopPadding)
+    // SystemArtworkPanel draws within 40% of the panel height.
+    val systemArtPanel = artworkPanelSize(artRowSize, systemArtWidth, artworkTopPadding, heightFraction = 0.4f)
+    val artworkWindow = remember(
+        state.items, state.selectedIndex, artPath, artworkRevision, systemArtworkType, gameArtPanel, systemArtPanel,
+        artScale, systemArtScale,
+    ) {
+        artworkWindow(state.items.size, state.selectedIndex) { index ->
+            val item = state.items[index]
+            val panel = (if (item is ListItem.GameItem) gameArtPanel else systemArtPanel) ?: return@artworkWindow null
+            val path = when {
+                index == state.selectedIndex -> artPath
+                item is ListItem.GameItem -> item.artFile?.absolutePath
+                else -> item.artworkTag?.let { viewModel.systemArtworkFile(it, systemArtworkType)?.absolutePath }
+            } ?: return@artworkWindow null
+            val scale = if (item is ListItem.GameItem) artScale else systemArtScale
+            ArtworkRequest(path, artworkRevision, panel.width, panel.height, scale)
+        }
+    }
+    val artworkList = if (artWidth > 0 || systemArtWidth > 0) "system:$fiveGameHandheld" else null
+    val selectedArt = rememberListArtwork(artworkList, artworkWindow)
     val showArt = selectedArtWidth > 0 &&
         (hasPlatforms || state.hasGameItems || artPath != null || categoryArtwork != null)
     val duplicateGameNames = remember(state.items) {
@@ -181,7 +206,7 @@ fun SystemListScreen(
                     )
                 }
             } else {
-            Row(modifier = Modifier.fillMaxSize()) {
+            Row(modifier = Modifier.fillMaxSize().onSizeChanged { artRowSize = it }) {
                 Box(
                     modifier = Modifier
                         .fillMaxHeight()
@@ -240,11 +265,7 @@ fun SystemListScreen(
                 }
                 }
                 if (showArt) {
-                    val artTopPadding = if (fiveGameHandheld && title.isEmpty()) {
-                        pillItemHeight(listLineHeight, 4.dp) + 8.dp
-                    } else {
-                        0.dp
-                    }
+                    val artTopPadding = artworkTopPadding
                     Box(
                         modifier = Modifier
                             .fillMaxHeight()

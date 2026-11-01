@@ -137,6 +137,9 @@ class RaPreloadController @Inject constructor(
         is RaOfflinePreloader.Result.NoAchievements ->
             context.getString(dev.piannoli.scorza.R.string.ra_preload_none)
         is RaOfflinePreloader.Result.Failure ->
-            context.getString(dev.piannoli.scorza.R.string.ra_preload_failed)
+            context.getString(
+                if (result.reason == "identification") dev.piannoli.scorza.R.string.ra_identification_failed
+                else dev.piannoli.scorza.R.string.ra_preload_failed
+            )
     }
 }

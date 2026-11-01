@@ -13,26 +13,6 @@ val CREDITS_INSPIRATION: List<CreditEntry> = listOf(
     CreditEntry("Abraham McCampbell", "Cannoli Logo"),
 )
 
-val CREDITS_CORES: List<CreditEntry> = listOf(
-    CreditEntry("FBNeo", "Non-commercial"),
-    CreditEntry("Gambatte", "GPLv2"),
-    CreditEntry("Genesis Plus GX", "Non-commercial"),
-    CreditEntry("Handy", "Zlib"),
-    CreditEntry("MAME 2003-Plus", "MAME"),
-    CreditEntry("Mednafen NGP", "GPLv2"),
-    CreditEntry("Mednafen PCE FAST", "GPLv2"),
-    CreditEntry("Mednafen VB", "GPLv2"),
-    CreditEntry("Mednafen WonderSwan", "GPLv2"),
-    CreditEntry("mGBA", "MPLv2.0"),
-    CreditEntry("Nestopia", "GPLv2"),
-    CreditEntry("PCSX ReARMed", "GPLv2"),
-    CreditEntry("PokeMini", "GPLv3"),
-    CreditEntry("ProSystem", "GPLv2"),
-    CreditEntry("Snes9x", "Non-commercial"),
-    CreditEntry("Stella", "GPLv2"),
-    CreditEntry("SwanStation", "GPLv3"),
-)
-
 val CREDITS_SHADERS: List<CreditEntry> = listOf(
     CreditEntry("crt-aperture by EasyMode", "GPL"),
     CreditEntry("crt-piannoli by Piannoli (based on EasyMode; adapted from Cannoli)", "GPL"),
@@ -59,6 +39,8 @@ val CREDITS_LIBRARIES: List<CreditEntry> = listOf(
     CreditEntry("PdfiumAndroid (io.legere)", "Apache 2.0"),
     CreditEntry("XZ for Java", "Public domain"),
     CreditEntry("ZXing", "Apache 2.0"),
+    CreditEntry("RetroAchievements cartridge hashing rules", "MIT"),
+    CreditEntry("RetroArch joypad autoconfig", "MIT"),
 )
 
 val CREDITS_LOCALIZATION: List<LocalizationCredit> = listOf(

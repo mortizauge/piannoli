@@ -57,6 +57,59 @@ class PlatformFolderScanTest {
         writeText("ROM")
     }
 
+    @Test fun `rescan inserts games between indexed names and repairs cached sort keys without resetting metadata`() {
+        val alphaFile = write("PS/alpha.chd")
+        val zuluFile = write("PlayStation/Zulu.chd")
+        val hiddenFile = write("PS/Hidden.chd")
+        scanner.scanPlatform("PS")
+        val alpha = repository.gameByPath(alphaFile.absolutePath)!!
+        val zulu = repository.gameByPath(zuluFile.absolutePath)!!
+        val hidden = repository.gameByPath(hiddenFile.absolutePath)!!
+        repository.setHidden(hidden.id, true)
+        repository.setRaGameId(zulu.id, 123)
+        RecentlyPlayedRepository(db).record(LibraryRef.Rom(zulu.id), 42)
+        val collections = CollectionsRepository(db)
+        val shelf = collections.create("Shelf")
+        collections.addMember(shelf, LibraryRef.Rom(zulu.id))
+        collections.addMember(shelf, LibraryRef.Rom(alpha.id))
+        collections.addMember(shelf, LibraryRef.Rom(hidden.id))
+        db.execute("UPDATE roms SET sort_key = '' WHERE platform_tag = 'PS'")
+
+        val betaFile = write("psx/Beta.chd")
+        write("PS/Game 10.chd")
+        write("Ps1/game 2.chd")
+        assertEquals(RomScanner.SyncCounts(3, 3, 0), scanner.scanPlatform("PS"))
+        assertEquals(listOf("alpha", "Beta", "game 2", "Game 10", "Zulu"),
+            repository.allRomsForPlatform("PS").map { it.displayName })
+        assertEquals(zulu.id, repository.gameByPath(zuluFile.absolutePath)!!.id)
+        assertEquals(123, repository.gameById(zulu.id)!!.raGameId)
+        assertEquals(42L, repository.gameById(zulu.id)!!.lastPlayedAt)
+        assertEquals(listOf(zulu.id, alpha.id), collections.romIdsIn(shelf))
+        assertTrue(collections.isMember(shelf, LibraryRef.Rom(hidden.id)))
+        assertTrue(repository.gameByPath(hiddenFile.absolutePath)!!.isHidden)
+        assertTrue(listOf(alphaFile, betaFile, zuluFile, hiddenFile).all { it.isFile })
+        assertEquals(RomScanner.SyncCounts(0, 0, 0), scanner.scanPlatform("PS"))
+    }
+
+    @Test fun `new games sort folder locally with folders first and bundles among normal games`() {
+        write("PS/Zulu.chd")
+        write("PS/alpha.chd")
+        write("PS/RPG/Zulu.chd")
+        write("PS/RPG/alpha.chd")
+        scanner.scanPlatform("PS")
+        write("PlayStation/Beta/Beta.chd")
+        write("psx/RPG/Beta.chd")
+        write("PS/Adventure/Zulu.chd")
+        scanner.scanPlatform("PS")
+        val rootItems = repository.gamesForPlatform("PS")
+        assertEquals(listOf("Adventure", "RPG"),
+            rootItems.take(2).filterIsInstance<ListItem.SubfolderItem>().map { it.name })
+        assertEquals(listOf("alpha", "Beta", "Zulu"),
+            rootItems.drop(2).filterIsInstance<ListItem.RomItem>().map { it.rom.displayName })
+        assertEquals(listOf("alpha", "Beta", "Zulu"),
+            repository.gamesForPlatform("PS", "RPG").filterIsInstance<ListItem.RomItem>().map { it.rom.displayName })
+    }
+
     @Test fun `Xbox compound extensions are hidden in titles without changing file identities`() {
         val files = listOf(
             write("Xbox/Halo.xiso.iso"),

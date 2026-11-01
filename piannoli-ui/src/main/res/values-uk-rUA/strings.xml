@@ -7,7 +7,6 @@
     <string name="label_play">ГРАТИ</string>
     <string name="label_launch">ЗАПУСК</string>
     <string name="label_open">ВІДКРИТИ</string>
-    <string name="label_save">ЗБЕРЕГТИ</string>
     <string name="label_load">ЗАВАНТАЖИТИ</string>
     <string name="label_change">ЗМІНИТИ</string>
     <string name="label_firmware">ПРОШИВКА</string>
@@ -25,8 +24,6 @@
     <string name="label_continue">ПРОДОВЖИТИ</string>
     <string name="label_new_folder">НОВА</string>
     <string name="label_parent">НАГОРУ</string>
-    <string name="label_slot">СЛОТ</string>
-    <string name="label_disc">ДИСК</string>
     <string name="label_use_location">ВИКОРИСТАТИ ЦЕ РОЗТАШУВАННЯ</string>
     <string name="label_quit">ВИЙТИ</string>
     <string name="label_stop">ЗУПИНИТИ</string>
@@ -40,38 +37,17 @@
     <string name="label_rename">ПЕРЕЙМЕНУВАТИ</string>
     <string name="label_set">ВСТАНОВИТИ</string>
     <string name="label_clear">ОЧИСТИТИ</string>
-    <string name="label_press">НАТИСНІТЬ</string>
     <string name="label_hold_buttons" tools:ignore="TypographyEllipsis">УТРИМУЙТЕ ОДНУ АБО ДЕКІЛЬКА КНОПОК...</string>
     <string name="label_info">ІНФО</string>
     <!-- Bottom-bar button. RA = RetroAchievements. -->
-    <string name="label_ra_settings">НАЛАШТУВАННЯ RA</string>
-    <string name="label_details">ДЕТАЛІ</string>
-    <string name="label_all">УСІ</string>
-    <string name="label_unlocked">ВІДКРИТО</string>
-    <string name="label_locked">ЗАБЛОКОВАНО</string>
-    <string name="label_reset_all">СКИНУТИ ВСЕ</string>
     <string name="label_remap">ПЕРЕПРИЗНАЧИТИ</string>
     <string name="label_unmap">СКАСУВАТИ ПРИЗНАЧЕННЯ</string>
-    <string name="label_swap">ПОМІНЯТИ</string>
     <string name="label_grant">НАДАТИ</string>
     <!-- In-game menu action: reassign connected controllers to player slots. -->
-    <string name="igm_reassign_players">Перепризначити гравців</string>
     <!-- In-game shortcut actions -->
-    <string name="shortcut_action_save_state">Зберегти стан</string>
-    <string name="shortcut_action_load_state">Завантажити стан</string>
-    <string name="shortcut_action_reset_game">Скинути гру</string>
-    <string name="shortcut_action_save_and_quit">Зберегти і вийти</string>
     <!-- In-game shortcut action. "(Hold)" means it triggers on a long-press of the shortcut. -->
-    <string name="shortcut_action_save_and_quit_hold">Зберегти і вийти (утримання)</string>
     <!-- In-game shortcut action: cycle through the video scaling modes. -->
-    <string name="shortcut_action_cycle_scaling">Перемкнути масштабування</string>
     <!-- In-game shortcut action: cycle through the shader presets. -->
-    <string name="shortcut_action_cycle_shader">Перемкнути шейдер</string>
-    <string name="shortcut_action_toggle_ff">Перемкнути прискорення</string>
-    <string name="shortcut_action_hold_ff">Утримувати прискорення</string>
-    <string name="shortcut_action_open_guide">Відкрити посібник</string>
-    <string name="shortcut_action_open_menu">Відкрити внутрішньоігрове меню</string>
-    <string name="shortcut_action_toggle_show_fps">Перемкнути відображення FPS</string>
     <string name="settings_title">Налаштування</string>
     <!-- Settings categories -->
     <string name="settings_general">Загальні налаштування</string>
@@ -152,7 +128,6 @@
     <string name="binding_axis_pos">Вісь %1$d+</string>
     <!-- Input binding label. %1$d is the joystick axis index; - is the negative direction. -->
     <string name="binding_axis_neg">Вісь %1$d-</string>
-    <string name="setting_shortcuts">Ярлики</string>
     <!-- Input setting toggle: swap the on-screen positions of the Play and Resume actions. -->
     <string name="setting_swap_play_resume">Поміняти місцями «Грати» і «Продовжити»</string>
     <!-- Input setting toggle: controls whether the in-game Quit returns to the main menu. -->
@@ -431,7 +406,6 @@
     <!-- %1$s = app name. -->
     <string name="dialog_missing_app">%1$s не встановлено.</string>
     <!-- %1$s = folder path. -->
-    <string name="dialog_missing_bios_header">Потрібен щонайменше один файл BIOS у %1$s:</string>
     <string name="dialog_title_missing_core">Відсутнє ядро</string>
     <string name="dialog_title_missing_app">Відсутній застосунок</string>
     <string name="dialog_title_launch_error">Помилка запуску</string>
@@ -506,71 +480,25 @@
     <!-- RetroAchievements -->
     <string name="ra_logged_in_as">Увійшли як</string>
     <!-- RA = RetroAchievements. -->
-    <string name="ra_login_failed">RA: не вдалося увійти</string>
     <string name="ra_login_invalid">Неправильне ім\'я користувача або пароль</string>
-    <string name="ra_status_online">У мережі</string>
-    <string name="ra_status_offline">Не в мережі</string>
     <!-- %1$d = achievements awaiting sync. -->
-    <string name="ra_status_offline_pending">Не в мережі • Очікує синхр.: %1$d</string>
-    <string name="ra_detect_not_logged_in">Не увійшли</string>
-    <string name="ra_detect_identifying">Розпізнавання гри…</string>
-    <string name="ra_detect_not_recognized">Гру не розпізнано</string>
-    <string name="ra_detect_no_achievements">Досягнення не опубліковано</string>
-    <string name="ra_detect_initializing">Ініціалізація…</string>
-    <string name="ra_detect_mem_failed">Не вдалося ініціалізувати пам\'ять</string>
     <!-- %d = achievement count. -->
-    <plurals name="ra_detect_active">
-        <item quantity="one">Активно • %d досягнення</item>
-        <item quantity="few">Активно • %d досягнення</item>
-        <item quantity="many">Активно • %d досягнень</item>
-        <item quantity="other">Активно • %d досягнення</item>
-    </plurals>
     <!-- %d = number of achievements synced. -->
-    <plurals name="ra_sync_done">
-        <item quantity="one">Синхронізовано %d досягнення</item>
-        <item quantity="few">Синхронізовано %d досягнення</item>
-        <item quantity="many">Синхронізовано %d досягнень</item>
-        <item quantity="other">Синхронізовано %d досягнення</item>
-    </plurals>
     <!-- Counts of synced and failed achievements. -->
-    <string name="ra_sync_partial">Синхронізовано: %1$d, помилок: %2$d</string>
     <!-- OSD toast. %1$s = save slot name. -->
-    <string name="osd_state_saved">Збережено в %1$s</string>
     <!-- OSD toast. %1$s = save slot name. -->
-    <string name="osd_state_loaded">Завантажено %1$s</string>
     <!-- OSD toast. %1$s = save slot name. -->
-    <string name="osd_state_deleted">Видалено %1$s</string>
-    <string name="osd_reset">Скинуто</string>
     <!-- OSD toast. %1$s = scaling mode name. -->
-    <string name="osd_scaling">Масштабування: %1$s</string>
     <!-- OSD toast. %1$s = shader preset name. -->
-    <string name="osd_shader">Шейдер: %1$s</string>
     <!-- OSD toast. %1$s = mode/item name. -->
-    <string name="osd_switched_to">Перемкнено на %1$s</string>
     <!-- OSD toast. %1$s = game name (setting saved per-game). -->
-    <string name="osd_saved_for">Збережено для %1$s</string>
-    <string name="osd_saved_for_game">Збережено для цієї гри</string>
     <!-- OSD toast. %1$s = controller name, %2$s = player slot. -->
-    <string name="osd_controller_connected_named">%1$s підключено до %2$s</string>
-    <string name="osd_buttons_reset">Кнопки скинуто до типових</string>
     <!-- %1$d = disc number (multi-disc games). -->
-    <string name="osd_disc_fallback">Диск %1$d</string>
-    <string name="igm_quit">Вийти</string>
-    <string name="igm_cheats">Чит-коди</string>
-    <string name="title_cheats">Чит-коди</string>
-    <string name="label_restore_session">ВІДНОВИТИ ОСТАННЮ СЕСІЮ</string>
     <!-- Scaling mode: use the size the emulator core reports. -->
-    <string name="scaling_core_reported">Визначено ядром</string>
-    <string name="scaling_integer">Ціле число</string>
     <!-- Scaling mode: integer scaling pushed beyond 1x to fill more of the screen. -->
-    <string name="scaling_integer_overscale">Ціле число з перевищенням</string>
     <!-- Scaling mode: fit the screen while keeping the aspect ratio. -->
-    <string name="scaling_aspect_screen">Співвідношення екрана</string>
-    <string name="scaling_fullscreen">На весь екран</string>
     <!-- Indicates a setting applies globally (all games). -->
-    <string name="override_source_global">Глобально</string>
     <!-- Indicates a setting applies only to the current game. -->
-    <string name="override_source_game">Ця гра</string>
     <string name="device_controller">Контролер</string>
     <!-- OSD toast. %1$d = player number, %2$s = controller name. -->
     <string name="osd_controller_connected">Г%1$d: %2$s</string>
@@ -579,65 +507,30 @@
     <!-- OSD toast. %1$s = controller name. -->
     <string name="osd_controller_disconnected">%1$s від\'єднано</string>
     <!-- RA login OSD. %1$s = username, %2$s = display name, %3$d/%4$d = unlocked/total achievements. -->
-    <string name="ra_login_success">RA: %1$s (%2$s) · %3$d/%4$d відкрито</string>
-    <string name="ra_init_failed">RA: помилка ініціалізації</string>
-    <string name="ra_load_not_recognized">RA: гру не розпізнано</string>
-    <string name="ra_load_no_achievements">RA: немає досягнень для цієї гри</string>
-    <string name="ra_load_offline_pending">RA: офлайн (дані гри недоступні)</string>
     <!-- Credits -->
     <string name="credits_title">Автори та ліцензії</string>
     <!-- Core picker / nav -->
     <string name="no_compatible_cores">Сумісні ядра не знайдено</string>
     <string name="no_collections">Немає колекцій</string>
     <string name="title_child_collections">Дочірні колекції</string>
-    <string name="title_shortcuts">Ярлики</string>
-    <string name="shortcut_hold_prompt" tools:ignore="TypographyEllipsis">Утримуйте одну або декілька кнопок...</string>
     <!-- Update download -->
     <string name="update_retry">ПОВТОРИТИ</string>
     <string name="restart_required">Для застосування змін потрібен перезапуск.</string>
     <!-- IGM screen titles -->
-    <string name="igm_settings">Налаштування</string>
-    <string name="igm_video">Відео</string>
-    <string name="igm_advanced">Додатково</string>
-    <string name="igm_shader_settings">Налаштування шейдера</string>
-    <string name="igm_emulator">Емулятор</string>
-    <string name="igm_save_changes">Зберегти зміни</string>
-    <string name="igm_input">Керування</string>
-    <string name="igm_button_mappings">Призначення кнопок</string>
-    <string name="igm_left_stick_dpad">Лівий стик як хрестовина</string>
-    <string name="igm_dpad_mode">Режим хрестовини (БЕТА)</string>
     <!-- D-Pad Mode value: 8 directions. -->
-    <string name="value_dpad_8way">8-напрямковий</string>
     <!-- D-Pad Mode value: 4 directions. -->
-    <string name="value_dpad_4way">4-напрямковий</string>
-    <string name="igm_save_and_quit">Зберегти і вийти</string>
     <string name="title_guide">Посібник</string>
     <string name="guide_zoom">МАСШТАБ</string>
     <!-- IGM info labels -->
-    <string name="info_core">Ядро</string>
-    <string name="info_rom">ROM</string>
     <!-- Info label: whether the ROM was extracted from an archive. -->
-    <string name="info_extracted">Розпаковано</string>
-    <string name="info_save">Збереження</string>
-    <string name="info_renderer">Рендерер</string>
-    <string name="info_game_id">ID гри</string>
-    <string name="info_ra_detection">Виявлення досягнень</string>
     <!-- IGM dialogs -->
     <!-- %1$s = save slot name. -->
-    <string name="igm_delete_slot">Видалити %1$s?</string>
     <string name="press_button_prompt" tools:ignore="TypographyEllipsis">Натисніть будь-яку кнопку...</string>
     <!-- Achievements -->
     <!-- %1$d = unlocked count, %2$d = total. -->
-    <string name="ach_title">Досягнення (%1$d/%2$d)</string>
     <!-- Compact points label. %1$d = points. -->
-    <string name="ach_points_short">%1$dоч</string>
     <!-- %1$d = points. -->
-    <string name="ach_points">%1$d очок</string>
-    <string name="ach_unlocked_pending">Відкрито \u2022 Очікує синхронізації</string>
     <!-- %1$s = date the achievement was unlocked. -->
-    <string name="ach_unlocked_date">Відкрито %1$s</string>
-    <string name="ach_unlocked">Відкрито</string>
-    <string name="ach_locked">Заблоковано</string>
     <string name="setting_portrait_margin">Відступ у портретному режимі</string>
     <!-- Advanced setting: adjust the on-screen viewport rectangle. -->
     <string name="setting_screen_geometry">Геометрія екрана</string>
@@ -652,7 +545,6 @@
     <string name="label_show_all">ПОКАЗАТИ ВСІ</string>
     <string name="label_show_installed">ПОКАЗАТИ ВСТАНОВЛЕНІ</string>
     <!-- The core is not bundled with the app. -->
-    <string name="value_not_bundled">НЕ ВБУДОВАНО</string>
     <string name="value_no_overrides">Немає перевизначень для окремих ігор.</string>
     <string name="value_no_firmware">Для цього ядра прошивка не потрібна.</string>
     <string name="mapping_action_bios">Файли BIOS</string>
@@ -699,12 +591,6 @@
         <item quantity="other">%d елемента</item>
     </plurals>
     <!-- OSD toast. %d = number of cheats restored. -->
-    <plurals name="osd_cheats_restored">
-        <item quantity="one">Відновлено %d чит-код</item>
-        <item quantity="few">Відновлено %d чит-коди</item>
-        <item quantity="many">Відновлено %d чит-кодів</item>
-        <item quantity="other">Відновлено %d чит-коду</item>
-    </plurals>
     <string name="regenerate_system_folders_none">Усі системні папки вже наявні</string>
     <!-- %d = number of system folders created. -->
     <plurals name="regenerate_system_folders_result">
@@ -716,7 +602,7 @@
     <string name="value_no_cores_found">Ядра не знайдено</string>
     <string name="label_clear_override">ОЧИСТИТИ</string>
     <!-- %1$s = platform name. -->
-    <string name="dialog_reset_platform_confirm">Скинути %1$s? Це очистить вибір емулятора для цієї платформи та відновить типовий вбудований варіант.</string>
+    <string name="dialog_reset_platform_confirm">Скинути %1$s? Перевага надається встановленому зовнішньому емулятору. Якщо жоден недоступний, налаштуйте його.</string>
     <!-- RA achievement preload. %1$s = game name. -->
     <string name="ra_preload_progress">Попереднє завантаження %1$s</string>
     <string name="ra_preload_none">Для цієї гри не знайдено досягнень</string>

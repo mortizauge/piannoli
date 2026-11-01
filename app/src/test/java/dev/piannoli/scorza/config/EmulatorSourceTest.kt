@@ -6,7 +6,7 @@ import org.junit.Test
 
 class EmulatorSourceTest {
     @Test fun `fromRunnerLabel maps known labels`() {
-        assertEquals(EmulatorSource.Internal, EmulatorSource.fromRunnerLabel("Internal"))
+        assertEquals(null, EmulatorSource.fromRunnerLabel("Internal"))
         assertEquals(EmulatorSource.Standalone, EmulatorSource.fromRunnerLabel("Standalone"))
         assertEquals(EmulatorSource.Standalone, EmulatorSource.fromRunnerLabel("App"))
         assertNull(EmulatorSource.fromRunnerLabel(null))

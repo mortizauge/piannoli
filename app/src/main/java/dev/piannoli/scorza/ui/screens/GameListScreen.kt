@@ -14,7 +14,11 @@ import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.rememberLazyListState
 import dev.piannoli.scorza.ui.components.artworkClip
 import dev.piannoli.scorza.ui.components.artworkStatusBarPadding
-import dev.piannoli.scorza.ui.components.rememberSelectedArtwork
+import dev.piannoli.scorza.ui.components.ArtworkRequest
+import dev.piannoli.scorza.ui.components.ArtworkWindow
+import dev.piannoli.scorza.ui.components.artworkPanelSize
+import dev.piannoli.scorza.ui.components.artworkWindow
+import dev.piannoli.scorza.ui.components.rememberListArtwork
 import androidx.compose.ui.geometry.Size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -22,7 +26,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import dev.piannoli.ui.components.collectAsStateWhileActive
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.FilterQuality
@@ -114,7 +122,23 @@ fun GameListScreen(
     val hasResumeState = resumeKey != null && resumableGames.contains(resumeKey)
 
     val artPath = if (artWidth > 0) selected?.artPath else null
-    val selectedArt by rememberSelectedArtwork(artPath, state.artworkRevision, artWidth > 0)
+    var artRowSize by remember { mutableStateOf(IntSize.Zero) }
+    val artPanel = artworkPanelSize(artRowSize, artWidth)
+    val artworkWindow = remember(state.items, state.selectedIndex, state.artworkRevision, artPanel, artScale) {
+        if (artPanel == null) return@remember ArtworkWindow.EMPTY
+        artworkWindow(state.items.size, state.selectedIndex) { index ->
+            state.items[index].artPath?.let {
+                ArtworkRequest(it, state.artworkRevision, artPanel.width, artPanel.height, artScale)
+            }
+        }
+    }
+    // Reloads and rescans keep the logical list; navigating to another list or search drops its artwork.
+    val artworkList = listOf(
+        state.platformTag, state.platformTags, state.subfolderPath, state.collectionId, state.isCollection,
+        state.isFavorites, state.isHiddenGames, state.isCollectionsList, state.isGlobalSearch,
+        state.globalSearchQuery, state.searchTerm,
+    ).takeIf { artWidth > 0 }
+    val selectedArt = rememberListArtwork(artworkList, artworkWindow)
 
     val inFavoritesCollection = state.isCollection && state.isFavorites
     val showFavoriteStars = viewModel.showFavoriteStars && !inFavoritesCollection
@@ -185,7 +209,7 @@ fun GameListScreen(
                         )
                     }
                 } else {
-                    Row(modifier = Modifier.fillMaxSize()) {
+                    Row(modifier = Modifier.fillMaxSize().onSizeChanged { artRowSize = it }) {
                         Box(
                             modifier = Modifier
                                 .fillMaxHeight()

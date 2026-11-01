@@ -65,8 +65,7 @@ fun screenInsets(): PaddingValues {
     )
 }
 
-// Hosts that solve a rhythm reserve exactly what the bar measures plus one gap. The in-game menu
-// does not solve one, so it keeps the reservation it has always had.
+// Hosts without a list rhythm keep the fixed footer reservation.
 @Composable
 fun footerReservation(): Dp =
     LocalListRhythm.current?.footerReserve ?: (48 * LocalScaleFactor.current).dp

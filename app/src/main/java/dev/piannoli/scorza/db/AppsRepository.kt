@@ -37,15 +37,35 @@ class AppsRepository(
         "SELECT COUNT(*) FROM apps WHERE type = ? AND is_hidden = 0", type.name,
     ) { it.getInt(0) } ?: 0
 
-    fun upsert(type: AppType, displayName: String, packageName: String): Long {
-        db.execute(
-            """
-            INSERT INTO apps (type, display_name, package_name) VALUES (?, ?, ?)
-            ON CONFLICT(type, package_name) DO NOTHING
-            """.trimIndent(),
+    fun upsert(type: AppType, displayName: String, packageName: String): Long = db.transaction { conn ->
+        val existingId = conn.queryOne(
+            "SELECT id FROM apps WHERE type = ? AND package_name = ?", type.name, packageName,
+        ) { it.getLong(0) }
+        if (existingId != null) return@transaction existingId
+
+        data class OrderedApp(val id: Long, val name: String, val normal: Boolean)
+        val ordered = conn.queryAll(
+            "SELECT id, display_name, pin_order, is_hidden FROM apps WHERE type = ? ORDER BY sort_order, display_name COLLATE NOCASE",
+            type.name,
+        ) { OrderedApp(it.getLong(0), it.getText(1), it.isNull(2) && it.getLong(3) == 0L) }.toMutableList()
+        val id = conn.executeReturningId(
+            "INSERT INTO apps (type, display_name, package_name) VALUES (?, ?, ?)",
             type.name, displayName, packageName,
         )
-        return byPackage(type, packageName)!!.id
+        // Insert into the existing sequence, rather than sorting away a user's manual order.
+        val next = ordered.indexOfFirst { it.normal && String.CASE_INSENSITIVE_ORDER.compare(it.name, displayName) > 0 }
+            .let { if (it < 0) ordered.size else it }
+        val previous = (0 until next).lastOrNull { ordered[it].normal } ?: -1
+        // Pins and hidden entries do not determine the visible-list insertion point, but keep
+        // their alphabetical position where possible for later unpinning or restoring.
+        val position = (previous + 1 until next).firstOrNull {
+            String.CASE_INSENSITIVE_ORDER.compare(ordered[it].name, displayName) > 0
+        } ?: next
+        ordered.add(position, OrderedApp(id, displayName, true))
+        ordered.forEachIndexed { index, app ->
+            conn.execute("UPDATE apps SET sort_order = ? WHERE id = ?", index.toLong(), app.id)
+        }
+        id
     }
 
     fun updateDisplayName(appId: Long, displayName: String) = db.execute(

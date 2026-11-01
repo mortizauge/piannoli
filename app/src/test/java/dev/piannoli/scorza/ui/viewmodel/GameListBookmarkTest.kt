@@ -54,11 +54,12 @@ class GameListBookmarkTest {
     private val mario = ListItem.RomItem(Rom(2, File("Mario.gb"), "GB", "Mario"))
     private val metroid = ListItem.RomItem(Rom(3, File("Metroid.gb"), "GB", "Metroid"))
     private val folderRevision = MutableStateFlow(0L)
+    private val scanResults = MutableSharedFlow<ScanScheduler.ScanResult>()
 
     @Before fun setup() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         every { platforms.getDisplayName("GB") } returns "Game Boy"
-        every { scans.results } returns MutableSharedFlow()
+        every { scans.results } returns scanResults
         every { roms.folderArtworkRevision } returns folderRevision
         every { roms.refreshFolderArtwork(any(), any()) } answers { secondArg() }
         every { roms.gamesForPlatform("GB", any()) } returns listOf(mario, metroid)
@@ -79,6 +80,24 @@ class GameListBookmarkTest {
 
     private suspend fun cancelSearch() = suspendCancellableCoroutine { continuation ->
         model.cancelSearch { continuation.resume(Unit) }
+    }
+
+    @Test fun `grouped platform games merge alphabetically with folders and favorites first after live scan`() = runBlocking {
+        val alpha = ListItem.RomItem(Rom(4, File("alpha.gbc"), "GBC", "alpha"))
+        val zulu = ListItem.RomItem(Rom(5, File("Zulu.gbc"), "GBC", "Zulu"))
+        val beta = ListItem.RomItem(Rom(6, File("beta.gbc"), "GBC", "beta"))
+        val adventure = ListItem.SubfolderItem("Adventure", "Adventure")
+        val rpg = ListItem.SubfolderItem("RPG", "RPG")
+        every { roms.gamesForPlatform("GB", any()) } returns listOf(rpg, mario, metroid)
+        every { roms.gamesForPlatform("GBC", any()) } returns listOf(adventure, alpha, zulu)
+        every { collections.favoriteRomIds() } returns setOf(metroid.rom.id)
+        restore(GameListBookmark(platformTag = "GB", platformTags = listOf("GB", "GBC")))
+        assertEquals(listOf(adventure, rpg, metroid, alpha, mario, zulu), model.state.value.items)
+
+        every { roms.gamesForPlatform("GBC", any()) } returns listOf(adventure, alpha, beta, zulu)
+        scanResults.emit(ScanScheduler.ScanResult("GBC", dev.piannoli.scorza.db.RomScanner.SyncCounts(1, 0, 0)))
+        val refreshed = withTimeout(5_000) { model.state.first { beta in it.items } }
+        assertEquals(listOf(adventure, rpg, metroid, alpha, beta, mario, zulu), refreshed.items)
     }
 
     @Test fun `folder artwork revisions refresh cached filtered and complete lists without losing position`() = runBlocking {

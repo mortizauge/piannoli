@@ -14,11 +14,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,7 +31,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -42,12 +38,10 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.piannoli.igm.ShortcutAction
 import dev.piannoli.scorza.R
 import dev.piannoli.scorza.input.runtime.confirmButton
 import dev.piannoli.scorza.input.runtime.labelSet
 import dev.piannoli.scorza.ui.LocalViewportInsets
-import dev.piannoli.scorza.util.buttonLabel
 import dev.piannoli.scorza.ui.ViewportInsetsPx
 import dev.piannoli.scorza.ui.components.CREDITS_ROOT_ROWS
 import dev.piannoli.scorza.ui.components.CreditsCategory
@@ -55,7 +49,6 @@ import dev.piannoli.scorza.ui.components.CreditsCategoryOverlay
 import dev.piannoli.scorza.ui.components.CreditsOverlay
 import dev.piannoli.scorza.ui.components.creditsItemCount
 import dev.piannoli.scorza.ui.components.DialogOverlay
-import dev.piannoli.ui.components.screenBackground
 import dev.piannoli.scorza.ui.components.ListDialogScreen
 import dev.piannoli.scorza.ui.components.LocalArtworkStatusBarHeight
 import dev.piannoli.scorza.ui.components.MeasuredArtworkStatusBar
@@ -84,7 +77,6 @@ import dev.piannoli.scorza.ui.viewmodel.GameListViewModel
 import dev.piannoli.scorza.ui.viewmodel.InputTesterViewModel
 import dev.piannoli.scorza.ui.viewmodel.SettingsViewModel
 import dev.piannoli.scorza.ui.viewmodel.SystemListViewModel
-import dev.piannoli.ui.components.ConfirmOverlay
 import dev.piannoli.ui.components.List
 import dev.piannoli.ui.components.ListSection
 import dev.piannoli.ui.components.SectionedList
@@ -115,8 +107,6 @@ import dev.piannoli.ui.theme.LocalPiannoliFont
 import dev.piannoli.ui.theme.LocalPillScale
 import dev.piannoli.ui.theme.LocalPiannoliTypography
 import dev.piannoli.ui.theme.LocalScaleFactor
-import dev.piannoli.ui.theme.Radius
-import dev.piannoli.ui.theme.Spacing
 import dev.piannoli.ui.theme.buildPiannoliTypography
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
@@ -306,10 +296,6 @@ sealed class LauncherScreen {
         override val scrollTarget: Int = 0,
     ) : LauncherScreen(), ScrollableScreen {
         override val itemCount: Int get() = dev.piannoli.scorza.util.LoggingPrefs.Category.entries.size
-        override fun withScroll(selectedIndex: Int, scrollTarget: Int) = copy(selectedIndex = selectedIndex, scrollTarget = scrollTarget)
-    }
-    data class ShortcutBinding(override val selectedIndex: Int = 0, override val scrollTarget: Int = 0, val shortcuts: Map<ShortcutAction, Set<Int>> = emptyMap(), val listening: Boolean = false, val heldKeys: Set<Int> = emptySet(), val countdownMs: Int = 0) : LauncherScreen(), ScrollableScreen {
-        override val itemCount: Int get() = ShortcutAction.entries.size
         override fun withScroll(selectedIndex: Int, scrollTarget: Int) = copy(selectedIndex = selectedIndex, scrollTarget = scrollTarget)
     }
     data class Credits(
@@ -524,10 +510,6 @@ fun AppNavGraph(
 ) {
     val dialog by dialogState.collectAsStateWhileActive()
     val appSettings by settingsViewModel.appSettings.collectAsStateWhileActive()
-    dev.piannoli.scorza.ui.components.ArtworkVisibility(
-        gameEnabled = appSettings.effectiveArtWidth > 0,
-        systemEnabled = appSettings.effectiveSystemArtWidth > 0,
-    )
 
     val pillScale = pillScaleFor(appSettings.textSize.sp)
     val listFontSize = appSettings.textSize.sp.sp
@@ -538,16 +520,6 @@ fun AppNavGraph(
         activeMapping.confirmButton(),
         appSettings.piannoliBindings,
     )
-
-    val labelContext = androidx.compose.ui.platform.LocalContext.current
-    val shortcutKeyLabel: (Int) -> String = { keyCode ->
-        buttonLabel(
-            labelContext,
-            keyCode,
-            activeMapping,
-            activeMapping?.glyphStyle ?: dev.piannoli.scorza.input.GlyphStyle.PLUMBER,
-        )
-    }
 
     val piannoliColors = PiannoliColors(
         highlight = appSettings.colorHighlight,
@@ -811,8 +783,7 @@ fun AppNavGraph(
                                 val value = when {
                                     item.isCurrent -> stringResource(R.string.value_active)
                                     opt.availability == dev.piannoli.scorza.ui.screens.CoreAvailability.UNAVAILABLE -> {
-                                        val resId = when (opt.runnerLabel) {
-                                            "Internal" -> R.string.value_not_bundled
+                                        val resId = when (opt.source) {
                                             else -> R.string.value_not_installed
                                         }
                                         stringResource(resId)
@@ -1146,96 +1117,6 @@ fun AppNavGraph(
                             verticalPadding = listVerticalPadding,
                             checkState = index in currentScreen.checkedIndices
                         )
-                    }
-                }
-            }
-            is LauncherScreen.ShortcutBinding -> {
-                if (inputRouter != null) {
-                    val handler = remember { inputRouter.currentHandler() }
-                    dev.piannoli.scorza.input.screen.compose.ScreenInput(handler)
-                }
-                ListDialogScreen(
-                    backgroundImagePath = appSettings.backgroundImagePath,
-                    backgroundTint = appSettings.backgroundTint,
-                    title = stringResource(R.string.title_shortcuts),
-
-                    listFontSize = listFontSize,
-                    listLineHeight = listLineHeight,
-                    fullWidth = true,
-                    rightBottomItems = if (currentScreen.listening) listOf("" to stringResource(R.string.label_hold_buttons))
-                        else listOf(labels.north to stringResource(R.string.label_clear), labels.confirm to stringResource(R.string.label_set)),
-                    buttonStyle = labels
-                ) {
-                    List(
-                        items = ShortcutAction.entries.toList(),
-                        selectedIndex = currentScreen.selectedIndex,
-                        itemHeight = itemHeight,
-                        scrollTarget = currentScreen.scrollTarget,
-                        onListStateChanged = onListStateChanged
-                    ) { _, action, isSelected ->
-                        val chord = currentScreen.shortcuts[action]
-                        val value = if (chord.isNullOrEmpty()) stringResource(R.string.value_none)
-                        else chord.joinToString(" + ") { shortcutKeyLabel(it) }
-                        PillRowKeyValue(
-                            label = stringResource(action.labelRes),
-                            value = value,
-                            isSelected = isSelected,
-                            fontSize = listFontSize,
-                            lineHeight = listLineHeight,
-                            verticalPadding = listVerticalPadding
-                        )
-                    }
-                }
-                if (currentScreen.listening) {
-                    val colors = LocalPiannoliColors.current
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .screenBackground(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth()
-                        ) {
-                            val actionName = ShortcutAction.entries.getOrNull(currentScreen.selectedIndex)
-                                ?.let { stringResource(it.labelRes) } ?: ""
-                            Text(
-                                text = actionName,
-                                style = MaterialTheme.typography.bodyLarge.copy(
-                                    fontSize = 24.sp,
-                                    color = colors.text
-                                )
-                            )
-                            Spacer(modifier = Modifier.height(Spacing.Sm))
-                            Text(
-                                text = if (currentScreen.heldKeys.isEmpty()) stringResource(R.string.shortcut_hold_prompt)
-                                else currentScreen.heldKeys.joinToString(" + ") { shortcutKeyLabel(it) },
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontSize = 16.sp,
-                                    color = colors.text.copy(alpha = 0.6f)
-                                )
-                            )
-                            Spacer(modifier = Modifier.height(Spacing.Lg))
-                            if (currentScreen.heldKeys.isNotEmpty()) {
-                                val progress = (currentScreen.countdownMs / 1500f).coerceIn(0f, 1f)
-                                Box(
-                                    modifier = Modifier
-                                        .widthIn(max = 280.dp).fillMaxWidth()
-                                        .height(8.dp)
-                                        .clip(RoundedCornerShape(Radius.Sm))
-                                        .background(colors.text.copy(alpha = 0.2f))
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth(progress)
-                                            .height(8.dp)
-                                            .clip(RoundedCornerShape(Radius.Sm))
-                                            .background(colors.highlight)
-                                    )
-                                }
-                            }
-                        }
                     }
                 }
             }

@@ -45,6 +45,8 @@ class AtomicRenameStateFilesTest {
         val rom = File(root, "Roms/$tag/$old.sfc").apply { parentFile?.mkdirs(); writeText("rom") }
         write(File(root, "Save States/$tag/$old/$old.state"), "S")
         write(File(root, "Save States/$tag/$old/$old.state.png"), "P")
+        val external = "External/dev.piannoli.ricotta/snes9x_libretro"
+        write(File(root, "Save States/$tag/$old/$external/$old.state.auto"), "E")
 
         val result = renamer(root).rename(rom, new, tag)
 
@@ -52,6 +54,8 @@ class AtomicRenameStateFilesTest {
         assertTrue(File(root, "Save States/$tag/$new/$new.state").exists())
         assertEquals("S", File(root, "Save States/$tag/$new/$new.state").readText())
         assertEquals("P", File(root, "Save States/$tag/$new/$new.state.png").readText())
+        assertEquals("E", File(root, "Save States/$tag/$new/$external/$new.state.auto").readText())
+        assertFalse(File(root, "Save States/$tag/$new/$external/$old.state.auto").exists())
         assertFalse(File(root, "Save States/$tag/$new/$old.state").exists())
     }
 }

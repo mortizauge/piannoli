@@ -23,8 +23,7 @@ class EmulatorMappingDownloadableTest {
         assertFalse(EmulatorMappingBuilder.isDownloadable(EmulatorSource.RetroArch, availability = CoreAvailability.UNAVAILABLE, raPackage = stock, raInstalled = true))
     }
 
-    @Test fun `Internal and Standalone sources are never downloadable`() {
-        assertFalse(EmulatorMappingBuilder.isDownloadable(EmulatorSource.Internal, availability = CoreAvailability.UNAVAILABLE, raPackage = ricotta, raInstalled = true))
+    @Test fun `Standalone sources are never downloadable`() {
         assertFalse(EmulatorMappingBuilder.isDownloadable(EmulatorSource.Standalone, availability = CoreAvailability.UNAVAILABLE, raPackage = ricotta, raInstalled = true))
     }
 
@@ -67,11 +66,7 @@ class EmulatorMappingDownloadableTest {
         )
     }
 
-    @Test fun `Internal and Standalone rows are unavailable regardless of RetroArch reporting`() {
-        assertEquals(
-            CoreAvailability.UNAVAILABLE,
-            EmulatorMappingBuilder.currentRowAvailability(EmulatorSource.Internal, raCannotReport = true),
-        )
+    @Test fun `Standalone rows are unavailable regardless of RetroArch reporting`() {
         assertEquals(
             CoreAvailability.UNAVAILABLE,
             EmulatorMappingBuilder.currentRowAvailability(EmulatorSource.Standalone, raCannotReport = true),

@@ -78,7 +78,7 @@ class BootInitializerReturnTest {
         initializer = BootInitializer(
             context, settings, mockk<PlatformConfig>(relaxed = true), db, mockk(relaxed = true),
             paths, scope, mockk(relaxed = true), games, mockk(relaxed = true), mockk(relaxed = true),
-            mockk(relaxed = true), mockk(relaxed = true), nav, mockk(relaxed = true), actions,
+            mockk(relaxed = true), nav, mockk(relaxed = true), actions,
             mockk(relaxed = true), session,
         )
     }

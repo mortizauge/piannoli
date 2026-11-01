@@ -8,7 +8,6 @@ import dev.piannoli.scorza.config.EmulatorSource
 import dev.piannoli.scorza.config.PlatformConfig
 import dev.piannoli.scorza.launcher.CoreReporting
 import dev.piannoli.scorza.launcher.InstalledCoreService
-import dev.piannoli.scorza.launcher.LaunchManager
 import dev.piannoli.scorza.launcher.RetroArchLauncher
 import dev.piannoli.scorza.launcher.isPackageInstalled
 import dev.piannoli.scorza.navigation.LauncherScreen
@@ -51,8 +50,8 @@ class EmulatorMappingBuilder @Inject constructor(
         val entries = platformConfig.getDetailedMappings(
             context.packageManager,
             installedCoreService.configuredCores(),
-            LaunchManager.extractBundledCores(context),
             installedCoreService.configuredUnreportable(),
+            raLabel = raLabel,
         )
         // MAME and FBN are both named Arcade; tag the name so the two rows are tellable apart.
         val shared = entries.groupingBy { it.platformName }.eachCount().filterValues { it > 1 }.keys
@@ -90,11 +89,10 @@ class EmulatorMappingBuilder @Inject constructor(
         gameName: String? = null,
         selectCurrent: Boolean = false,
     ): LauncherScreen.PlatformMapping {
-        val bundled = LaunchManager.extractBundledCores(context)
         val installedRaCores = installedCoreService.configuredCores()
         val raReporting = installedCoreService.configuredReporting()
         val raCannotReport = raReporting != CoreReporting.REPORTS
-        val sources = platformConfig.availableSources(tag = tag, embeddedCoresDir = bundled)
+        val sources = platformConfig.availableSources(tag)
         // Game scope reads the per-game override; platform scope reads the platform choice.
         val current =
             if (romId != null) gameOverrideStore.get(romId) else platformConfig.getPlatformChoice(tag)
@@ -130,13 +128,11 @@ class EmulatorMappingBuilder @Inject constructor(
         fun emulatorSection(useShowAll: Boolean): List<MappingItem> {
             val section = mutableListOf<MappingItem>()
             for (source in sources) {
-                // Internal cores are bundled-or-nothing; Show All never expands them since
-                // there is no install path for a core Piannoli does not ship.
-                val includeAll = useShowAll && source != EmulatorSource.Internal
+                val includeAll = useShowAll
                 var options = platformConfig.emulatorOptionsForSource(
                     tag = tag, source = source, includeAll = includeAll,
                     installedRaCores = installedRaCores,
-                    embeddedCoresDir = bundled, pm = context.packageManager, raLabel = raLabel,
+                    pm = context.packageManager, raLabel = raLabel,
                     coreReportingUnavailable = raCannotReport,
                 )
                 // Always surface the current mapping even when its core/app is not installed
@@ -145,13 +141,12 @@ class EmulatorMappingBuilder @Inject constructor(
                     platformConfig.emulatorOptionsForSource(
                         tag = tag, source = source, includeAll = true,
                         installedRaCores = installedRaCores,
-                        embeddedCoresDir = bundled, pm = context.packageManager, raLabel = raLabel,
+                        pm = context.packageManager, raLabel = raLabel,
                         coreReportingUnavailable = raCannotReport,
                     ).firstOrNull { isCurrent(it) }?.let { options = options + it }
                 }
                 if (options.isEmpty()) continue
                 val header = when (source) {
-                    EmulatorSource.Internal -> EmulatorSource.Internal.displayName
                     EmulatorSource.RetroArch -> raLabel
                     EmulatorSource.Standalone -> EmulatorSource.Standalone.displayName
                 }
@@ -185,7 +180,6 @@ class EmulatorMappingBuilder @Inject constructor(
         if (current != null && section.none { it is MappingItem.EmulatorOption && it.isCurrent }) {
             synthesizeCurrentRow(current, raCannotReport)?.let { row ->
                 val header = when (current.source) {
-                    EmulatorSource.Internal -> EmulatorSource.Internal.displayName
                     EmulatorSource.RetroArch -> raLabel
                     EmulatorSource.Standalone -> EmulatorSource.Standalone.displayName
                 }
@@ -213,7 +207,7 @@ class EmulatorMappingBuilder @Inject constructor(
         val items = mutableListOf<MappingItem>()
         if (romId != null) {
             val platformLabel = platformConfig.detailedMappingFor(
-                tag, context.packageManager, installedRaCores, bundled,
+                tag, context.packageManager, installedRaCores,
                 installedCoreService.configuredUnreportable(), raLabel,
             ).coreDisplayName
             val label = if (platformLabel.isNotEmpty()) {
@@ -311,7 +305,6 @@ class EmulatorMappingBuilder @Inject constructor(
             else -> platformConfig.getCoreDisplayName(current.coreId)
         }
         val label = when (current.source) {
-            EmulatorSource.Internal -> EmulatorSource.Internal.displayName
             EmulatorSource.RetroArch -> raLabel
             EmulatorSource.Standalone -> EmulatorSource.Standalone.displayName
         }
@@ -334,7 +327,7 @@ class EmulatorMappingBuilder @Inject constructor(
             ?.takeIf { it.source != EmulatorSource.Standalone }
             ?.coreId?.ifEmpty { null }
             ?: platformConfig.getCoreMapping(tag)
-        val runner = platformConfig.getRunnerLabel(tag, coreId, raLabel)
+        val runner = platformConfig.getRunnerLabel(tag, raLabel)
         val biosDir = PiannoliPaths(File(settings.sdCardRoot)).biosFor(tag)
         val firmware = platformConfig.getFirmwareStatus(coreId, biosDir)
             .map { dev.piannoli.scorza.ui.screens.FirmwareStatus(it.first, it.second) }

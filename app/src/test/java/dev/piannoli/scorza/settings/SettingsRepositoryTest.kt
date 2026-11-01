@@ -33,6 +33,42 @@ class SettingsRepositoryTest {
 
     @Test
     @Config(sdk = [28])
+    fun `fresh RetroArch package selection uses installed packages and persists`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        Shadows.shadowOf(context as android.app.Application).grantPermissions(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+        writeSettingsJson(tmp.root, "{}")
+        val settings = newRepo()
+        try {
+            settings.sdCardRoot = tmp.root.absolutePath
+            settings.setupCompleted = true
+            settings.seedRetroArchPackage(emptyList())
+            assertEquals(SettingsRepository.DEFAULT_RA_PACKAGE, settings.retroArchPackage)
+            settings.seedRetroArchPackage(listOf("com.retroarch", "com.retroarch.aarch64"))
+            assertEquals("com.retroarch.aarch64", settings.retroArchPackage)
+        } finally { settings.shutdown() }
+        val reopened = newRepo()
+        try {
+            reopened.sdCardRoot = tmp.root.absolutePath
+            assertEquals("com.retroarch.aarch64", reopened.retroArchPackage)
+            reopened.seedRetroArchPackage(listOf(SettingsRepository.DEFAULT_RA_PACKAGE))
+            assertEquals("com.retroarch.aarch64", reopened.retroArchPackage)
+        } finally { reopened.shutdown() }
+    }
+
+    @Test
+    fun `explicit missing RetroArch package survives automatic detection and settings display`() {
+        writeSettingsJson(tmp.root, "{}")
+        val settings = newRepo()
+        try {
+            settings.sdCardRoot = tmp.root.absolutePath
+            settings.retroArchPackage = "com.retroarch.chosen"
+            settings.seedRetroArchPackage(listOf(SettingsRepository.DEFAULT_RA_PACKAGE, "com.retroarch"))
+            assertEquals("com.retroarch.chosen", settings.retroArchPackage)
+        } finally { settings.shutdown() }
+    }
+
+    @Test
+    @Config(sdk = [28])
     fun `artwork visibility defaults show toggles independently and supports preview cancel save and reopen`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         Shadows.shadowOf(context as android.app.Application)

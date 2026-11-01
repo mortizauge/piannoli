@@ -15,7 +15,6 @@ import dev.piannoli.scorza.db.RomScanner
 import dev.piannoli.scorza.db.RomsRepository
 import dev.piannoli.scorza.di.IoScope
 import dev.piannoli.scorza.launcher.InstalledCoreService
-import dev.piannoli.scorza.launcher.LaunchManager
 import dev.piannoli.scorza.model.AppType
 import dev.piannoli.scorza.model.CollectionType
 import dev.piannoli.scorza.model.ListItem
@@ -67,7 +66,6 @@ class DialogInputHandler @Inject constructor(
     private val recentlyPlayedManager: RecentlyPlayedRepository,
     private val platformResolver: PlatformConfig,
     private val installedCoreService: InstalledCoreService,
-    private val launchManager: LaunchManager,
     private val updateManager: dev.piannoli.scorza.updater.UpdateManager,
     private val atomicRename: AtomicRename,
     private val scanner: RomScanner,
@@ -230,7 +228,6 @@ class DialogInputHandler @Inject constructor(
     private fun isQuickMenuBlockedScreen(): Boolean = when (nav.currentScreen) {
         is LauncherScreen.InputTester,
         is LauncherScreen.EditButtons,
-        is LauncherScreen.ShortcutBinding,
         is LauncherScreen.OnboardingPermissions -> true
         else -> false
     }
@@ -1944,7 +1941,7 @@ class DialogInputHandler @Inject constructor(
                         rom.path.absolutePath in pathSet &&
                             dev.piannoli.scorza.ra.RaPreloadEligibility.isEligible(
                                 platformTag = rom.platformTag,
-                                embeddedCorePresent = launchManager.getEmbeddedCorePath(rom) != null,
+                                externalIntegrationSupported = rom.raGameId != null || dev.piannoli.scorza.ra.RaHasher.supports(rom.platformTag, rom.path),
                                 raLoggedIn = settings.raToken.isNotEmpty(),
                             )
                     }
@@ -2074,7 +2071,7 @@ class DialogInputHandler @Inject constructor(
     }
 
     private fun onPlatformReset(state: DialogState.PlatformResetConfirm) {
-        platformResolver.resetPlatformToDefault(state.tag, context.packageManager)
+        platformResolver.resetPlatformToDefault(state.tag, context.packageManager, installedCoreService.configuredCores())
         launcherActions.scanResumableGames()
         nav.dialogState.value = DialogState.None
         val mapping = nav.screenStack.lastOrNull() as? LauncherScreen.PlatformMapping ?: return
@@ -2165,7 +2162,7 @@ class DialogInputHandler @Inject constructor(
                 }
                 if (rom != null && dev.piannoli.scorza.ra.RaPreloadEligibility.isEligible(
                         platformTag = rom.platformTag,
-                        embeddedCorePresent = launchManager.getEmbeddedCorePath(rom) != null,
+                        externalIntegrationSupported = rom.raGameId != null || dev.piannoli.scorza.ra.RaHasher.supports(rom.platformTag, rom.path),
                         raLoggedIn = settings.raToken.isNotEmpty(),
                     )
                 ) {

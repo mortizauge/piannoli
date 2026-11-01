@@ -1,7 +1,6 @@
 package dev.piannoli.scorza.launcher
 
 import dev.piannoli.scorza.config.PiannoliPaths
-import dev.piannoli.scorza.libretro.SaveSlotManager
 import dev.piannoli.scorza.util.ArchiveExtractor
 import dev.piannoli.scorza.util.AtomicRename
 import java.io.File
@@ -10,7 +9,7 @@ import java.text.Normalizer
 // Heals pre-fix save data for archived games whose on-disk identity is the
 // archive's inner entry name rather than the library (zip) name. Lazy: runs at
 // launch, short-circuits once library-named data exists. Sunset once the early
-// user base has rolled forward - delete this class and its launchEmbedded call.
+// user base has rolled forward - delete this helper when no legacy saves remain.
 class SaveIdentityMigrator(piannoliRoot: File, private val atomicRename: AtomicRename) {
 
     private val paths = PiannoliPaths(piannoliRoot)

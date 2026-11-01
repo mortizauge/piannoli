@@ -18,7 +18,7 @@ internal val LocalArtworkStatusBarHeight = staticCompositionLocalOf<State<Dp>> {
 
 @Composable
 internal fun Modifier.artworkStatusBarPadding(existingTopPadding: Dp = 0.dp): Modifier =
-    padding(top = maxOf(existingTopPadding, LocalArtworkStatusBarHeight.current.value))
+    padding(vertical = maxOf(existingTopPadding, LocalArtworkStatusBarHeight.current.value))
 
 @Composable
 internal fun MeasuredArtworkStatusBar(

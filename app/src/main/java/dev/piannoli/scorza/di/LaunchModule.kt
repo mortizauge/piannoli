@@ -15,7 +15,6 @@ import dev.piannoli.scorza.launcher.LaunchManager
 import dev.piannoli.scorza.launcher.LaunchState
 import dev.piannoli.scorza.launcher.RetroArchLauncher
 import dev.piannoli.scorza.settings.SettingsRepository
-import dev.piannoli.scorza.util.AtomicRename
 import javax.inject.Singleton
 
 @Module
@@ -44,12 +43,11 @@ object LaunchModule {
         delfinoLauncher: DelfinoLauncher,
         launchState: LaunchState,
         activeMappingHolder: dev.piannoli.scorza.input.runtime.ActiveMappingHolder,
-        atomicRename: AtomicRename,
         installedCoreService: InstalledCoreService,
         gameOverrides: dev.piannoli.scorza.db.GameOverrideStore,
     ): LaunchManager = LaunchManager(
         context, settings, platformConfig,
         retroArchLauncher, emuLauncher, apkLauncher, delfinoLauncher, launchState, activeMappingHolder,
-        atomicRename, installedCoreService, gameOverrides
+        installedCoreService, gameOverrides
     )
 }

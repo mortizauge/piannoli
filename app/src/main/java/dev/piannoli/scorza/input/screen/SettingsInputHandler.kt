@@ -21,7 +21,6 @@ import dev.piannoli.scorza.model.AppType
 import dev.piannoli.scorza.navigation.BrowsePurpose
 import dev.piannoli.scorza.navigation.LauncherScreen
 import dev.piannoli.scorza.navigation.NavigationController
-import dev.piannoli.scorza.settings.GlobalOverridesManager
 import dev.piannoli.scorza.settings.SettingsRepository
 import dev.piannoli.scorza.setup.SetupCoordinator
 import dev.piannoli.scorza.ui.screens.DialogState
@@ -42,7 +41,6 @@ class SettingsInputHandler @Inject constructor(
     private val settings: SettingsRepository,
     private val platformConfig: PlatformConfig,
     private val installedCoreService: InstalledCoreService,
-    private val globalOverrides: GlobalOverridesManager,
     private val appsRepository: AppsRepository,
     private val setupCoordinator: SetupCoordinator,
     private val inputTesterController: InputTesterController,
@@ -138,7 +136,6 @@ class SettingsInputHandler @Inject constructor(
             "logging" -> nav.push(LauncherScreen.LoggingSettings())
             "audit_emulator_intents" -> runIntentAudit()
             "icon_gallery" -> nav.push(LauncherScreen.IconGallery())
-            "shortcuts" -> nav.push(LauncherScreen.ShortcutBinding(shortcuts = globalOverrides.readShortcuts()))
             "input_tester" -> {
                 inputTesterController.enter()
                 nav.push(LauncherScreen.InputTester)

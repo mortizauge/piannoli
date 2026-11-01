@@ -4,12 +4,9 @@ import android.Manifest
 import android.app.ActivityManager
 import android.app.ActivityOptions
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.provider.Settings
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -45,7 +42,6 @@ import dev.piannoli.scorza.db.RomScanner
 import dev.piannoli.scorza.db.RomsRepository
 import dev.piannoli.scorza.di.AppFonts
 import dev.piannoli.scorza.input.ActivityActions
-import dev.piannoli.scorza.input.BindingController
 import dev.piannoli.scorza.input.AndroidGamepadKeyNames
 import dev.piannoli.scorza.input.runtime.InputDispatcher
 import dev.piannoli.scorza.input.InputRouter
@@ -54,8 +50,6 @@ import dev.piannoli.scorza.input.LauncherActions
 import dev.piannoli.scorza.input.runtime.ControllerBridge
 import dev.piannoli.scorza.launcher.InstalledCoreService
 import dev.piannoli.scorza.launcher.LaunchManager
-import dev.piannoli.scorza.libretro.LibretroActivity
-import dev.piannoli.scorza.libretro.RetroAchievementsManager
 import dev.piannoli.scorza.navigation.AppNavGraph
 import dev.piannoli.scorza.navigation.LauncherScreen
 import dev.piannoli.scorza.navigation.NavigationController
@@ -70,7 +64,6 @@ import dev.piannoli.scorza.ui.viewmodel.GameListViewModel
 import dev.piannoli.scorza.ui.viewmodel.InputTesterViewModel
 import dev.piannoli.scorza.ui.viewmodel.SettingsViewModel
 import dev.piannoli.scorza.ui.viewmodel.SystemListViewModel
-import dev.piannoli.scorza.romm.sync.RomKeys
 import dev.piannoli.scorza.updater.UpdateManager
 import dev.piannoli.ui.theme.PiannoliTheme
 import dev.piannoli.ui.components.collectAsStateWhileActive
@@ -94,7 +87,6 @@ class MainActivity : ComponentActivity(), ActivityActions {
     @Inject lateinit var controllerBridge: ControllerBridge
     @Inject lateinit var portRouter: dev.piannoli.scorza.input.runtime.PortRouter
     @Inject lateinit var activeMappingHolder: dev.piannoli.scorza.input.runtime.ActiveMappingHolder
-    @Inject lateinit var bindingController: BindingController
     @Inject lateinit var osdController: dev.piannoli.ui.components.OsdController
     @Inject lateinit var inputTesterController: InputTesterController
     @Inject lateinit var updateManager: UpdateManager
@@ -139,21 +131,14 @@ class MainActivity : ComponentActivity(), ActivityActions {
     private val isReady: Boolean get() = bootSequencer.state.value is BootState.Ready
 
     private var coreQueryReceiver: android.content.BroadcastReceiver? = null
-    private var loginManager: RetroAchievementsManager? = null
+    private var loginJob: kotlinx.coroutines.Job? = null
     private var pairingUiJob: kotlinx.coroutines.Job? = null
-    private val loginPollHandler = Handler(Looper.getMainLooper())
-    private val loginPollRunnable: Runnable = object : Runnable {
-        override fun run() {
-            loginManager?.idle()
-            if (loginManager != null) loginPollHandler.postDelayed(this, 100)
-        }
-    }
     private var coldStart = true
     private var launcherResumed = false
     private val launcherUiActive = kotlinx.coroutines.flow.MutableStateFlow(false)
 
     private fun updateLauncherActivity() {
-        val active = launcherResumed && hasWindowFocus() && !LibretroActivity.isRunning
+        val active = launcherResumed && hasWindowFocus()
         launcherUiActive.value = active
         if (active) menuNavigationPoller.start() else {
             menuNavigationPoller.stop()
@@ -572,35 +557,21 @@ class MainActivity : ComponentActivity(), ActivityActions {
     override fun onResume() {
         super.onResume()
         launcherResumed = true
-        // Re-wire the dispatcher to launcher dispatch shape on each resume. LibretroActivity
-        // overwrites these callbacks with IGM-specific wiring when it runs; we restore the
-        // launcher's wiring when we come back.
+        // Restore launcher input and refresh saves after returning from an external emulator.
         router.wire(inputDispatcher)
         registerControllerOsd()
         updateLauncherActivity()
         bootSequencer.advance()
         launchState.launching = false
         val justExited = launchState.lastLaunched
-        if (justExited != null && !LibretroActivity.isRunning) {
-            launchState.lastLaunched = null
-        }
-        if (!LibretroActivity.isRunning) {
-            syncScheduler.start()
-            // The just-played save is uploaded by the sweep itself; force one so it runs now.
-            if (justExited != null) syncScheduler.syncNow()
-        }
+        launchState.lastLaunched = null
+        syncScheduler.start()
+        if (justExited != null) syncScheduler.syncNow()
         if (!isReady) return
-        if (!LibretroActivity.isRunning) browseSession.clear()
+        browseSession.clear()
         if (!coldStart) overridePendingTransition(0, 0)
         coldStart = false
         hideSystemUI()
-        if (LibretroActivity.isRunning) {
-            val intent = Intent(this, LibretroActivity::class.java)
-            intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-            val opts = ActivityOptions.makeCustomAnimation(this, 0, 0).toBundle()
-            startActivity(intent, opts)
-            return
-        }
         settings.reload()
         settingsViewModel.get().load()
         val activeDialogState = nav.dialogState
@@ -620,7 +591,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
         syncScheduler.stop()
         menuNavigationPoller.stop()
         // Cancel any in-flight stick auto-repeat so it does not keep firing dispatcher callbacks
-        // after LibretroActivity has rewired them.
+        // while an external emulator owns the foreground.
         stickAutoRepeat.stop()
         controllerBridge.onDeviceAdded = null
         controllerBridge.onDeviceRemoved = null
@@ -640,9 +611,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
         controllerBridge.stop(this)
         super.onDestroy()
         unregisterCoreQueryReceiver()
-        loginPollHandler.removeCallbacks(loginPollRunnable)
-        loginManager?.destroy()
-        loginManager = null
+        loginJob?.cancel()
         settings.shutdown()
         if (isReady) {
             systemListViewModel.get().close()
@@ -761,12 +730,6 @@ class MainActivity : ComponentActivity(), ActivityActions {
             inputTesterController.dispatchKey(event, down = true)
             return true
         }
-        if (bindingController.keyDown(keyCode)) {
-            return true
-        }
-        if (event.repeatCount > 0 && currentScreenForKey is LauncherScreen.ShortcutBinding && !currentScreenForKey.listening) {
-            return true
-        }
         nav.lastKeyRepeatCount = event.repeatCount
         if (isTv && !AndroidGamepadKeyNames.isGamepadEvent(event)) {
             when (keyCode) {
@@ -818,9 +781,6 @@ class MainActivity : ComponentActivity(), ActivityActions {
         if (inputDispatcher.handleKeyEvent(event, keyboardNavigation = usesPiannoliKeyboard())) {
             return true
         }
-        if (bindingController.keyUp(keyCode)) {
-            return true
-        }
         return super.onKeyUp(keyCode, event)
     }
 
@@ -837,21 +797,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
         return handled || super.onGenericMotionEvent(event)
     }
 
-    private val triggerL2HeldDevices = mutableSetOf<Int>()
-    private val triggerR2HeldDevices = mutableSetOf<Int>()
-    private val bindingHatSync = dev.piannoli.scorza.input.HatKeySync()
     private val keyboardHatSync = dev.piannoli.scorza.input.HatKeySync()
-
-    private fun syncBindingTrigger(deviceId: Int, keyCode: Int, value: Float, held: MutableSet<Int>) {
-        val wasHeld = deviceId in held
-        if (value > 0.5f && !wasHeld) {
-            held.add(deviceId)
-            bindingController.keyDown(keyCode)
-        } else if (value < 0.3f && wasHeld) {
-            held.remove(deviceId)
-            bindingController.keyUp(keyCode)
-        }
-    }
 
     override fun dispatchGenericMotionEvent(event: android.view.MotionEvent): Boolean {
         val csForListen = nav.currentScreen
@@ -885,26 +831,6 @@ class MainActivity : ComponentActivity(), ActivityActions {
         }
 
         val currentScreenForMotion = nav.currentScreen
-        if (currentScreenForMotion is LauncherScreen.ShortcutBinding) {
-            val lt = maxOf(
-                event.getAxisValue(android.view.MotionEvent.AXIS_LTRIGGER),
-                event.getAxisValue(android.view.MotionEvent.AXIS_BRAKE),
-            )
-            val rt = maxOf(
-                event.getAxisValue(android.view.MotionEvent.AXIS_RTRIGGER),
-                event.getAxisValue(android.view.MotionEvent.AXIS_GAS),
-            )
-            syncBindingTrigger(event.deviceId, KeyEvent.KEYCODE_BUTTON_L2, lt, triggerL2HeldDevices)
-            syncBindingTrigger(event.deviceId, KeyEvent.KEYCODE_BUTTON_R2, rt, triggerR2HeldDevices)
-            bindingHatSync.sync(
-                event.deviceId,
-                event.getAxisValue(android.view.MotionEvent.AXIS_HAT_X),
-                event.getAxisValue(android.view.MotionEvent.AXIS_HAT_Y),
-                { bindingController.keyDown(it) },
-                { bindingController.keyUp(it) },
-            )
-        }
-
         if (currentScreenForMotion is LauncherScreen.InputTester) {
             inputTesterController.dispatchMotion(event)
             return true
@@ -959,28 +885,22 @@ class MainActivity : ComponentActivity(), ActivityActions {
     }
 
     override fun startRaLogin(username: String, password: String) {
-        val ra = RetroAchievementsManager(
-            context = this,
-            onLogin = { success, nameOrError, token ->
-                if (success && token != null) {
-                    settings.raUsername = nameOrError
-                    settings.raToken = token
-                    settings.raPassword = password
-                    settingsViewModel.get().raPassword = ""
-                    nav.dialogState.value = DialogState.RAAccount(username = nameOrError)
-                } else {
-                    nav.dialogState.value = DialogState.RALoggingIn(message = getString(R.string.ra_login_invalid))
-                }
-                loginPollHandler.removeCallbacks(loginPollRunnable)
-                loginManager?.destroy()
-                loginManager = null
-            }
-        )
-        ra.init()
-        ra.loginWithPassword(username, password)
-        loginManager = ra
-        loginPollHandler.postDelayed(loginPollRunnable, 100)
+        loginJob?.cancel()
         nav.dialogState.value = DialogState.RALoggingIn()
+        loginJob = lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                dev.piannoli.scorza.ra.RaConnectClient().loginWithPassword(username, password)
+            }
+            if (result != null) {
+                settings.raUsername = result.username
+                settings.raToken = result.token
+                settings.raPassword = password
+                settingsViewModel.get().raPassword = ""
+                nav.dialogState.value = DialogState.RAAccount(username = result.username)
+            } else {
+                nav.dialogState.value = DialogState.RALoggingIn(message = getString(R.string.ra_login_invalid))
+            }
+        }
     }
 
     override fun startRommPairing(host: String) {

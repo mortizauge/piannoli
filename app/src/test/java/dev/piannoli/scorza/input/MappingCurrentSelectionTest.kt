@@ -39,11 +39,9 @@ class MappingCurrentSelectionTest {
         val romId: Long,
     )
 
-    private fun fixture(name: String, bundled: List<String> = listOf("mgba_libretro")): Fixture {
+    private fun fixture(name: String): Fixture {
         val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
         val root = File(tmp.root, name).apply { mkdirs() }
-        val libs = File(tmp.root, "$name-libs").apply { mkdirs() }
-        bundled.forEach { File(libs, "${it}_android.so").writeText("stub") }
 
         val paths = mockk<PiannoliPathsProvider>()
         every { paths.root } returns root
@@ -55,7 +53,7 @@ class MappingCurrentSelectionTest {
             "GBA/game.gba", "GBA", "Game", "game", "game",
         )
 
-        val config = PlatformConfig(root, ctx.assets, nativeLibDir = libs.absolutePath).also { it.load() }
+        val config = PlatformConfig(root, ctx.assets).also { it.load() }
         val settings = dev.piannoli.scorza.settings.SettingsRepository(ctx).also { it.sdCardRoot = root.absolutePath }
         val cores = dev.piannoli.scorza.launcher.InstalledCoreService(ctx, settings)
         val store = GameOverrideStore(db)
@@ -81,19 +79,29 @@ class MappingCurrentSelectionTest {
         }
     }
 
-    @Test fun `platform internal core is current`() =
-        assertExactlyOneCurrent("cur-p-int", EmulatorChoice(EmulatorSource.Internal, "mgba_libretro"), false)
-
     @Test fun `platform retroarch core is current`() =
         assertExactlyOneCurrent("cur-p-ra", EmulatorChoice(EmulatorSource.RetroArch, "mgba_libretro"), false)
+
+    @Test fun `legacy built-in mappings never create a source picker row`() {
+        val fixture = fixture("cur-legacy")
+        File(tmp.root, "cur-legacy/Config/cores.json").writeText(
+            """{"v":2,"platforms":{"GBA":{"source":"Internal","core":"mgba_libretro"}}}"""
+        )
+        fixture.config.reloadCoreMappings()
+        val screen = fixture.builder.buildPlatformMapping("GBA", "GBA", showAll = true)
+        assertEquals(0, currentRows(screen).size)
+        val headers = screen.items.filterIsInstance<MappingItem.SectionHeader>().map { it.label }
+        assertTrue(headers.isNotEmpty())
+        assertTrue(headers.none { it == "Built-in" || it == "Internal" })
+        assertTrue(screen.items.filterIsInstance<MappingItem.EmulatorOption>().all {
+            it.option.source == EmulatorSource.RetroArch || it.option.source == EmulatorSource.Standalone
+        })
+    }
 
     @Test fun `platform standalone app is current`() =
         assertExactlyOneCurrent(
             "cur-p-app", EmulatorChoice(EmulatorSource.Standalone, appPackage = "com.fastemulator.gba"), false,
         )
-
-    @Test fun `game internal core is current`() =
-        assertExactlyOneCurrent("cur-g-int", EmulatorChoice(EmulatorSource.Internal, "mgba_libretro"), true)
 
     @Test fun `game retroarch core is current`() =
         assertExactlyOneCurrent("cur-g-ra", EmulatorChoice(EmulatorSource.RetroArch, "mgba_libretro"), true)
@@ -131,7 +139,7 @@ class MappingCurrentSelectionTest {
 
     @Test fun `game scope drops the platform wide actions and platform scope keeps them`() {
         val f = fixture("cur-actions")
-        f.config.setPlatformChoice("GBA", EmulatorChoice(EmulatorSource.Internal, "mgba_libretro"))
+        f.config.setPlatformChoice("GBA", EmulatorChoice(EmulatorSource.RetroArch, "mgba_libretro"))
         val scoped = f.builder.buildPlatformMapping("GBA", "GBA", showAll = true, romId = f.romId)
         assertTrue(scoped.items.none { it is MappingItem.Action })
         assertEquals(f.romId, scoped.romId)

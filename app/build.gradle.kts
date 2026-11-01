@@ -49,16 +49,6 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
-        }
-
-        externalNativeBuild {
-            cmake {
-                arguments("-DANDROID_STL=c++_shared")
-            }
-        }
-
         buildConfigField("String", "BUILD_DATE", "\"${buildDate()}\"")
         buildConfigField("String", "GIT_HASH", "\"${gitCommitHash()}\"")
         buildConfigField("String", "SCREENSCRAPER_DEV_ID", "\"${screenScraperProperty("screenscraper.devid")}\"")
@@ -67,14 +57,15 @@ android {
 
     buildFeatures {
         buildConfig = true
-        prefab = true
     }
 
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
-        }
+    packaging {
+        jniLibs.excludes += setOf("lib/x86/**", "lib/x86_64/**")
+    }
+
+    sourceSets.configureEach {
+        // Ignore leftover downloaded cores; native libraries from frontend dependencies remain.
+        jniLibs.setSrcDirs(emptyList<String>())
     }
 
     signingConfigs {
@@ -131,7 +122,7 @@ android {
 }
 
 dependencies {
-    implementation(project(":piannoli-igm"))
+    implementation(project(":piannoli-ui"))
     implementation(project(":piannoli-core"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.core.splashscreen)
@@ -150,7 +141,6 @@ dependencies {
     implementation("org.apache.commons:commons-compress:1.27.1")
     implementation("org.tukaani:xz:1.10")
     implementation("io.legere:pdfiumandroid:1.0.35")
-    implementation("com.google.oboe:oboe:1.9.3")
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
     implementation(libs.coil.compose)

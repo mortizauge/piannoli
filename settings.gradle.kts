@@ -25,5 +25,4 @@ dependencyResolutionManagement {
 rootProject.name = "Piannoli"
 include(":app")
 include(":piannoli-ui")
-include(":piannoli-igm")
 include(":piannoli-core")

@@ -13,7 +13,4 @@ sealed interface LaunchTarget {
         val packageName: String
     ) : LaunchTarget
 
-    data class Embedded(
-        val corePath: String
-    ) : LaunchTarget
 }

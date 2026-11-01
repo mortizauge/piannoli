@@ -29,6 +29,7 @@ class LaunchManagerStandalonePickTest {
     private val delfinoLauncher = mockk<DelfinoLauncher>(relaxed = true)
     private val retroArchLauncher = mockk<RetroArchLauncher>(relaxed = true)
     private val gameOverrides = mockk<dev.piannoli.scorza.db.GameOverrideStore>(relaxed = true)
+    private val context = mockk<android.content.Context>(relaxed = true)
 
     private fun rom(root: File): Rom {
         val romFile = File(root, "roms/3ds/Zelda.3ds").apply { parentFile!!.mkdirs(); writeText("x") }
@@ -45,6 +46,8 @@ class LaunchManagerStandalonePickTest {
     private fun manager(root: File): LaunchManager {
         val settings = mockk<SettingsRepository>(relaxed = true)
         every { settings.sdCardRoot } returns root.absolutePath
+        every { settings.retroArchPackage } returns "com.retroarch"
+        every { context.filesDir } returns root
         every { gameOverrides.get(any()) } returns null
         every { platformConfig.getPlatformChoice("3DS") } returns
             dev.piannoli.scorza.config.EmulatorChoice(dev.piannoli.scorza.config.EmulatorSource.Standalone)
@@ -57,7 +60,7 @@ class LaunchManagerStandalonePickTest {
         val activeMappingHolder = mockk<ActiveMappingHolder>(relaxed = true)
         every { activeMappingHolder.active } returns MutableStateFlow<DeviceMapping?>(null)
         return LaunchManager(
-            context = mockk(relaxed = true),
+            context = context,
             settings = settings,
             platformConfig = platformConfig,
             retroArchLauncher = retroArchLauncher,
@@ -66,7 +69,6 @@ class LaunchManagerStandalonePickTest {
             delfinoLauncher = delfinoLauncher,
             launchState = mockk(relaxed = true),
             activeMappingHolder = activeMappingHolder,
-            atomicRename = mockk(relaxed = true),
             gameOverrides = gameOverrides,
         )
     }
@@ -181,6 +183,30 @@ class LaunchManagerStandalonePickTest {
 
         assertEquals(DELFINO, delfinoPackage())
         verify(exactly = 0) { apkLauncher.launchWithRom(any(), any(), any()) }
+    }
+
+    @Test fun `an unset platform launches the installed standalone despite its RetroArch default core`() {
+        val root = tmp.newFolder()
+        val mgr = manager(root)
+        val game = gcRom(root)
+        every { platformConfig.getCoreName("GC") } returns "dolphin_libretro"
+        every { platformConfig.getUserAppMapping("GC") } returns null
+        every { platformConfig.getFirstInstalledApp("GC", any()) } returns AppConfig(DOLPHIN)
+        mgr.launchRom(game)
+        assertEquals(DOLPHIN, launchedPackage(root))
+    }
+
+    @Test fun `an unset platform with no external app reports missing RetroArch`() {
+        val root = tmp.newFolder()
+        val mgr = manager(root)
+        val game = gcRom(root)
+        every { platformConfig.getCoreName("GC") } returns "dolphin_libretro"
+        every { platformConfig.getFirstInstalledApp("GC", any()) } returns null
+        every { context.packageManager.getPackageInfo("com.retroarch", 0) } throws android.content.pm.PackageManager.NameNotFoundException()
+        val dialog = mgr.launchRom(game) as dev.piannoli.scorza.ui.screens.DialogState.MissingApp
+        assertEquals("com.retroarch", dialog.packageName)
+        assertEquals("GC", dialog.platformTag)
+        verify(exactly = 0) { retroArchLauncher.launchRetroArchIntent(any(), any(), any(), any()) }
     }
 
     companion object {

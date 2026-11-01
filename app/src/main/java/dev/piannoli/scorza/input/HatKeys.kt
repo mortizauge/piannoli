@@ -3,10 +3,7 @@ package dev.piannoli.scorza.input
 import android.view.KeyEvent
 
 /**
- * Shortcut chords are stored as Android keycodes, but pads that report the D-pad as hat axes
- * (Retroid built-in, GameSir, others) never produce a KEYCODE_DPAD_*, so a D-pad direction could
- * not take part in a chord at all. This bridges hat axes to the D-pad keycodes, the same way the
- * analog triggers are bridged to KEYCODE_BUTTON_L2 / R2.
+ * Bridges controller hat axes to Android D-pad keycodes for the frontend keyboard.
  */
 object HatKeys {
     const val PRESS_THRESHOLD = 0.5f
@@ -31,8 +28,7 @@ object HatKeys {
 
 /**
  * Per-device hat state with press/release hysteresis, emitting D-pad keycode down/up events.
- * Shared by the launcher and IGM shortcut binding screens and by the IGM's gameplay shortcut
- * matcher, so all three see a hat D-pad as the same keycodes a keycode D-pad already produces.
+ * Lets the frontend keyboard accept a hat D-pad just like a keycode D-pad.
  */
 class HatKeySync {
 

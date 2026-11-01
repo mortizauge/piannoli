@@ -112,7 +112,6 @@ class SettingsInputHandlerTest {
             settings = settings,
             platformConfig = mockk(relaxed = true),
             installedCoreService = mockk(relaxed = true),
-            globalOverrides = mockk(relaxed = true),
             appsRepository = apps,
             setupCoordinator = mockk(relaxed = true),
             inputTesterController = mockk(relaxed = true),

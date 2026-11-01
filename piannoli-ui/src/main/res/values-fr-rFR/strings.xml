@@ -7,7 +7,6 @@
     <string name="label_play">JOUER</string>
     <string name="label_launch">DÉMARRER</string>
     <string name="label_open">OUVRIR</string>
-    <string name="label_save">SAUVEGARDER</string>
     <string name="label_load">CHARGER</string>
     <string name="label_change">CHANGER</string>
     <string name="label_firmware">FIRMWARE</string>
@@ -25,8 +24,6 @@
     <string name="label_continue">CONTINUER</string>
     <string name="label_new_folder">NOUVEAU</string>
     <string name="label_parent">PARENT</string>
-    <string name="label_slot">EMPLACEMENT</string>
-    <string name="label_disc">DISQUE</string>
     <string name="label_use_location">UTILISER CET EMPLACEMENT</string>
     <string name="label_quit">QUITTER</string>
     <string name="label_stop">ARRÊTER</string>
@@ -40,38 +37,17 @@
     <string name="label_rename">RENOMMER</string>
     <string name="label_set">DÉFINIR</string>
     <string name="label_clear">EFFACER</string>
-    <string name="label_press">APPUYER</string>
     <string name="label_hold_buttons" tools:ignore="TypographyEllipsis">MAINTENIR UN OU PLUSIEURS BOUTONS</string>
     <string name="label_info">INFO</string>
     <!-- Bottom-bar button. RA = RetroAchievements. -->
-    <string name="label_ra_settings">PARAMÈTRES RA</string>
-    <string name="label_details">DÉTAILS</string>
-    <string name="label_all">TOUT</string>
-    <string name="label_unlocked">DÉBLOQUÉ</string>
-    <string name="label_locked">VERROUILLÉ</string>
-    <string name="label_reset_all">RÉINITIALISER TOUT</string>
     <string name="label_remap">RÉATTRIBUER</string>
     <string name="label_unmap">DISSOCIER</string>
-    <string name="label_swap">ÉCHANGER</string>
     <string name="label_grant">AUTORISER</string>
     <!-- In-game menu action: reassign connected controllers to player slots. -->
-    <string name="igm_reassign_players">Réassigner les joueurs</string>
     <!-- In-game shortcut actions -->
-    <string name="shortcut_action_save_state">Enregistrer l\'état</string>
-    <string name="shortcut_action_load_state">Charger l\'état</string>
-    <string name="shortcut_action_reset_game">Réinitialiser le jeu</string>
-    <string name="shortcut_action_save_and_quit">Sauvegarder et quitter</string>
     <!-- In-game shortcut action. "(Hold)" means it triggers on a long-press of the shortcut. -->
-    <string name="shortcut_action_save_and_quit_hold">Sauvegarder et quitter (maintenir)</string>
     <!-- In-game shortcut action: cycle through the video scaling modes. -->
-    <string name="shortcut_action_cycle_scaling">Changer l\'échelle</string>
     <!-- In-game shortcut action: cycle through the shader presets. -->
-    <string name="shortcut_action_cycle_shader">Changer le Shader</string>
-    <string name="shortcut_action_toggle_ff">Activer/désactiver l\'avance rapide</string>
-    <string name="shortcut_action_hold_ff">Maintenir l\'Avance rapide</string>
-    <string name="shortcut_action_open_guide">Ouvrir le guide</string>
-    <string name="shortcut_action_open_menu">Ouvrir le menu en jeu</string>
-    <string name="shortcut_action_toggle_show_fps">Activer/désactiver l\'affichage FPS</string>
     <string name="settings_title">Paramètres</string>
     <!-- Settings categories -->
     <string name="settings_general">Généraux</string>
@@ -152,7 +128,6 @@
     <string name="binding_axis_pos">Axe %1$d+</string>
     <!-- Input binding label. %1$d is the joystick axis index; - is the negative direction. -->
     <string name="binding_axis_neg">Axe %1$d-</string>
-    <string name="setting_shortcuts">Raccourcis</string>
     <!-- Input setting toggle: swap the on-screen positions of the Play and Resume actions. -->
     <string name="setting_swap_play_resume">Permuter la lecture et la reprise</string>
     <!-- Input setting toggle: controls whether the in-game Quit returns to the main menu. -->
@@ -428,7 +403,6 @@
     <!-- %1$s = app name. -->
     <string name="dialog_missing_app">%1$s n\'est pas installé.</string>
     <!-- %1$s = folder path. -->
-    <string name="dialog_missing_bios_header">Au moins un fichier BIOS est requis dans %1$s:</string>
     <string name="dialog_title_missing_core">Noyau manquant</string>
     <string name="dialog_title_missing_app">Application manquante</string>
     <string name="dialog_title_launch_error">Échec du lancement</string>
@@ -503,67 +477,25 @@
     <!-- RetroAchievements -->
     <string name="ra_logged_in_as">Connecté en tant que</string>
     <!-- RA = RetroAchievements. -->
-    <string name="ra_login_failed">RA: Échec de la connexion</string>
     <string name="ra_login_invalid">Nom d\'utilisateur ou mot de passe invalide</string>
-    <string name="ra_status_online">En ligne</string>
-    <string name="ra_status_offline">Hors ligne</string>
     <!-- %1$d = achievements awaiting sync. -->
-    <string name="ra_status_offline_pending">Hors ligne • %1$d en attente de synchronisation</string>
-    <string name="ra_detect_not_logged_in">Non connecté</string>
-    <string name="ra_detect_identifying">Identification du jeu…</string>
-    <string name="ra_detect_not_recognized">Jeu non reconnu</string>
-    <string name="ra_detect_no_achievements">Aucun succès publié</string>
-    <string name="ra_detect_initializing">Initialisation…</string>
-    <string name="ra_detect_mem_failed">L\'initialisation de la mémoire a échoué</string>
     <!-- %d = achievement count. -->
-    <plurals name="ra_detect_active">
-        <item quantity="one">Actif • %d réussit</item>
-        <item quantity="other">Actif • %d réussit</item>
-    </plurals>
     <!-- %d = number of achievements synced. -->
-    <plurals name="ra_sync_done">
-        <item quantity="one">Succès %d synchronisé</item>
-        <item quantity="other">Succès %d synchronisés</item>
-    </plurals>
     <!-- Counts of synced and failed achievements. -->
-    <string name="ra_sync_partial">%1$d synchronisé, %2$d a échoué</string>
     <!-- OSD toast. %1$s = save slot name. -->
-    <string name="osd_state_saved">Enregistré dans %1$s</string>
     <!-- OSD toast. %1$s = save slot name. -->
-    <string name="osd_state_loaded">Chargé %1$s</string>
     <!-- OSD toast. %1$s = save slot name. -->
-    <string name="osd_state_deleted">%1$s supprimé</string>
-    <string name="osd_reset">Réinitialiser</string>
     <!-- OSD toast. %1$s = scaling mode name. -->
-    <string name="osd_scaling">Mise à l\'échelle : %1$s</string>
     <!-- OSD toast. %1$s = shader preset name. -->
-    <string name="osd_shader">Shader : %1$s</string>
     <!-- OSD toast. %1$s = mode/item name. -->
-    <string name="osd_switched_to">Basculé vers %1$s</string>
     <!-- OSD toast. %1$s = game name (setting saved per-game). -->
-    <string name="osd_saved_for">Enregistré pour %1$s</string>
-    <string name="osd_saved_for_game">Enregistré pour ce jeu</string>
     <!-- OSD toast. %1$s = controller name, %2$s = player slot. -->
-    <string name="osd_controller_connected_named">%1$s connecté à %2$s</string>
-    <string name="osd_buttons_reset">Rétablir les boutons par défaut</string>
     <!-- %1$d = disc number (multi-disc games). -->
-    <string name="osd_disc_fallback">Disque %1$d</string>
-    <string name="igm_quit">Quitter</string>
-    <string name="igm_cheats">Triches</string>
-    <string name="title_cheats">Triches</string>
-    <string name="label_restore_session">RESTAURER LA DERNIÈRE SESSION</string>
     <!-- Scaling mode: use the size the emulator core reports. -->
-    <string name="scaling_core_reported">Noyau rapporté</string>
-    <string name="scaling_integer">Entier</string>
     <!-- Scaling mode: integer scaling pushed beyond 1x to fill more of the screen. -->
-    <string name="scaling_integer_overscale">Integer Overscale</string>
     <!-- Scaling mode: fit the screen while keeping the aspect ratio. -->
-    <string name="scaling_aspect_screen">Aspect de l\'écran</string>
-    <string name="scaling_fullscreen">Plein écran</string>
     <!-- Indicates a setting applies globally (all games). -->
-    <string name="override_source_global">Globale</string>
     <!-- Indicates a setting applies only to the current game. -->
-    <string name="override_source_game">Ce jeu</string>
     <string name="device_controller">Contrôleur</string>
     <!-- OSD toast. %1$d = player number, %2$s = controller name. -->
     <string name="osd_controller_connected">P%1$d: %2$s</string>
@@ -572,64 +504,30 @@
     <!-- OSD toast. %1$s = controller name. -->
     <string name="osd_controller_disconnected">%1$s déconnecté</string>
     <!-- RA login OSD. %1$s = username, %2$s = display name, %3$d/%4$d = unlocked/total achievements. -->
-    <string name="ra_login_success">RA: %1$s (%2$s) · %3$d/%4$d débloqué</string>
-    <string name="ra_init_failed">RA: Initialisation échouée</string>
-    <string name="ra_load_not_recognized">RA: Jeu non reconnu</string>
-    <string name="ra_load_no_achievements">RA: Pas de succès pour ce jeu</string>
-    <string name="ra_load_offline_pending">RA: Hors ligne (données de jeu indisponibles)</string>
     <!-- Credits -->
     <string name="credits_title">Crédits et licences</string>
     <!-- Core picker / nav -->
     <string name="no_compatible_cores">Aucun noyau compatible trouvé</string>
     <string name="no_collections">Aucune collection</string>
     <string name="title_child_collections">Collections enfants</string>
-    <string name="title_shortcuts">Raccourcis</string>
-    <string name="shortcut_hold_prompt" tools:ignore="TypographyEllipsis">Maintenir un ou plusieurs boutons...</string>
     <!-- Update download -->
     <string name="update_retry">RÉESSAYER</string>
     <string name="restart_required">Redémarrage requis pour appliquer les modifications.</string>
     <!-- IGM screen titles -->
-    <string name="igm_settings">Paramètres</string>
-    <string name="igm_video">Vidéo</string>
-    <string name="igm_advanced">Avancé</string>
-    <string name="igm_shader_settings">Paramètres Shader</string>
-    <string name="igm_emulator">Émulateur</string>
-    <string name="igm_save_changes">Enregistrer les modifications</string>
-    <string name="igm_input">Entrée</string>
-    <string name="igm_button_mappings">Mappages des boutons</string>
-    <string name="igm_left_stick_dpad">Stick gauche comme D-Pad</string>
-    <string name="igm_dpad_mode">Mode D-Pad (BETA)</string>
     <!-- D-Pad Mode value: 8 directions. -->
-    <string name="value_dpad_8way">8 Voies</string>
     <!-- D-Pad Mode value: 4 directions. -->
-    <string name="value_dpad_4way">4 Voies</string>
-    <string name="igm_save_and_quit">Sauvegarder et quitter</string>
     <string name="title_guide">Guide</string>
     <string name="guide_zoom">ZOOM</string>
     <!-- IGM info labels -->
-    <string name="info_core">Noyau</string>
-    <string name="info_rom">ROM</string>
     <!-- Info label: whether the ROM was extracted from an archive. -->
-    <string name="info_extracted">Extrait</string>
-    <string name="info_save">Enregistrer</string>
-    <string name="info_renderer">Moteur de rendu</string>
-    <string name="info_game_id">ID du jeu</string>
-    <string name="info_ra_detection">Détection de Succès</string>
     <!-- IGM dialogs -->
     <!-- %1$s = save slot name. -->
-    <string name="igm_delete_slot">Supprimer %1$s?</string>
     <string name="press_button_prompt" tools:ignore="TypographyEllipsis">Appuyez sur un bouton...</string>
     <!-- Achievements -->
     <!-- %1$d = unlocked count, %2$d = total. -->
-    <string name="ach_title">Succès (%1$d/%2$d)</string>
     <!-- Compact points label. %1$d = points. -->
-    <string name="ach_points_short">%1$dpts</string>
     <!-- %1$d = points. -->
-    <string name="ach_points">%1$d points</string>
     <!-- %1$s = date the achievement was unlocked. -->
-    <string name="ach_unlocked_date">%1$s Débloqué</string>
-    <string name="ach_unlocked">Débloqué</string>
-    <string name="ach_locked">Verrouillé</string>
     <string name="setting_portrait_margin">Marge en portrait</string>
     <!-- Advanced setting: adjust the on-screen viewport rectangle. -->
     <string name="setting_screen_geometry">Géométrie de l\'écran</string>
@@ -644,7 +542,6 @@
     <string name="label_show_all">VOIR TOUT</string>
     <string name="label_show_installed">VOIR INSTALLÉ</string>
     <!-- The core is not bundled with the app. -->
-    <string name="value_not_bundled">NON INCLUS</string>
     <string name="value_no_overrides">Pas de surcharge par jeu</string>
     <string name="value_no_firmware">Aucun firmware n\'est requis pour ce noyau.</string>
     <string name="mapping_action_bios">Fichiers BIOS</string>
@@ -687,10 +584,6 @@
         <item quantity="other">%d éléments</item>
     </plurals>
     <!-- OSD toast. %d = number of cheats restored. -->
-    <plurals name="osd_cheats_restored">
-        <item quantity="one">%d triche restaurée</item>
-        <item quantity="other">%d triches restaurées</item>
-    </plurals>
     <string name="regenerate_system_folders_none">Tous les dossiers système sont déjà présents</string>
     <!-- %d = number of system folders created. -->
     <plurals name="regenerate_system_folders_result">
@@ -700,7 +593,7 @@
     <string name="value_no_cores_found">Aucun Noyau Trouvé</string>
     <string name="label_clear_override">EFFACER</string>
     <!-- %1$s = platform name. -->
-    <string name="dialog_reset_platform_confirm">Réinitialiser %1$s? Cela efface votre sélection d\'émulateurs pour cette plateforme et restaure la valeur par défaut groupée.</string>
+    <string name="dialog_reset_platform_confirm">Réinitialiser %1$s ? Un émulateur externe installé est privilégié. Si aucun n\'est disponible, configurez-en un.</string>
     <!-- RA achievement preload. %1$s = game name. -->
     <string name="ra_preload_progress">Préchargement de %1$s</string>
     <string name="ra_preload_none">Aucun succès trouvé pour ce jeu</string>

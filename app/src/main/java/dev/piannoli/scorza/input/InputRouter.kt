@@ -3,7 +3,6 @@ package dev.piannoli.scorza.input
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.scopes.ActivityScoped
-import dev.piannoli.igm.ShortcutAction
 import dev.piannoli.scorza.config.PlatformConfig
 import dev.piannoli.scorza.input.screen.ControllerDetailInputHandler
 import dev.piannoli.scorza.input.screen.ControllersInputHandler
@@ -22,7 +21,6 @@ import dev.piannoli.scorza.launcher.InstalledCoreService
 import dev.piannoli.scorza.launcher.LaunchManager
 import dev.piannoli.scorza.navigation.LauncherScreen
 import dev.piannoli.scorza.navigation.NavigationController
-import dev.piannoli.scorza.settings.GlobalOverridesManager
 import dev.piannoli.scorza.settings.SettingsRepository
 import dev.piannoli.scorza.ui.components.CREDITS_ROOT_ROWS
 import dev.piannoli.scorza.ui.components.CreditsRootRow
@@ -58,9 +56,7 @@ class InputRouter @Inject constructor(
     private val gameOverrideStore: dev.piannoli.scorza.db.GameOverrideStore,
     private val installedCoreService: InstalledCoreService,
     private val emulatorMappingBuilder: EmulatorMappingBuilder,
-    private val globalOverrides: GlobalOverridesManager,
     private val launcherActions: LauncherActions,
-    private val bindingController: BindingController,
     private val screenInputRegistry: dev.piannoli.scorza.input.runtime.ScreenInputRegistry,
     @ApplicationContext private val context: Context,
     private val settings: SettingsRepository,
@@ -213,7 +209,6 @@ class InputRouter @Inject constructor(
         is LauncherScreen.CollectionPicker  -> collectionPickerHandler()
         is LauncherScreen.ChildPicker       -> childPickerHandler()
         is LauncherScreen.AppPicker         -> appPickerHandler()
-        is LauncherScreen.ShortcutBinding   -> shortcutBindingHandler()
         is LauncherScreen.Credits           -> creditsHandler()
         is LauncherScreen.CreditsSection    -> creditsSectionHandler()
         is LauncherScreen.InstalledCores    -> installedCoresHandler()
@@ -464,28 +459,6 @@ class InputRouter @Inject constructor(
             nav.replaceTop(copy(checkedIndices = newChecked))
         },
         onBack = { settingsHandler.confirmAppPicker(this) },
-    )
-
-    private fun shortcutBindingHandler() = scrollable<LauncherScreen.ShortcutBinding>(
-        onMove = { idx -> if (listening) this else copy(selectedIndex = idx) },
-        onConfirm = {
-            if (!listening) {
-                nav.replaceTop(copy(listening = true, heldKeys = emptySet(), countdownMs = 0))
-                bindingController.startListening()
-            }
-        },
-        onBack = {
-            bindingController.stopListening()
-            globalOverrides.saveShortcuts(shortcuts)
-            nav.pop()
-        },
-        onNorth = {
-            if (!listening) {
-                ShortcutAction.entries.getOrNull(selectedIndex)?.let { action ->
-                    nav.replaceTop(copy(shortcuts = shortcuts + (action to emptySet())))
-                }
-            }
-        },
     )
 
     private fun creditsHandler() = scrollable<LauncherScreen.Credits>(

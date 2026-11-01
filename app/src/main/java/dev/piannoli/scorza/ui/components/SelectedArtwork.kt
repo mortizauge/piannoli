@@ -2,287 +2,355 @@ package dev.piannoli.scorza.ui.components
 
 import android.graphics.BitmapFactory
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.State
-import androidx.compose.runtime.key
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
+import dev.piannoli.scorza.settings.ArtScale
 import dev.piannoli.scorza.util.ErrorLog
 import dev.piannoli.ui.components.LocalUiActive
+import java.io.File
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
-internal enum class ArtworkKind { GAME, SYSTEM }
+internal const val ARTWORK_WINDOW_RADIUS = 10
+private const val MAX_ORIGINAL_ARTWORK_PX = 1024
+
+/** One decodable artwork file for a list row, sized for the panel that displays it (in pixels). */
+internal data class ArtworkRequest(
+    val path: String,
+    val revision: Long,
+    val width: Int,
+    val height: Int,
+    val scale: ArtScale,
+)
+
+/** The selected row plus at most [ARTWORK_WINDOW_RADIUS] list rows on each side; rows without artwork are null. */
+internal data class ArtworkWindow(val selectedIndex: Int, val start: Int, val requests: List<ArtworkRequest?>) {
+    val selected: ArtworkRequest? get() = requests.getOrNull(selectedIndex - start)
+
+    companion object {
+        val EMPTY = ArtworkWindow(0, 0, emptyList())
+    }
+}
+
+internal inline fun artworkWindow(
+    size: Int,
+    selectedIndex: Int,
+    request: (Int) -> ArtworkRequest?,
+): ArtworkWindow {
+    if (selectedIndex !in 0 until size) return ArtworkWindow.EMPTY
+    val start = max(0, selectedIndex - ARTWORK_WINDOW_RADIUS)
+    val end = min(size - 1, selectedIndex + ARTWORK_WINDOW_RADIUS)
+    return ArtworkWindow(selectedIndex, start, (start..end).map(request))
+}
 
 /**
- * Decodes selected artwork with a single background worker. Cache hits publish immediately; misses are queued
- * without delay. The worker decodes the newest pending focused selection first, then a small latest-first
- * backlog of recently selected sources. Decoded artwork is cached even after its selection is superseded, but only
- * while at least one owning artwork category remains enabled. Hiding a category drops its pending work, not the
- * shared bounded cache. Artwork is only published to subscribers that still request that exact source while
- * their UI is active.
+ * Largest power-of-two sample size whose decoded image still covers what [request]'s panel can display, so
+ * artwork is never decoded larger than needed nor degraded below the panel's pixel density. Never upscales.
  */
-internal class SelectionArtworkLoader<T>(
-    private val decoder: (String) -> T?,
+internal fun artworkSampleSize(sourceWidth: Int, sourceHeight: Int, request: ArtworkRequest): Int {
+    if (sourceWidth <= 0 || sourceHeight <= 0) return 1
+    val widthScale = request.width.toDouble() / sourceWidth
+    val heightScale = request.height.toDouble() / sourceHeight
+    val displayScale = when (request.scale) {
+        ArtScale.FIT -> min(widthScale, heightScale)
+        ArtScale.FIT_WIDTH -> widthScale
+        ArtScale.FIT_HEIGHT -> heightScale
+        ArtScale.ORIGINAL -> 1.0
+    }
+    var sample = 1
+    if (displayScale > 0) {
+        while (displayScale * sample * 2 <= 1.0) sample *= 2
+    }
+    if (request.scale == ArtScale.ORIGINAL || displayScale <= 0) {
+        while (max(sourceWidth, sourceHeight) / sample > MAX_ORIGINAL_ARTWORK_PX) sample *= 2
+    }
+    return sample
+}
+
+/**
+ * Decoded artwork for the single list currently on screen. A list owns a [Session]; opening another session or
+ * closing the owner drops every cached reference and pending request, and a stale owner's close is ignored.
+ *
+ * Only artwork in the current [ArtworkWindow] is wanted. One worker decodes the selected row first, then rows
+ * alternately outward, starting on the side the selection last moved towards. Moving inside the window keeps the
+ * overlap and only reprioritises; any cached artwork that leaves the window (or a jump beyond it) is dropped. A
+ * decode that is already running is allowed to finish but its result is discarded once it is no longer wanted.
+ * The byte budget evicts the rows farthest from the selection, never the selected one, and rows rejected for budget
+ * or failing to decode are not retried until the window changes. Paused sessions keep their window but start no
+ * decode. References are only dropped, never recycled, because Compose may still be drawing them.
+ */
+internal class ListArtworkCache<T>(
+    private val decoder: (ArtworkRequest) -> T?,
     private val sizeOf: (T) -> Int,
     private val scope: CoroutineScope,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val maxCacheBytes: Int = 24 * 1024 * 1024,
-    private val maxBacklog: Int = 6,
 ) {
-    private data class Source(val path: String, val revision: Long)
-    private data class Entry<T>(val artwork: T, val bytes: Int)
-    private class Subscriber<T>(val source: Source, val kind: ArtworkKind) {
-        val result = CompletableDeferred<T?>()
-        var focused = false
-    }
+    class Session internal constructor()
+
+    private class Entry<T>(val artwork: T, val bytes: Int)
 
     private val lock = Any()
-    private val cache = LinkedHashMap<Source, Entry<T>>(16, 0.75f, true)
+    private var session: Session? = null
+    private var active = false
+    private var window = ArtworkWindow.EMPTY
+    private var direction = 1
+    private var priority: List<ArtworkRequest> = emptyList()
+    private var budgetRank = Int.MAX_VALUE
+    private val cache = HashMap<ArtworkRequest, Entry<T>>()
     private var cacheBytes = 0L
-    private val backlog = ArrayDeque<Source>()
-    private val pendingOwners = mutableMapOf<Source, MutableSet<ArtworkKind>>()
-    private val enabledKinds = ArtworkKind.entries.toMutableSet()
-    private val subscribers = mutableListOf<Subscriber<T>>()
-    private var inFlight: Source? = null
-    private val inFlightOwners = mutableSetOf<ArtworkKind>()
-    private var inFlightSuperseded = false
+    private var oversized: Pair<ArtworkRequest, T>? = null
+    private val failed = HashSet<ArtworkRequest>()
+    private var inFlightSession: Session? = null
     private var worker: Job? = null
     private val wake = Channel<Unit>(Channel.CONFLATED)
+    private val selectedDecoded = MutableStateFlow(0L)
+
+    /** Changes whenever the selected row's artwork finishes decoding. */
+    val changes: StateFlow<Long> = selectedDecoded
 
     init {
         require(maxCacheBytes > 0)
-        require(maxBacklog > 0)
     }
 
-    fun setEnabled(kind: ArtworkKind, enabled: Boolean) = synchronized(lock) {
-        if (enabled) {
-            enabledKinds.add(kind)
-        } else {
-            enabledKinds.remove(kind)
-            pendingOwners.values.forEach { it.remove(kind) }
-            backlog.removeAll { pendingOwners[it].isNullOrEmpty() }
-            pendingOwners.entries.removeAll { it.value.isEmpty() }
-            inFlightOwners.remove(kind)
-            subscribers.filter { it.kind == kind }.forEach {
-                it.focused = false
-                it.result.complete(null)
-            }
-        }
+    fun open(active: Boolean): Session = synchronized(lock) {
+        clear()
+        this.active = active
+        Session().also { session = it }
     }
 
-    fun cached(path: String, revision: Long, kind: ArtworkKind = ArtworkKind.GAME): T? = synchronized(lock) {
-        if (kind in enabledKinds) cache[Source(path, revision)]?.artwork else null
+    fun close(owner: Session) = synchronized(lock) {
+        if (owner !== session) return
+        clear()
+        session = null
+        active = false
     }
 
-    suspend fun load(
-        path: String,
-        uiActive: Flow<Boolean>,
-        revision: Long = 0L,
-        kind: ArtworkKind = ArtworkKind.GAME,
-        publish: (T?) -> Unit,
-    ) {
-        val subscriber = register(Source(path, revision), kind) ?: return
-        try {
-            var published = false
-            uiActive.collectLatest { focused ->
-                setFocused(subscriber, focused)
-                if (!focused || published) return@collectLatest
-                val artwork = cached(path, revision, kind) ?: subscriber.result.await()
-                currentCoroutineContext().ensureActive()
-                synchronized(lock) {
-                    if (kind in enabledKinds) publish(artwork)
-                }
-                published = true
-            }
-        } finally {
-            synchronized(lock) { subscribers.remove(subscriber) }
-        }
-    }
-
-    private fun register(source: Source, kind: ArtworkKind): Subscriber<T>? {
-        val subscriber = Subscriber<T>(source, kind)
+    fun setActive(owner: Session, active: Boolean) {
         synchronized(lock) {
-            if (kind !in enabledKinds) return null
-            subscribers += subscriber
-            // A new revision makes queued, cached, and in-flight artwork for older revisions of this path stale.
-            backlog.removeAll { it.path == source.path }
-            pendingOwners.keys.removeAll { it.path == source.path && it != source }
-            removeStaleRevisions(source)
-            if (inFlight?.path == source.path && inFlight != source) inFlightSuperseded = true
-            val artwork = cache[source]?.artwork
-            if (artwork != null) {
-                subscriber.result.complete(artwork)
-                return subscriber
+            if (owner !== session) return
+            this.active = active
+        }
+        if (active) start()
+    }
+
+    fun update(owner: Session, window: ArtworkWindow) {
+        synchronized(lock) {
+            if (owner !== session || window == this.window) return
+            val previous = this.window
+            if (previous.requests.isNotEmpty() && window.selectedIndex != previous.selectedIndex) {
+                direction = if (window.selectedIndex > previous.selectedIndex) 1 else -1
             }
-            if (source != inFlight) {
-                pendingOwners.getOrPut(source) { mutableSetOf() }.add(kind)
-                backlog.addLast(source)
-                while (backlog.size > maxBacklog) pendingOwners.remove(backlog.removeFirst())
-            } else {
-                inFlightOwners.add(kind)
+            this.window = window
+            priority = priorityOf(window)
+            budgetRank = Int.MAX_VALUE
+            val wanted = priority.toHashSet()
+            val entries = cache.entries.iterator()
+            while (entries.hasNext()) {
+                val entry = entries.next()
+                if (entry.key !in wanted) {
+                    cacheBytes -= entry.value.bytes
+                    entries.remove()
+                }
             }
+            failed.retainAll(wanted)
+            if (oversized?.first != window.selected) oversized = null
+        }
+        start()
+    }
+
+    fun peek(request: ArtworkRequest): T? = synchronized(lock) {
+        cache[request]?.artwork ?: oversized?.takeIf { it.first == request }?.second
+    }
+
+    private fun priorityOf(window: ArtworkWindow): List<ArtworkRequest> {
+        val order = LinkedHashSet<ArtworkRequest>()
+        fun add(index: Int) {
+            window.requests.getOrNull(index - window.start)?.let(order::add)
+        }
+        add(window.selectedIndex)
+        for (distance in 1..ARTWORK_WINDOW_RADIUS) {
+            add(window.selectedIndex + distance * direction)
+            add(window.selectedIndex - distance * direction)
+        }
+        return order.toList()
+    }
+
+    private fun clear() {
+        cache.clear()
+        cacheBytes = 0
+        oversized = null
+        failed.clear()
+        window = ArtworkWindow.EMPTY
+        priority = emptyList()
+        budgetRank = Int.MAX_VALUE
+        direction = 1
+    }
+
+    private fun start() {
+        synchronized(lock) {
             if (worker == null) worker = scope.launch(dispatcher) { work() }
         }
         wake.trySend(Unit)
-        return subscriber
-    }
-
-    private fun setFocused(subscriber: Subscriber<T>, focused: Boolean) {
-        synchronized(lock) { subscriber.focused = focused && subscriber.kind in enabledKinds }
-        if (focused) wake.trySend(Unit)
     }
 
     private suspend fun work() {
         while (true) {
-            val source = next()
-            if (source == null) {
+            val request = next()
+            if (request == null) {
                 wake.receive()
                 continue
             }
             // Native decoding cannot be interrupted; this single worker is the only caller of the decoder.
             val artwork = try {
-                decoder(source.path)
+                decoder(request)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
                 null
             }
-            finish(source, artwork)
+            finish(request, artwork)
         }
     }
 
-    private fun next(): Source? = synchronized(lock) {
-        var source: Source? = null
-        // Pause queued work while no subscriber's UI is active.
-        while (source == null && subscribers.any { it.focused && it.kind in enabledKinds }) {
-            val current = subscribers.lastOrNull { it.focused && !it.result.isCompleted }?.source
-            val candidate = current?.also { backlog.remove(it) } ?: backlog.removeLastOrNull() ?: break
-            val owners = pendingOwners.remove(candidate).orEmpty().toMutableSet()
-            // A still-requested selection can outlive its eviction from the recent-selection backlog.
-            subscribers.filter { it.source == candidate }.forEach { owners.add(it.kind) }
-            owners.retainAll(enabledKinds)
-            if (owners.isEmpty()) continue
-            val artwork = cache[candidate]?.artwork
-            if (artwork == null) {
-                source = candidate
-                inFlightOwners.clear()
-                inFlightOwners.addAll(owners)
-            } else {
-                complete(candidate, artwork)
-            }
+    private fun next(): ArtworkRequest? = synchronized(lock) {
+        val owner = session
+        if (owner == null || !active) return null
+        priority.withIndex().firstOrNull { (rank, request) ->
+            rank < budgetRank && request !in cache && request !in failed && oversized?.first != request
+        }?.value?.also { inFlightSession = owner }
+    }
+
+    private fun finish(request: ArtworkRequest, artwork: T?) = synchronized(lock) {
+        val owner = inFlightSession
+        inFlightSession = null
+        val rank = priority.indexOf(request)
+        if (owner == null || owner !== session || rank < 0) return
+        val selected = request == window.selected
+        if (artwork == null) {
+            failed += request
+            if (selected) selectedDecoded.value++
+            return
         }
-        inFlight = source
-        inFlightSuperseded = false
-        source
-    }
-
-    private fun finish(source: Source, artwork: T?) = synchronized(lock) {
-        inFlight = null
-        val stillWanted = inFlightOwners.any { it in enabledKinds }
-        inFlightOwners.clear()
-        if (artwork != null && stillWanted && !inFlightSuperseded) store(source, artwork)
-        // Failures complete with null so active requests stop waiting without retrying forever.
-        if (stillWanted) complete(source, artwork.takeUnless { inFlightSuperseded })
-    }
-
-    private fun complete(source: Source, artwork: T?) {
-        subscribers.forEach {
-            if (it.source == source && it.kind in enabledKinds) it.result.complete(artwork)
-        }
-    }
-
-    private fun removeStaleRevisions(source: Source) {
-        val entries = cache.entries.iterator()
-        while (entries.hasNext()) {
-            val entry = entries.next()
-            if (entry.key.path == source.path && entry.key != source) {
-                cacheBytes -= entry.value.bytes
-                entries.remove()
-            }
-        }
-    }
-
-    private fun store(source: Source, artwork: T) {
         val bytes = sizeOf(artwork)
-        if (bytes <= 0 || bytes > maxCacheBytes) return
-        cache.remove(source)?.let { cacheBytes -= it.bytes }
-        cache[source] = Entry(artwork, bytes)
-        cacheBytes += bytes
-        val entries = cache.entries.iterator()
-        while (cacheBytes > maxCacheBytes && entries.hasNext()) {
-            cacheBytes -= entries.next().value.bytes
-            // Drop only the cache reference; Compose may still be displaying this bitmap.
-            entries.remove()
+        if (bytes <= 0 || bytes > maxCacheBytes) {
+            // The selected row is still shown, but oversized artwork never displaces the window's cache.
+            if (selected) oversized = request to artwork else failed += request
+        } else {
+            cache[request] = Entry(artwork, bytes)
+            cacheBytes += bytes
+            evictFarthest()
+        }
+        if (selected) selectedDecoded.value++
+    }
+
+    private fun evictFarthest() {
+        while (cacheBytes > maxCacheBytes) {
+            val victim = cache.keys.maxBy { priority.indexOf(it) }
+            cacheBytes -= cache.remove(victim)?.bytes ?: 0
+            // Rows at or beyond the evicted rank would only displace nearer artwork again.
+            budgetRank = min(budgetRank, priority.indexOf(victim))
         }
     }
 }
 
-// Shared across library screens and composition restarts, bounded by decoded bitmap bytes. Its worker scope
-// intentionally lives for the app process, like the cache.
-private val libraryArtworkLoader = SelectionArtworkLoader<ImageBitmap>(decoder = { path ->
-    try {
+private fun decodeArtwork(request: ArtworkRequest): ImageBitmap? {
+    // Unassigned system and category art resolves to a conventional path that usually does not exist.
+    if (!File(request.path).isFile) return null
+    return try {
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(path, options)
-        var sampleSize = 1
-        while (options.outWidth / sampleSize > 1024 || options.outHeight / sampleSize > 1024) {
-            sampleSize *= 2
-        }
+        BitmapFactory.decodeFile(request.path, options)
         options.inJustDecodeBounds = false
-        options.inSampleSize = sampleSize
-        BitmapFactory.decodeFile(path, options)?.asImageBitmap()
+        options.inSampleSize = artworkSampleSize(options.outWidth, options.outHeight, request)
+        val bitmap = BitmapFactory.decodeFile(request.path, options)
+        if (bitmap == null) ErrorLog.write("Unable to decode artwork: ${request.path}")
+        bitmap?.prepareToDraw()
+        bitmap?.asImageBitmap()
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (error: Exception) {
-        ErrorLog.error("Unable to decode selected artwork: $path", error)
+        ErrorLog.error("Unable to decode artwork: ${request.path}", error)
         null
-    }
-}, sizeOf = { it.asAndroidBitmap().byteCount }, scope = CoroutineScope(SupervisorJob()))
-
-@Composable
-internal fun ArtworkVisibility(gameEnabled: Boolean, systemEnabled: Boolean) {
-    SideEffect {
-        libraryArtworkLoader.setEnabled(ArtworkKind.GAME, gameEnabled)
-        libraryArtworkLoader.setEnabled(ArtworkKind.SYSTEM, systemEnabled)
     }
 }
 
-@Composable
-internal fun rememberSelectedArtwork(
-    path: String?,
-    revision: Long,
-    enabled: Boolean,
-    kind: ArtworkKind = ArtworkKind.GAME,
-): State<ImageBitmap?> = rememberSelectedArtwork(
-    path, revision, enabled, LocalUiActive.current, libraryArtworkLoader, kind,
+// One list is on screen at a time, so a single process-wide cache and worker serve every library list.
+private val libraryArtworkCache = ListArtworkCache(
+    decoder = ::decodeArtwork,
+    sizeOf = { it.asAndroidBitmap().byteCount },
+    scope = CoroutineScope(SupervisorJob()),
 )
 
+/** Pixel size of an artwork panel taking [widthPercent] of a list row measured as [rowSize]. */
 @Composable
-internal fun <T> rememberSelectedArtwork(
-    path: String?,
-    revision: Long,
-    enabled: Boolean,
+internal fun artworkPanelSize(
+    rowSize: IntSize,
+    widthPercent: Int,
+    topPadding: Dp = 0.dp,
+    heightFraction: Float = 1f,
+): IntSize? {
+    if (widthPercent <= 0 || rowSize.width <= 0 || rowSize.height <= 0) return null
+    val verticalPadding = maxOf(topPadding, LocalArtworkStatusBarHeight.current.value)
+    val (startPx, verticalPx) = with(LocalDensity.current) { 16.dp.roundToPx() to verticalPadding.roundToPx() }
+    val width = (rowSize.width * widthPercent / 100f).roundToInt() - startPx
+    val height = ((rowSize.height - 2 * verticalPx) * heightFraction).roundToInt()
+    return if (width > 0 && height > 0) IntSize(width, height) else null
+}
+
+/**
+ * Opens a cache session for the list identified by [listKey] (null when artwork is hidden), keeps the cache's
+ * window in sync with [window] and returns the selected row's artwork if it is already decoded.
+ */
+@Composable
+internal fun rememberListArtwork(listKey: Any?, window: ArtworkWindow): ImageBitmap? =
+    rememberListArtwork(listKey, window, LocalUiActive.current, libraryArtworkCache)
+
+@Composable
+internal fun <T> rememberListArtwork(
+    listKey: Any?,
+    window: ArtworkWindow,
     uiActive: StateFlow<Boolean>,
-    loader: SelectionArtworkLoader<T>,
-    kind: ArtworkKind = ArtworkKind.GAME,
-): State<T?> = key(path, revision, enabled, uiActive, loader, kind) {
-    // produceState otherwise retains the previous selection's image until its new producer runs.
-    val initialArtwork = if (enabled && path != null && uiActive.value) loader.cached(path, revision, kind) else null
-    produceState(initialArtwork) {
-        if (enabled && path != null) loader.load(path, uiActive, revision, kind) { value = it }
+    cache: ListArtworkCache<T>,
+): T? {
+    val latestWindow by rememberUpdatedState(window)
+    var session by remember(cache) { mutableStateOf<ListArtworkCache.Session?>(null) }
+    DisposableEffect(cache, listKey) {
+        val opened = listKey?.let { cache.open(uiActive.value) }
+        opened?.let { cache.update(it, latestWindow) }
+        session = opened
+        onDispose { opened?.let(cache::close) }
     }
+    SideEffect { session?.let { cache.update(it, window) } }
+    LaunchedEffect(session, uiActive) {
+        val owner = session ?: return@LaunchedEffect
+        uiActive.collect { cache.setActive(owner, it) }
+    }
+    cache.changes.collectAsState().value
+    if (listKey == null) return null
+    return window.selected?.let(cache::peek)
 }

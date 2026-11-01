@@ -66,6 +66,7 @@ class InstalledCoreService @Inject constructor(
         val silent = mutableSetOf<String>()
         val unsupported = mutableSetOf<String>()
         val discovered = discoverRaPackages()
+        settings.seedRetroArchPackage(discovered)
         for (pkg in discovered) {
             // No receiver means no reply is coming, so paying the timeout would only stall
             // the scan by three seconds per package to learn nothing.
@@ -183,7 +184,7 @@ class InstalledCoreService @Inject constructor(
 
     fun configuredUnreportable(): Set<String> {
         val pkg = settings.retroArchPackage
-        return if (canReport(pkg)) emptySet() else setOf(pkg)
+        return if (canReport(pkg) || !context.isPackageInstalled(pkg)) emptySet() else setOf(pkg)
     }
 
     companion object {

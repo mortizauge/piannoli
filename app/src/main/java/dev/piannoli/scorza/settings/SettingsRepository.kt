@@ -168,6 +168,18 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         get() = jsonRead { optString(KEY_RA_PACKAGE, DEFAULT_RA_PACKAGE) }
         set(value) = jsonWrite { put(KEY_RA_PACKAGE, value) }
 
+    fun seedRetroArchPackage(installedPackages: List<String>) {
+        val preferred = listOf(DEFAULT_RA_PACKAGE, "com.retroarch.aarch64", "com.retroarch")
+        val pkg = preferred.firstOrNull { it in installedPackages } ?: installedPackages.sorted().firstOrNull() ?: return
+        val changed = synchronized(jsonLock) {
+            if (json.has(KEY_RA_PACKAGE)) false else {
+                json.put(KEY_RA_PACKAGE, pkg)
+                true
+            }
+        }
+        if (changed) scheduleSave()
+    }
+
     var textSize: TextSize
         get() = TextSize.fromString(jsonRead { if (has(KEY_TEXT_SIZE)) optString(KEY_TEXT_SIZE) else null })
         set(value) = jsonWrite { put(KEY_TEXT_SIZE, value.name) }

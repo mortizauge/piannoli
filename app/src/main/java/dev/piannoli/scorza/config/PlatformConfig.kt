@@ -19,7 +19,6 @@ class PlatformConfig(
     private val piannoliRootProvider: () -> File,
     private val assets: AssetManager,
     private val coreInfo: CoreInfoRepository? = null,
-    private val nativeLibDir: String? = null,
     // Resolved string passed in because this class has no Context; defaulted for tests.
     private val emptyOverrideLabel: String = "(empty override)",
     private val needsSetupLabel: String = "Needs setup",
@@ -29,8 +28,7 @@ class PlatformConfig(
         piannoliRoot: File,
         assets: AssetManager,
         coreInfo: CoreInfoRepository? = null,
-        nativeLibDir: String? = null,
-    ) : this({ piannoliRoot }, assets, coreInfo, nativeLibDir)
+    ) : this({ piannoliRoot }, assets, coreInfo)
 
     private var defaultCores = mapOf<String, String>()
     private var defaultPlatformNames = mapOf<String, String>()
@@ -125,15 +123,21 @@ class PlatformConfig(
 
     private fun loadV2(json: JSONObject) {
         val obj = json.optJSONObject("platforms") ?: return
+        var clearedBuiltIn = false
+        for (tag in obj.keys()) {
+            val entry = obj.getJSONObject(tag)
+            if (EmulatorSource.isLegacyBuiltIn(entry.optString("source"))) clearedBuiltIn = true
+        }
         for (tag in obj.keys()) readChoice(obj.getJSONObject(tag))?.let { userChoices[tag] = it }
+        if (clearedBuiltIn) saveCoreMappings()
     }
 
     private fun readChoice(obj: JSONObject): EmulatorChoice? {
-        val source = runCatching { EmulatorSource.valueOf(obj.optString("source", "")) }.getOrNull() ?: return null
+        val source = EmulatorSource.fromStoredName(obj.optString("source", "")) ?: return null
         val coreId = obj.optString("core", "")
         val app = obj.optString("app", "").ifEmpty { null }
         // A core source with no core names nothing, so it cannot render or launch. Dropping it
-        // leaves the platform unset, which the boot seed then refills with the built-in default.
+        // leaves the platform unset, which can then use an external default.
         if (source != EmulatorSource.Standalone && coreId.isEmpty()) {
             dev.piannoli.scorza.util.ErrorLog.write("dropping $source choice with no core")
             return null
@@ -143,8 +147,7 @@ class PlatformConfig(
     }
 
     // v1 stored the picker's display caption as the runner, so the source has to be recovered
-    // from it. An absent runner means v1 was re-deriving the source from the bundled .so on
-    // every read, so resolve it here the same way getRunnerLabel did.
+    // from it. Obsolete built-in entries are cleared; a runnerless core now selects RetroArch.
     private fun migrateV1(json: JSONObject) {
         val cores = json.optJSONObject("cores")
         val runners = json.optJSONObject("runners")
@@ -203,17 +206,15 @@ class PlatformConfig(
         coreId: String,
         fallbackCoreId: String? = null,
     ): EmulatorChoice? {
+        if (EmulatorSource.isLegacyBuiltIn(runner)) return null
         val source = EmulatorSource.fromRunnerLabel(runner) ?: when {
             app != null -> EmulatorSource.Standalone
             coreId.isEmpty() && fallbackCoreId.isNullOrEmpty() -> return null
-            // v1 stored no runner here and re-derived the source from the bundled .so on every
-            // read, so resolve it the same way rather than guessing.
-            nativeLibDir != null && File(nativeLibDir, "${coreId}_android.so").exists() -> EmulatorSource.Internal
             else -> EmulatorSource.RetroArch
         }
         if (source == EmulatorSource.Standalone) return EmulatorChoice(source, coreId, app)
         // v1's setCoreMapping dropped the core when the pick equalled the platform default but
-        // still wrote the runner, so an Internal/RetroArch entry can arrive with no core at all.
+        // still wrote the runner, so a RetroArch entry can arrive with no core at all.
         // That is v1 saying "the default core", not "no core". Standalone is excluded above: its
         // identity is the package, and stamping a core on it would misreport the mapping.
         val resolved = coreId.ifEmpty { fallbackCoreId.orEmpty() }
@@ -225,6 +226,7 @@ class PlatformConfig(
         loadCoreMappings()
     }
 
+    @Synchronized
     fun saveCoreMappings() {
         // A failed load leaves the maps empty. Writing that out would turn a recoverable parse
         // error into permanent data loss, so refuse until something loads cleanly.
@@ -254,10 +256,11 @@ class PlatformConfig(
                 out.write(json.toString(2).toByteArray())
                 out.fd.sync()
             }
-            if (!tmp.renameTo(coresFile)) {
-                tmp.delete()
-                dev.piannoli.scorza.util.ErrorLog.write("cores.json atomic rename failed")
-            }
+            java.nio.file.Files.move(
+                tmp.toPath(), coresFile.toPath(),
+                java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+            )
         } catch (e: java.io.IOException) {
             tmp.delete()
             dev.piannoli.scorza.util.ErrorLog.write("cores.json write failed: ${e.message}")
@@ -265,45 +268,39 @@ class PlatformConfig(
     }
 
     /**
-     * Gives every platform Piannoli can serve itself an explicit mapping, so no screen has to
-     * fall back to a derived default.
+     * Seeds installed external defaults in curated app order, then configured RetroArch cores.
      *
      * Only ever writes a platform that has no stored choice. It never overwrites, repairs or
      * clears one, including when the stored core or app is no longer installed. Being idempotent
-     * it also backfills a platform that gains a bundled core in a later release, and recovers
+     * it also backfills a platform that gains an installed external emulator, and recovers
      * from a first run that was interrupted part way through.
      */
-    fun seedUnsetPlatforms(pm: PackageManager): Int {
+    fun seedUnsetPlatforms(pm: PackageManager, installedRaCores: Map<String, Set<String>> = emptyMap()): Int {
         if (loadFailed) return 0
         var written = 0
         for (tag in getAllTags()) {
             if (userChoices.containsKey(tag)) continue
-            val choice = seedFor(tag, pm) ?: continue
-            userChoices[tag] = choice
-            written++
+            val choice = seedFor(tag, pm, installedRaCores) ?: continue
+            if (userChoices.putIfAbsent(tag, choice) == null) written++
         }
         if (written > 0) saveCoreMappings()
         return written
     }
 
-    private fun seedFor(tag: String, pm: PackageManager): EmulatorChoice? {
-        val upper = tag.uppercase()
-        val dir = nativeLibDir
-        if (dir != null) {
-            val candidates = buildList {
-                defaultCores[upper]?.let { add(it) }
-                coreInfo?.getCoresForTag(tag)?.forEach { add(it.id) }
-            }
-            candidates.firstOrNull { File(dir, "${it}_android.so").exists() }
-                ?.let { return EmulatorChoice(EmulatorSource.Internal, it) }
+    private fun seedFor(
+        tag: String,
+        pm: PackageManager,
+        installedRaCores: Map<String, Set<String>> = emptyMap(),
+    ): EmulatorChoice? {
+        getFirstInstalledApp(tag, pm)?.let {
+            return EmulatorChoice(EmulatorSource.Standalone, appPackage = it.packageName)
         }
-        // Exactly one, never the first of several. Picking among several installed emulators is
-        // the silent-guess behavior this rework exists to remove.
-        val installed = getAppOptions(tag).filter { pm.isPackageInstalled(it.packageName) }
-        if (installed.size == 1) {
-            return EmulatorChoice(EmulatorSource.Standalone, appPackage = installed.single().packageName)
+        val candidates = buildSet {
+            getCoreName(tag)?.let { add(it) }
+            coreInfo?.getCoresForTag(tag)?.forEach { add(it.id) }
         }
-        return null
+        val installed = installedRaCores.filterKeys { pm.isPackageInstalled(it) }.values.flatten().toSet()
+        return candidates.firstOrNull { it in installed }?.let { EmulatorChoice(EmulatorSource.RetroArch, it) }
     }
 
     fun getPlatformChoice(tag: String): EmulatorChoice? = userChoices[tag]
@@ -329,19 +326,23 @@ class PlatformConfig(
                 val pkg = choice.appPackage ?: return emptyOverrideLabel
                 pm?.let { resolveAppLabel(it, pkg) } ?: (knownAppLabels[pkg] ?: pkg)
             }
-            EmulatorSource.Internal -> "${EmulatorSource.Internal.displayName}: ${getCoreDisplayName(choice.coreId)}"
             EmulatorSource.RetroArch -> "$raLabel: ${getCoreDisplayName(choice.coreId)}"
         }
 
     /**
-     * Restores the platform to the same choice a first run would have seeded: the bundled core
-     * when there is one, otherwise the sole installed standalone app, otherwise nothing.
+     * Restores the first installed standalone, then a configured installed RetroArch core.
+     * With neither available it stays unset and launch offers external setup.
      *
      * Resolves immediately rather than clearing and leaving the next boot's backfill to fill it
      * in, so what the user sees after confirming is the final state.
      */
-    fun resetPlatformToDefault(tag: String, pm: PackageManager): EmulatorChoice? {
-        val seeded = seedFor(tag, pm)
+    fun resetPlatformToDefault(
+        tag: String,
+        pm: PackageManager,
+        installedRaCores: Map<String, Set<String>> = emptyMap(),
+    ): EmulatorChoice? {
+        userChoices.remove(tag)
+        val seeded = seedFor(tag, pm, installedRaCores)
         if (seeded == null) userChoices.remove(tag) else userChoices[tag] = seeded
         saveCoreMappings()
         return seeded
@@ -393,14 +394,10 @@ class PlatformConfig(
 
     // The caption is derived, never stored, so switching the configured RetroArch package
     // updates every label instead of leaving stale ones behind.
-    fun getRunnerLabel(tag: String, coreId: String, raLabel: String = "RetroArch"): String {
+    fun getRunnerLabel(tag: String, raLabel: String = "RetroArch"): String {
         if (File(romsTagDir(tag), ".emu_launch").exists()) return "External"
-        val source = userChoices[tag]?.source ?: when {
-            nativeLibDir != null && File(nativeLibDir, "${coreId}_android.so").exists() -> EmulatorSource.Internal
-            else -> EmulatorSource.RetroArch
-        }
+        val source = userChoices[tag]?.source ?: EmulatorSource.RetroArch
         return when (source) {
-            EmulatorSource.Internal -> EmulatorSource.Internal.displayName
             EmulatorSource.Standalone -> EmulatorSource.Standalone.displayName
             EmulatorSource.RetroArch -> raLabel
         }
@@ -409,13 +406,12 @@ class PlatformConfig(
     fun getDetailedMappings(
         pm: PackageManager? = null,
         installedRaCores: Map<String, Set<String>> = emptyMap(),
-        embeddedCoresDir: String? = null,
         unreportablePackages: Set<String> = emptySet(),
         raLabel: String = "RetroArch",
     ): List<dev.piannoli.scorza.ui.screens.EmulatorMappingEntry> {
         val tags = (defaultCores.keys + defaultApps.keys + userChoices.keys)
         return tags.map { tag ->
-            detailedMappingFor(tag, pm, installedRaCores, embeddedCoresDir, unreportablePackages, raLabel)
+            detailedMappingFor(tag, pm, installedRaCores, unreportablePackages, raLabel)
         }.sortedNatural { it.platformName }
     }
 
@@ -423,11 +419,10 @@ class PlatformConfig(
         tag: String,
         pm: PackageManager? = null,
         installedRaCores: Map<String, Set<String>> = emptyMap(),
-        embeddedCoresDir: String? = null,
         unreportablePackages: Set<String> = emptySet(),
         raLabel: String = "RetroArch",
     ): dev.piannoli.scorza.ui.screens.EmulatorMappingEntry {
-        val choice = userChoices[tag]
+        val choice = userChoices[tag] ?: pm?.let { seedFor(tag, it, installedRaCores) }
         val app = getAppPackage(tag)
         val coreId = getCoreMapping(tag)
         val installedApp: String? = when {
@@ -461,10 +456,10 @@ class PlatformConfig(
                 status = EmulatorMappingStatus.NEEDS_SETUP
             )
         } else {
-            val resolvedRunner = getRunnerLabel(tag, coreId, raLabel)
-            val status = coreStatus(tag, coreId, resolvedRunner, installedRaCores, embeddedCoresDir, unreportablePackages)
-            // "Missing" is a confirmed absence: an internal .so that is not on disk, or a
-            // RetroArch that reported its cores and did not name this one. "Unknown" means no
+            val resolvedCoreId = choice?.coreId?.ifEmpty { null } ?: coreId
+            val resolvedRunner = getRunnerLabel(tag, raLabel)
+            val status = coreStatus(resolvedCoreId, resolvedRunner, installedRaCores, unreportablePackages)
+            // "Missing" is a confirmed absence from a reported external core list. "Unknown" means no
             // report is possible, so the row must not claim either way.
             val mappingStatus = when (status) {
                 "Missing" -> EmulatorMappingStatus.NOT_INSTALLED
@@ -473,7 +468,7 @@ class PlatformConfig(
             }
             dev.piannoli.scorza.ui.screens.EmulatorMappingEntry(
                 tag = tag, platformName = getDisplayName(tag),
-                coreDisplayName = getCoreDisplayName(coreId),
+                coreDisplayName = getCoreDisplayName(resolvedCoreId),
                 runnerLabel = resolvedRunner,
                 status = mappingStatus
             )
@@ -481,37 +476,27 @@ class PlatformConfig(
     }
 
     private fun coreStatus(
-        tag: String, coreId: String, runner: String,
+        coreId: String, runner: String,
         installedRaCores: Map<String, Set<String>>,
-        embeddedCoresDir: String?,
         unreportablePackages: Set<String>
     ): String {
-        if (runner == "Internal") {
-            val dir = embeddedCoresDir ?: nativeLibDir ?: return "Missing"
-            return if (File(dir, "${coreId}_android.so").exists()) "Present" else "Missing"
-        }
         if (runner == "External") return "Present"
         if (installedRaCores.any { it.value.contains(coreId) }) return "Present"
         if (unreportablePackages.isNotEmpty()) return "Unknown"
         return "Missing"
     }
 
-    fun availableSources(tag: String, embeddedCoresDir: String? = null): List<EmulatorSource> {
+    fun availableSources(tag: String): List<EmulatorSource> {
         val upper = tag.uppercase()
         val candidateCores = buildSet {
             defaultCores[upper]?.let { add(it) }
             coreInfo?.getCoresForTag(tag)?.forEach { add(it.id) }
         }
-        val embeddedDir = embeddedCoresDir ?: nativeLibDir
-        val hasInternal = embeddedDir != null && candidateCores.any {
-            File(embeddedDir, "${it}_android.so").exists()
-        }
         val hasRaCandidates = candidateCores.isNotEmpty()
         val hasStandaloneCandidates = getAppOptions(tag).isNotEmpty()
         return buildList {
-            if (hasInternal) add(EmulatorSource.Internal)
-            if (hasRaCandidates) add(EmulatorSource.RetroArch)
             if (hasStandaloneCandidates) add(EmulatorSource.Standalone)
+            if (hasRaCandidates) add(EmulatorSource.RetroArch)
         }
     }
 
@@ -520,7 +505,6 @@ class PlatformConfig(
         source: EmulatorSource,
         includeAll: Boolean,
         installedRaCores: Map<String, Set<String>> = emptyMap(),
-        embeddedCoresDir: String? = null,
         pm: PackageManager? = null,
         raLabel: String = "RetroArch",
         coreReportingUnavailable: Boolean = false,
@@ -530,23 +514,7 @@ class PlatformConfig(
             defaultCores[upper]?.let { add(it) }
             coreInfo?.getCoresForTag(tag)?.forEach { add(it.id) }
         }
-        val embeddedDir = embeddedCoresDir ?: nativeLibDir
         return when (source) {
-            EmulatorSource.Internal -> candidateCoreIds.mapNotNull { coreId ->
-                val present = embeddedDir != null && File(embeddedDir, "${coreId}_android.so").exists()
-                when {
-                    present -> dev.piannoli.scorza.ui.screens.EmulatorPickerOption(
-                        coreId = coreId, displayName = getCoreDisplayName(coreId),
-                        source = EmulatorSource.Internal, runnerLabel = EmulatorSource.Internal.displayName,
-                    )
-                    includeAll -> dev.piannoli.scorza.ui.screens.EmulatorPickerOption(
-                        coreId = coreId, displayName = getCoreDisplayName(coreId),
-                        source = EmulatorSource.Internal, runnerLabel = EmulatorSource.Internal.displayName,
-                        availability = CoreAvailability.UNAVAILABLE,
-                    )
-                    else -> null
-                }
-            }
             EmulatorSource.RetroArch -> candidateCoreIds.mapNotNull { coreId ->
                 val pkg = installedRaCores.entries.firstOrNull { coreId in it.value }?.key
                 when {

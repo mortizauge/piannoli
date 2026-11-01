@@ -96,13 +96,13 @@ class ArtworkStatusBarInsetTest {
                     val slot = compose.onNodeWithTag("slot").getUnclippedBoundsInRoot()
                     assertEquals(size, height.value)
                     assertEquals(title.bottom + size, slot.top)
-                    assertEquals(footer.top, slot.bottom)
+                    assertEquals(footer.top - size, slot.bottom)
                     assertEquals(list, compose.onNodeWithTag("list").getUnclippedBoundsInRoot())
                     assertEquals(title, compose.onNodeWithTag("title").getUnclippedBoundsInRoot())
                     assertEquals(footer, compose.onNodeWithTag("footer").getUnclippedBoundsInRoot())
                     if (isSystem) {
                         val art = compose.onNodeWithContentDescription("art").getUnclippedBoundsInRoot()
-                        val remainingFraction = (320.dp - size) / 320.dp
+                        val remainingFraction = (320.dp - size * 2) / 320.dp
                         assertEquals((before!!.bottom - before.top).value * remainingFraction, (art.bottom - art.top).value, 1f)
                         assertEquals(((slot.top + slot.bottom) / 2).value, ((art.top + art.bottom) / 2).value, 1f)
                     } else {
@@ -165,8 +165,10 @@ class ArtworkStatusBarInsetTest {
             }
         }
         assertEquals(48.dp, compose.onNodeWithTag("slot").getUnclippedBoundsInRoot().top)
+        assertEquals(392.dp, compose.onNodeWithTag("slot").getUnclippedBoundsInRoot().bottom)
         compose.runOnIdle { height.value = 64.dp }
         assertEquals(64.dp, compose.onNodeWithTag("slot").getUnclippedBoundsInRoot().top)
+        assertEquals(376.dp, compose.onNodeWithTag("slot").getUnclippedBoundsInRoot().bottom)
         compose.runOnIdle { height.value = 0.dp }
         assertEquals(48.dp, compose.onNodeWithTag("slot").getUnclippedBoundsInRoot().top)
     }

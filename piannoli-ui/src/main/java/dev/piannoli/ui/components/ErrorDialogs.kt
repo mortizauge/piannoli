@@ -88,7 +88,8 @@ fun MissingAppDialog(
         )
         Spacer(modifier = Modifier.height(12.dp))
         Text(
-            text = stringResource(R.string.dialog_missing_app, appName),
+            text = stringResource(R.string.dialog_missing_app, appName) +
+                if (showChangeEmulator) "\n" + stringResource(R.string.dialog_external_emulator_hint) else "",
             style = MaterialTheme.typography.bodyLarge,
             color = LocalPiannoliColors.current.text.copy(alpha = 0.6f)
         )

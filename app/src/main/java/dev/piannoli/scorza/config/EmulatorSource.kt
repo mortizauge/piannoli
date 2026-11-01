@@ -3,13 +3,12 @@ package dev.piannoli.scorza.config
 import dev.piannoli.scorza.R
 
 enum class EmulatorSource(val displayName: String) {
-    Internal("Internal"),
     RetroArch("RetroArch"),
     Standalone("Standalone");
 
     val emptyMessageRes: Int
         get() = when (this) {
-            Internal, RetroArch -> R.string.value_no_cores_found
+            RetroArch -> R.string.value_no_cores_found
             Standalone -> R.string.value_none_installed
         }
 
@@ -20,10 +19,16 @@ enum class EmulatorSource(val displayName: String) {
          * source: options and choices carry [EmulatorSource] directly.
          */
         fun fromRunnerLabel(label: String?): EmulatorSource? = when (label) {
-            "Internal" -> Internal
+            "Internal", "Built-in", "BUILTIN" -> null
             "Standalone", "App" -> Standalone
             null, "" -> null
             else -> RetroArch
         }
+
+        fun fromStoredName(name: String?): EmulatorSource? =
+            entries.firstOrNull { it.name == name }
+
+        fun isLegacyBuiltIn(name: String?): Boolean =
+            name in setOf("Internal", "Built-in", "BUILTIN", "Builtin", "BuiltIn")
     }
 }

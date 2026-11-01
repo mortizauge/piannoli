@@ -473,7 +473,7 @@ class SteamGridControllerTest {
         viewModel.load()
         val handler = SettingsInputHandler(
             nav = nav, ioScope = scope, settings = settings, platformConfig = mockk(),
-            installedCoreService = mockk(), globalOverrides = mockk(), appsRepository = mockk(),
+            installedCoreService = mockk(), appsRepository = mockk(),
             setupCoordinator = mockk(), inputTesterController = mockk(), updateManager = mockk(),
             intentAuditor = mockk(), settingsViewModel = viewModel, gameListViewModel = mockk(),
             launcherActions = mockk(relaxed = true),

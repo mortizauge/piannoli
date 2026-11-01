@@ -7,7 +7,6 @@
     <string name="label_play">プレイ</string>
     <string name="label_launch">起動</string>
     <string name="label_open">開く</string>
-    <string name="label_save">保存</string>
     <string name="label_load">ロード</string>
     <string name="label_change">変更</string>
     <string name="label_firmware">FIRWARE</string>
@@ -25,8 +24,6 @@
     <string name="label_continue">続ける</string>
     <string name="label_new_folder">新規</string>
     <string name="label_parent">たとえば、</string>
-    <string name="label_slot">SLOT</string>
-    <string name="label_disc">DISC</string>
     <string name="label_use_location">この場所を使用</string>
     <string name="label_quit">終了</string>
     <string name="label_stop">停止</string>
@@ -40,38 +37,17 @@
     <string name="label_rename">名前の変更</string>
     <string name="label_set">設定</string>
     <string name="label_clear">消去</string>
-    <string name="label_press">プレス</string>
     <string name="label_hold_buttons" tools:ignore="TypographyEllipsis">1つまたは複数のボタンを長押ししてください...</string>
     <string name="label_info">情報</string>
     <!-- Bottom-bar button. RA = RetroAchievements. -->
-    <string name="label_ra_settings">RAの設定</string>
-    <string name="label_details">詳細</string>
-    <string name="label_all">すべて</string>
-    <string name="label_unlocked">アンロックしました</string>
-    <string name="label_locked">ロック済み</string>
-    <string name="label_reset_all">すべてリセット</string>
     <string name="label_remap">REMAP</string>
     <string name="label_unmap">UNMAP</string>
-    <string name="label_swap">SWAP</string>
     <string name="label_grant">Grant</string>
     <!-- In-game menu action: reassign connected controllers to player slots. -->
-    <string name="igm_reassign_players">プレイヤーを再割り当て</string>
     <!-- In-game shortcut actions -->
-    <string name="shortcut_action_save_state">状態を保存</string>
-    <string name="shortcut_action_load_state">状態を読み込む</string>
-    <string name="shortcut_action_reset_game">ゲームをリセット</string>
-    <string name="shortcut_action_save_and_quit">保存して終了</string>
     <!-- In-game shortcut action. "(Hold)" means it triggers on a long-press of the shortcut. -->
-    <string name="shortcut_action_save_and_quit_hold">保存して終了 (Hold)</string>
     <!-- In-game shortcut action: cycle through the video scaling modes. -->
-    <string name="shortcut_action_cycle_scaling">サイクルスケール</string>
     <!-- In-game shortcut action: cycle through the shader presets. -->
-    <string name="shortcut_action_cycle_shader">サイクルシェーダー</string>
-    <string name="shortcut_action_toggle_ff">早送り切り替え</string>
-    <string name="shortcut_action_hold_ff">急いで前に進む</string>
-    <string name="shortcut_action_open_guide">ガイドを開く</string>
-    <string name="shortcut_action_open_menu">ゲーム内メニューを開く</string>
-    <string name="shortcut_action_toggle_show_fps">FPS表示の切り替え</string>
     <string name="settings_title">設定</string>
     <!-- Settings categories -->
     <string name="settings_general">全般</string>
@@ -152,7 +128,6 @@
     <string name="binding_axis_pos">Axis %1$d+</string>
     <!-- Input binding label. %1$d is the joystick axis index; - is the negative direction. -->
     <string name="binding_axis_neg">Axis %1$d-</string>
-    <string name="setting_shortcuts">ショートカット</string>
     <!-- Input setting toggle: swap the on-screen positions of the Play and Resume actions. -->
     <string name="setting_swap_play_resume">再生と再開を入れ替え</string>
     <!-- Input setting toggle: controls whether the in-game Quit returns to the main menu. -->
@@ -428,7 +403,6 @@
     <!-- %1$s = app name. -->
     <string name="dialog_missing_app">%1$s はインストールされていません。</string>
     <!-- %1$s = folder path. -->
-    <string name="dialog_missing_bios_header">%1$sには少なくとも1つのBIOSファイルが必要です:</string>
     <string name="dialog_title_missing_core">欠けているコア</string>
     <string name="dialog_title_missing_app">不足しているアプリ</string>
     <string name="dialog_title_launch_error">起動に失敗しました</string>
@@ -503,63 +477,25 @@
     <!-- RetroAchievements -->
     <string name="ra_logged_in_as">としてログイン</string>
     <!-- RA = RetroAchievements. -->
-    <string name="ra_login_failed">RA: ログインに失敗しました</string>
     <string name="ra_login_invalid">ユーザー名またはパスワードが正しくありません</string>
-    <string name="ra_status_online">オンライン</string>
-    <string name="ra_status_offline">オフライン</string>
     <!-- %1$d = achievements awaiting sync. -->
-    <string name="ra_status_offline_pending">オフライン • %1$d 保留中の同期</string>
-    <string name="ra_detect_not_logged_in">ログインしていません</string>
-    <string name="ra_detect_not_recognized">ゲームが認識されていません</string>
-    <string name="ra_detect_no_achievements">成果は公開されていません</string>
-    <string name="ra_detect_mem_failed">メモリ初期化に失敗しました</string>
     <!-- %d = achievement count. -->
-    <plurals name="ra_detect_active">
-        <item quantity="other">アクティブ • %d アチーブメント数</item>
-    </plurals>
     <!-- %d = number of achievements synced. -->
-    <plurals name="ra_sync_done">
-        <item quantity="other">%d 達成を同期しました</item>
-    </plurals>
     <!-- Counts of synced and failed achievements. -->
-    <string name="ra_sync_partial">%1$d 同期、 %2$d 失敗</string>
     <!-- OSD toast. %1$s = save slot name. -->
-    <string name="osd_state_saved">%1$s に保存しました</string>
     <!-- OSD toast. %1$s = save slot name. -->
-    <string name="osd_state_loaded">読み込まれた %1$s</string>
     <!-- OSD toast. %1$s = save slot name. -->
-    <string name="osd_state_deleted">%1$sを削除しました</string>
-    <string name="osd_reset">Reset</string>
     <!-- OSD toast. %1$s = scaling mode name. -->
-    <string name="osd_scaling">拡大縮小: %1$s</string>
     <!-- OSD toast. %1$s = shader preset name. -->
-    <string name="osd_shader">シェーダー: %1$s</string>
     <!-- OSD toast. %1$s = mode/item name. -->
-    <string name="osd_switched_to">%1$sに切り替えました</string>
     <!-- OSD toast. %1$s = game name (setting saved per-game). -->
-    <string name="osd_saved_for">%1$s に保存しました</string>
-    <string name="osd_saved_for_game">このゲームに保存しました</string>
     <!-- OSD toast. %1$s = controller name, %2$s = player slot. -->
-    <string name="osd_controller_connected_named">%1$s は %2$s に接続されました</string>
-    <string name="osd_buttons_reset">ボタンをデフォルトにリセット</string>
     <!-- %1$d = disc number (multi-disc games). -->
-    <string name="osd_disc_fallback">ディスク %1$d</string>
-    <string name="igm_quit">終了</string>
-    <string name="igm_cheats">チート</string>
-    <string name="title_cheats">チート</string>
-    <string name="label_restore_session">最後のセッションを復元</string>
     <!-- Scaling mode: use the size the emulator core reports. -->
-    <string name="scaling_core_reported">コアが報告されました</string>
-    <string name="scaling_integer">整数</string>
     <!-- Scaling mode: integer scaling pushed beyond 1x to fill more of the screen. -->
-    <string name="scaling_integer_overscale">Integer Overscale</string>
     <!-- Scaling mode: fit the screen while keeping the aspect ratio. -->
-    <string name="scaling_aspect_screen">アスペクト画面</string>
-    <string name="scaling_fullscreen">全画面</string>
     <!-- Indicates a setting applies globally (all games). -->
-    <string name="override_source_global">グローバル</string>
     <!-- Indicates a setting applies only to the current game. -->
-    <string name="override_source_game">このゲーム</string>
     <string name="device_controller">コントローラ</string>
     <!-- OSD toast. %1$d = player number, %2$s = controller name. -->
     <string name="osd_controller_connected">P%1$d: %2$s</string>
@@ -568,64 +504,30 @@
     <!-- OSD toast. %1$s = controller name. -->
     <string name="osd_controller_disconnected">%1$s が切断されました</string>
     <!-- RA login OSD. %1$s = username, %2$s = display name, %3$d/%4$d = unlocked/total achievements. -->
-    <string name="ra_login_success">RA: %1$s (%2$s) · %3$d/%4$d ロック解除</string>
-    <string name="ra_init_failed">RA: 初期化に失敗しました</string>
-    <string name="ra_load_not_recognized">RA: ゲームが認識されていません</string>
-    <string name="ra_load_no_achievements">RA: このゲームの実績はありません</string>
-    <string name="ra_load_offline_pending">RA: オフライン (ゲームデータ利用不可)</string>
     <!-- Credits -->
     <string name="credits_title">クレジットとライセンス</string>
     <!-- Core picker / nav -->
     <string name="no_compatible_cores">互換性のあるコアが見つかりません</string>
     <string name="no_collections">コレクションがありません</string>
     <string name="title_child_collections">子コレクション</string>
-    <string name="title_shortcuts">ショートカット</string>
-    <string name="shortcut_hold_prompt" tools:ignore="TypographyEllipsis">1 つ以上のボタンを長押ししてください...</string>
     <!-- Update download -->
     <string name="update_retry">再試行する</string>
     <string name="restart_required">変更を適用するには再起動が必要です。</string>
     <!-- IGM screen titles -->
-    <string name="igm_settings">設定</string>
-    <string name="igm_video">ビデオ</string>
-    <string name="igm_advanced">高度な設定</string>
-    <string name="igm_shader_settings">シェーダーの設定</string>
-    <string name="igm_emulator">エミュレーター</string>
-    <string name="igm_save_changes">変更を保存</string>
-    <string name="igm_input">Input</string>
-    <string name="igm_button_mappings">ボタンのマッピング</string>
-    <string name="igm_left_stick_dpad">方向パッドとして左スティック</string>
-    <string name="igm_dpad_mode">方向パッドモード（ベータ版）</string>
     <!-- D-Pad Mode value: 8 directions. -->
-    <string name="value_dpad_8way">8-way</string>
     <!-- D-Pad Mode value: 4 directions. -->
-    <string name="value_dpad_4way">4-way</string>
-    <string name="igm_save_and_quit">保存して終了</string>
     <string name="title_guide">ガイド</string>
     <string name="guide_zoom">ズーム</string>
     <!-- IGM info labels -->
-    <string name="info_core">コア</string>
-    <string name="info_rom">ROM</string>
     <!-- Info label: whether the ROM was extracted from an archive. -->
-    <string name="info_extracted">抽出済み</string>
-    <string name="info_save">保存</string>
-    <string name="info_renderer">レンダラー</string>
-    <string name="info_game_id">ゲームID</string>
-    <string name="info_ra_detection">実績検出</string>
     <!-- IGM dialogs -->
     <!-- %1$s = save slot name. -->
-    <string name="igm_delete_slot">%1$s を削除しますか？</string>
     <string name="press_button_prompt" tools:ignore="TypographyEllipsis">任意のボタンを押してください...</string>
     <!-- Achievements -->
     <!-- %1$d = unlocked count, %2$d = total. -->
-    <string name="ach_title">実績 (%1$d/%2$d)</string>
     <!-- Compact points label. %1$d = points. -->
-    <string name="ach_points_short">%1$dpts</string>
     <!-- %1$d = points. -->
-    <string name="ach_points">%1$d ポイント</string>
     <!-- %1$s = date the achievement was unlocked. -->
-    <string name="ach_unlocked_date">解放された %1$s</string>
-    <string name="ach_unlocked">ロック解除済み</string>
-    <string name="ach_locked">ロック中</string>
     <string name="setting_portrait_margin">ポートレートの余白（余白）</string>
     <!-- Advanced setting: adjust the on-screen viewport rectangle. -->
     <string name="setting_screen_geometry">スクリーンジオメトリー</string>
@@ -640,7 +542,6 @@
     <string name="label_show_all">すべて表示</string>
     <string name="label_show_installed">インストール済みを表示</string>
     <!-- The core is not bundled with the app. -->
-    <string name="value_not_bundled">バンドルしていません</string>
     <string name="value_no_overrides">ゲームごとのオーバーライドはありません。</string>
     <string name="value_no_firmware">このコアにファームウェアは必要ありません。</string>
     <string name="mapping_action_bios">BIOS ファイル</string>
@@ -681,9 +582,6 @@
         <item quantity="other">%d 件のアイテム</item>
     </plurals>
     <!-- OSD toast. %d = number of cheats restored. -->
-    <plurals name="osd_cheats_restored">
-        <item quantity="other">%d チートが復元されました</item>
-    </plurals>
     <string name="regenerate_system_folders_none">すべてのシステムフォルダが既に存在します</string>
     <!-- %d = number of system folders created. -->
     <plurals name="regenerate_system_folders_result">
@@ -692,7 +590,7 @@
     <string name="value_no_cores_found">コアが見つかりません</string>
     <string name="label_clear_override">消去</string>
     <!-- %1$s = platform name. -->
-    <string name="dialog_reset_platform_confirm">%1$sをリセットしますか? このプラットフォームのエミュレータの選択を解除し、バンドルされたデフォルトを復元します。</string>
+    <string name="dialog_reset_platform_confirm">%1$sをリセットしますか？ インストール済みの外部エミュレータを優先します。利用できない場合は外部エミュレータを設定してください。</string>
     <!-- RA achievement preload. %1$s = game name. -->
     <string name="ra_preload_progress">%1$s のプリロード中</string>
     <string name="ra_preload_none">このゲームの実績は見つかりませんでした</string>

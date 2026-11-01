@@ -31,13 +31,76 @@ class RaPreloadEngineTest {
         )
     }
 
-    private fun engine(repo: RomsRepository) = RaPreloadEngine(
+    private fun engine(repo: RomsRepository, hasher: (String, Int) -> String? = { _, _ -> "deadbeef" }) = RaPreloadEngine(
         store = RaOfflineStore(tmp.root),
         romsRepository = repo,
         username = "bob",
         token = "tok",
-        hasher = { _, _ -> "deadbeef" },
+        hasher = hasher,
     )
+
+    @Test fun unsupportedIdentification_isFailureAndKnownRommIdStillWorks() = runBlocking {
+        val server = MockWebServer()
+        server.start()
+        val repo = mockk<RomsRepository>(relaxed = true)
+        val engine = engine(repo) { _, _ -> null }
+        assertEquals(
+            RaOfflinePreloader.Result.Failure("identification"),
+            engine.preloadOne(client(server), rom(tag = "PS", raGameId = null)),
+        )
+        assertEquals(0, server.requestCount)
+        server.enqueue(MockResponse().setBody("""{"Success":true,"User":"bob","Token":"tok"}"""))
+        server.enqueue(MockResponse().setBody(setsBody))
+        server.enqueue(MockResponse().setBody("""{"Success":true}"""))
+        assertTrue(engine.preloadOne(client(server), rom(tag = "PS", raGameId = 55)) is RaOfflinePreloader.Result.Success)
+        verify(exactly = 1) { repo.setRaCachedGameId(1L, 55) }
+        server.shutdown()
+    }
+
+    @Test fun uncachedPlayStation_resolvesOfficialDiscHashAndCachesGameId() = runBlocking {
+        val disc = File(tmp.root, "game.iso").apply { writeBytes(PlayStationHashFixture.iso()) }
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setBody("""{"Success":true,"GameID":55}"""))
+        server.enqueue(MockResponse().setBody("""{"Success":true,"User":"bob","Token":"tok"}"""))
+        server.enqueue(MockResponse().setBody(setsBody))
+        server.enqueue(MockResponse().setBody("""{"Success":true}"""))
+        server.start()
+        val repo = mockk<RomsRepository>(relaxed = true)
+        val engine = engine(repo, RaHasher::hashRom)
+        try {
+            val result = engine.preloadOne(client(server), rom(tag = "PS").copy(path = disc))
+            assertTrue(result is RaOfflinePreloader.Result.Success)
+            val request = server.takeRequest().body.readUtf8()
+            assertTrue(request.contains("r=gameid"))
+            assertTrue(request.contains("m=${PlayStationHashFixture.HASH}"))
+            verify(exactly = 1) { repo.setRaCachedGameId(1L, 55) }
+            assertEquals(4, server.requestCount)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test fun unsupportedPlayStationContainer_neverCallsHashLookupAndCachedIdBypassesHasher() = runBlocking {
+        val disc = File(tmp.root, "game.chd").apply { writeText("MComprHD") }
+        val server = MockWebServer()
+        server.start()
+        val repo = mockk<RomsRepository>(relaxed = true)
+        try {
+            assertEquals(RaOfflinePreloader.Result.Failure("identification"),
+                engine(repo, RaHasher::hashRom).preloadOne(client(server), rom(tag = "PS").copy(path = disc)))
+            assertEquals(0, server.requestCount)
+            verify(exactly = 0) { repo.setRaCachedGameId(any(), any()) }
+            server.enqueue(MockResponse().setBody("""{"Success":true,"User":"bob","Token":"tok"}"""))
+            server.enqueue(MockResponse().setBody(setsBody))
+            server.enqueue(MockResponse().setBody("""{"Success":true}"""))
+            val result = engine(repo) { _, _ -> error("Known game IDs must not be hashed") }
+                .preloadOne(client(server), rom(tag = "PS", raGameId = 55).copy(path = disc))
+            assertTrue(result is RaOfflinePreloader.Result.Success)
+            verify(exactly = 1) { repo.setRaCachedGameId(1L, 55) }
+        } finally {
+            server.shutdown()
+        }
+    }
 
     private fun rom(id: Long = 1L, raGameId: Int? = null, tag: String = "SNES") = Rom(
         id = id,

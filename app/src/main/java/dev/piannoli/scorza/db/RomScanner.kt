@@ -69,14 +69,15 @@ class RomScanner(
     fun ensureReservedPlatformTag(tag: String) = ensurePlatformRow(tag)
 
     private fun sync(tag: String, scanned: List<RomDirectoryWalker.ScannedRom>): SyncCounts {
-        data class ExistingRow(val id: Long, val displayName: String, val tags: String?)
+        data class ExistingRow(val id: Long, val displayName: String, val tags: String?, val sortKey: String?)
         val existing = db.queryAll(
-            "SELECT id, path, display_name, tags FROM roms WHERE platform_tag = ?", tag,
+            "SELECT id, path, display_name, tags, sort_key FROM roms WHERE platform_tag = ?", tag,
         ) { stmt ->
             stmt.getText(1) to ExistingRow(
                 id = stmt.getLong(0),
                 displayName = stmt.getText(2),
                 tags = if (stmt.isNull(3)) null else stmt.getText(3),
+                sortKey = if (stmt.isNull(4)) null else stmt.getText(4),
             )
         }.toMap()
 
@@ -118,6 +119,12 @@ class RomScanner(
                                 updateStmt.bindText(5, rom.relativePath)
                                 updateStmt.bindLong(6, current.id)
                                 updateStmt.step()
+                                updated++
+                            } else if (current.sortKey != NaturalSort.toSortKey(current.displayName)) {
+                                conn.execute(
+                                    "UPDATE roms SET sort_key = ? WHERE id = ?",
+                                    NaturalSort.toSortKey(current.displayName), current.id,
+                                )
                                 updated++
                             }
                         }

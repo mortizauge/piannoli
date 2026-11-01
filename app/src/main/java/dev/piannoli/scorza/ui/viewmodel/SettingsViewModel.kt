@@ -1007,7 +1007,6 @@ class SettingsViewModel @Inject constructor(
             SettingsItem("haptic_feedback", R.string.setting_haptic_feedback, valueRes = onOff(settings.hapticFeedback)),
             SettingsItem("controller_notifications", R.string.setting_controller_notifications, valueRes = onOff(settings.controllerNotifications)),
             SettingsItem("controllers", R.string.setting_controllers, isEditable = true),
-            SettingsItem("shortcuts", R.string.setting_shortcuts, isEditable = true),
             SettingsItem("input_tester", R.string.setting_input_tester, isEditable = true)
         )
         "remap_piannoli" -> buildList {
@@ -1024,9 +1023,7 @@ class SettingsViewModel @Inject constructor(
         "emulation" -> buildList {
             add(SettingsItem("core_mapping", R.string.setting_emulator_mapping, isEditable = true))
             val pkgs = detectInstalledRaPackages()
-            if (pkgs.isNotEmpty() && settings.retroArchPackage !in pkgs) {
-                settings.retroArchPackage = pkgs.first()
-            }
+            settings.seedRetroArchPackage(pkgs)
             add(SettingsItem("ra_package", R.string.setting_ra_package, valueText = if (pkgs.isEmpty()) null else settings.retroArchPackage, valueRes = if (pkgs.isEmpty()) R.string.value_none_installed else null, canCycle = pkgs.size > 1))
             if (pkgs.isNotEmpty()) {
                 val pkgLabel = InstalledCoreService.getPackageLabel(settings.retroArchPackage)

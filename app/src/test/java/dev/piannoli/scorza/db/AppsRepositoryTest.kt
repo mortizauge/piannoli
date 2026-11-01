@@ -90,6 +90,62 @@ class AppsRepositoryTest {
         assertNull(byName["No Art"]?.artFile)
     }
 
+    @Test fun `new tools and ports enter alphabetical order after indexing and across batches`() {
+        for (type in AppType.entries) {
+            val zulu = repo.upsert(type, "Zulu", "dev.zulu")
+            val alpha = repo.upsert(type, "alpha", "dev.alpha")
+            assertEquals(listOf(alpha, zulu), repo.all(type).map { it.id })
+            repo.setOrder(listOf(alpha, zulu))
+            val mango = repo.upsert(type, "Mango", "dev.mango")
+            val beta = repo.upsert(type, "beta", "dev.beta")
+            val omega = repo.upsert(type, "Omega", "dev.omega")
+            assertEquals(listOf(alpha, beta, mango, omega, zulu), repo.all(type).map { it.id })
+            assertEquals(mango, repo.upsert(type, "Changed package label", "dev.mango"))
+            assertEquals("Mango", repo.byId(mango)!!.displayName)
+        }
+        database.close()
+        database = PiannoliDatabase(paths)
+        repo = AppsRepository(database, ArtworkLookup(paths))
+        for (type in AppType.entries) {
+            assertEquals(listOf("alpha", "beta", "Mango", "Omega", "Zulu"), repo.all(type).map { it.displayName })
+        }
+    }
+
+    @Test fun `alphabetical insertion preserves manual order pins and collection membership`() {
+        val zulu = repo.upsert(AppType.TOOL, "Zulu", "dev.zulu")
+        val alpha = repo.upsert(AppType.TOOL, "alpha", "dev.alpha")
+        val echo = repo.upsert(AppType.TOOL, "Echo", "dev.echo")
+        repo.setOrder(listOf(zulu, alpha, echo))
+        repo.setToolsPinned(listOf(zulu), true)
+        val collections = CollectionsRepository(database)
+        val shelf = collections.create("Shelf")
+        collections.addMember(shelf, LibraryRef.App(echo))
+        collections.addMember(shelf, LibraryRef.App(alpha))
+        val bravo = repo.upsert(AppType.TOOL, "bravo", "dev.bravo")
+        assertEquals(listOf(zulu, alpha, bravo, echo), repo.all(AppType.TOOL).map { it.id })
+        assertEquals(listOf(echo, alpha), collections.appIdsIn(shelf))
+        repo.setToolsPinned(listOf(zulu), false)
+        assertEquals(listOf(zulu, alpha, bravo, echo), repo.all(AppType.TOOL).map { it.id })
+
+        val ports = listOf("Zulu", "alpha", "Echo").map { repo.upsert(AppType.PORT, it, "dev.$it") }
+        repo.setOrder(ports)
+        repo.setHidden(ports.first(), true)
+        val port = repo.upsert(AppType.PORT, "bravo", "dev.bravo")
+        assertEquals(listOf(ports[1], port, ports[2]), repo.all(AppType.PORT).map { it.id })
+        repo.setHidden(ports.first(), false)
+        assertEquals(listOf(ports[0], ports[1], port, ports[2]), repo.all(AppType.PORT).map { it.id })
+    }
+
+    @Test fun `new normal apps remain alphabetical when pinned apps are later unpinned`() {
+        val alpha = repo.upsert(AppType.TOOL, "Alpha", "dev.alpha")
+        val zulu = repo.upsert(AppType.TOOL, "Zulu", "dev.zulu")
+        repo.setToolsPinned(listOf(zulu), true)
+        val mango = repo.upsert(AppType.TOOL, "mango", "dev.mango")
+        assertEquals(listOf(zulu, alpha, mango), repo.all(AppType.TOOL).map { it.id })
+        repo.setToolsPinned(listOf(zulu), false)
+        assertEquals(listOf(alpha, mango, zulu), repo.all(AppType.TOOL).map { it.id })
+    }
+
     @Test fun `pins persist at top independently of Favorites and unpin restores normal order`() {
         val collections = CollectionsRepository(database)
         val favorites = collections.create("Favorites", dev.piannoli.scorza.model.CollectionType.FAVORITES)

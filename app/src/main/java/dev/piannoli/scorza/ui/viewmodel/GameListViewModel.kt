@@ -929,6 +929,7 @@ class GameListViewModel @Inject constructor(
 
     private fun loadPlatformItems(tag: String, tags: List<String>, subfolder: String?): List<ListItem> {
         val items = tags.flatMap { romsRepository.gamesForPlatform(it.uppercase(), subfolder) }
+            .sortedNatural { displayNameOf(it) }
         return sortFavoritesFirst(items)
     }
 
