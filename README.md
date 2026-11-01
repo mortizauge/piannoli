@@ -17,7 +17,7 @@ Play using built-in libretro cores, RetroArch, or standalone emulators.
   types, and hide or restore individual games.
 - **Apps and Ports:** Launch Android shortcuts with their app icons and pin
   your most-used apps.
-- **Customizable input:** Remap controls, choose your keyboard, and enable
+- **Customizable input:** Remap navigation controls, choose your keyboard, and enable
   navigation sounds and haptic feedback.
 - **Smoother browsing:** Background artwork loading, improved scrolling and
   search navigation, and preserved browsing positions when returning from games.
@@ -28,13 +28,9 @@ Play using built-in libretro cores, RetroArch, or standalone emulators.
 Add your game folders and configure your emulators in the app. Customize artwork
 under **Settings > Appearance > Artwork**.
 
-For scraping, add a
-[SteamGridDB API key](https://www.steamgriddb.com/profile/preferences/api)
+For scraping, add a [SteamGridDB API key](https://www.steamgriddb.com/profile/preferences/api)
 through **Setup scrapers**, then use game/platform menus or the Quick Menu.
-
-## Development
-
-Open the project in Android Studio. Feature development takes place on `develop`.
+More scraping sources are planned for future updates.
 
 ## Credits and license
 
