@@ -179,6 +179,8 @@ fun PillRowText(
     checkState: Boolean? = null,
     tagSuffix: String? = null,
     showPinIcon: Boolean = false,
+    showFolderIcon: Boolean = false,
+    showFavoriteIcon: Boolean = false,
 ) {
     val colors = LocalPiannoliColors.current
     val baseStyle = MaterialTheme.typography.bodyLarge
@@ -211,6 +213,16 @@ fun PillRowText(
                         .horizontalScroll(scrollState),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (showFolderIcon) {
+                        val folderLabel = stringResource(R.string.label_folder)
+                        Text(
+                            text = PiannoliIcons.Folder.glyph,
+                            style = textStyle.copy(fontFamily = LocalPiannoliIconFont.current),
+                            color = textColor,
+                            modifier = Modifier.clearAndSetSemantics { contentDescription = folderLabel },
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
                     if (showPinIcon) {
                         val pinnedLabel = stringResource(R.string.label_pinned)
                         Text(
@@ -218,6 +230,16 @@ fun PillRowText(
                             style = textStyle.copy(fontFamily = LocalPiannoliIconFont.current),
                             color = textColor,
                             modifier = Modifier.clearAndSetSemantics { contentDescription = pinnedLabel },
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    if (showFavoriteIcon) {
+                        val favoriteLabel = stringResource(R.string.label_favorite)
+                        Text(
+                            text = PiannoliIcons.Favorite.glyph,
+                            style = textStyle.copy(fontFamily = LocalPiannoliIconFont.current),
+                            color = textColor,
+                            modifier = Modifier.clearAndSetSemantics { contentDescription = favoriteLabel },
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                     }

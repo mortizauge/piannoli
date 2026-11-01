@@ -44,12 +44,63 @@ class PinIndicatorTest {
         compose.onAllNodesWithContentDescription("Pinned").assertCountEquals(1)
         compose.onNodeWithText("Files").assertIsDisplayed()
         compose.onNodeWithText("Settings").assertIsDisplayed()
-        compose.onNodeWithText("$STAR Game").assertIsDisplayed()
+        compose.onNodeWithText("Game").assertIsDisplayed()
+        compose.onAllNodesWithContentDescription("Favorite").assertCountEquals(1)
         compose.runOnIdle {
             state.value = state.value.copy(items = listOf(
                 ListItem.AppItem(pinned.copy(isPinned = false)), ListItem.AppItem(other), ListItem.RomItem(game)))
         }
         compose.onAllNodesWithContentDescription("Pinned").assertCountEquals(0)
-        compose.onNodeWithText("$STAR Game").assertIsDisplayed()
+        compose.onNodeWithText("Game").assertIsDisplayed()
+        compose.onAllNodesWithContentDescription("Favorite").assertCountEquals(1)
+    }
+
+    @Test fun `favorite icons track ROM and app membership without changing titles`() {
+        val game = Rom(1, File("Game.gb"), "GB", "Game")
+        val port = App(2, AppType.PORT, "Port", "dev.port")
+        val state = MutableStateFlow(GameListViewModel.State(
+            platformTag = "recently_played",
+            items = listOf(ListItem.RomItem(game), ListItem.AppItem(port)),
+            favoriteRomIds = setOf(game.id),
+            favoriteAppIds = setOf(port.id),
+            isLoading = false,
+        ))
+        val model = mockk<GameListViewModel>(relaxed = true)
+        every { model.state } returns state
+        every { model.showFavoriteStars } returns true
+        compose.setContent { GameListScreen(viewModel = model, artWidth = 0) }
+        compose.onNodeWithText("Game").assertIsDisplayed()
+        compose.onNodeWithText("Port").assertIsDisplayed()
+        compose.onAllNodesWithContentDescription("Favorite").assertCountEquals(2)
+        compose.onAllNodesWithContentDescription("Pinned").assertCountEquals(0)
+        compose.runOnIdle {
+            state.value = state.value.copy(favoriteRomIds = emptySet(), favoriteAppIds = emptySet())
+        }
+        compose.onAllNodesWithContentDescription("Favorite").assertCountEquals(0)
+        compose.onNodeWithText("Game").assertIsDisplayed()
+        compose.onNodeWithText("Port").assertIsDisplayed()
+    }
+
+    @Test fun `favorites collection and disabled setting hide favorite icons`() {
+        val game = Rom(1, File("Game.gb"), "GB", "Game")
+        val state = MutableStateFlow(GameListViewModel.State(
+            isCollection = true,
+            isFavorites = true,
+            items = listOf(ListItem.RomItem(game)),
+            favoriteRomIds = setOf(game.id),
+            isLoading = false,
+        ))
+        val model = mockk<GameListViewModel>(relaxed = true)
+        every { model.state } returns state
+        every { model.showFavoriteStars } returns true
+        compose.setContent { GameListScreen(viewModel = model, artWidth = 0) }
+        compose.onNodeWithText("Game").assertIsDisplayed()
+        compose.onAllNodesWithContentDescription("Favorite").assertCountEquals(0)
+        compose.runOnIdle {
+            every { model.showFavoriteStars } returns false
+            state.value = state.value.copy(isCollection = false, isFavorites = false)
+        }
+        compose.onNodeWithText("Game").assertIsDisplayed()
+        compose.onAllNodesWithContentDescription("Favorite").assertCountEquals(0)
     }
 }

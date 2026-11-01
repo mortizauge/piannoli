@@ -28,6 +28,8 @@
     <string name="label_resume">RESUME</string>
     <string name="label_continue">CONTINUE</string>
     <string name="label_new_folder">NEW</string>
+    <string name="label_folder">Folder</string>
+    <string name="label_favorite">Favorite</string>
     <string name="label_parent">PARENT</string>
     <string name="label_slot">SLOT</string>
     <string name="label_disc">DISC</string>

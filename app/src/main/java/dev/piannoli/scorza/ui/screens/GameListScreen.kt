@@ -40,7 +40,6 @@ import dev.piannoli.scorza.model.ListItem
 import dev.piannoli.scorza.settings.ArtScale
 import dev.piannoli.scorza.ui.viewmodel.GameListViewModel
 import dev.piannoli.ui.ButtonStyle
-import dev.piannoli.ui.STAR
 import dev.piannoli.ui.components.BottomBar
 import dev.piannoli.ui.components.ConfirmOverlay
 import dev.piannoli.ui.components.LaunchErrorDialog
@@ -60,12 +59,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.withContext
 
-private fun ListItem.rowDisplayName(showStar: Boolean): String = when (this) {
-    is ListItem.RomItem -> if (showStar) "$STAR ${rom.displayName}" else rom.displayName
-    is ListItem.AppItem -> if (showStar) "$STAR ${app.displayName}" else app.displayName
+private fun ListItem.rowDisplayName(): String = when (this) {
+    is ListItem.RomItem -> rom.displayName
+    is ListItem.AppItem -> app.displayName
     is ListItem.SubfolderItem -> name
     is ListItem.CollectionItem -> collection.displayName
-    is ListItem.ChildCollectionItem -> "/${collection.displayName}"
+    is ListItem.ChildCollectionItem -> collection.displayName
 }
 
 private val ListItem.itemKey: String get() = when (this) {
@@ -239,11 +238,10 @@ fun GameListScreen(
                                 } else {
                                     (item as? ListItem.RomItem)?.let { romTagSuffixById[it.rom.id] }
                                 }
-                                val displayName = item.rowDisplayName(showStar = false)
-                                val withStar = if (starred) "$STAR $displayName" else displayName
-                                val label = if (item is ListItem.SubfolderItem) "/ $withStar" else withStar
                                 PillRowText(
-                                    label = label,
+                                    label = item.rowDisplayName(),
+                                    showFavoriteIcon = starred,
+                                    showFolderIcon = item is ListItem.SubfolderItem || item is ListItem.ChildCollectionItem,
                                     showPinIcon = (item as? ListItem.AppItem)?.app?.isPinned == true,
                                     isSelected = isSelected,
                                     fontSize = listFontSize,

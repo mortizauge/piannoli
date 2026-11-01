@@ -61,6 +61,9 @@ object PiannoliIcons {
     // RomM lists
     val Variants = PiannoliIcon("\uDB85\uDFF2", "Variants", "md-card_multiple_outline", "This row folds multiple versions", "RomM lists")
     val Pin = PiannoliIcon("\uDB81\uDC03", "Pin", "md-pin", "This tool is pinned to the top", "Library lists")
+    val Folder = PiannoliIcon("\uDB80\uDE4B", "Folder", "md-folder", "This row opens a folder", "Library lists")
+    // The bundled fa-star outline has broad quadratic curves at all five tips, unlike uni2605.
+    val Favorite = PiannoliIcon("\uF005", "Favorite", "fa-star", "This game or app is a favorite", "Library lists")
 
     /** Declaration order, which the gallery groups by [PiannoliIcon.category]. */
     val all: List<PiannoliIcon> = listOf(
@@ -72,6 +75,6 @@ object PiannoliIcons {
         CloudAlert, CloudOff, AlertCircle, DatabaseSync,
         DatabaseAlert, Primary, CheckCircle, SyncDownload,
         SyncUpload, SyncAlert, NotInstalled, Unknown,
-        Variants, Pin,
+        Variants, Pin, Folder, Favorite,
     )
 }
