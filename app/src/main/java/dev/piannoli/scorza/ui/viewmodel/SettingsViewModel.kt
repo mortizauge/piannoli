@@ -931,6 +931,7 @@ class SettingsViewModel @Inject constructor(
             }
             add(SettingsItem("manage_ports", R.string.setting_manage_ports, isEditable = true))
             add(SettingsItem("manage_tools", R.string.setting_manage_tools, isEditable = true))
+            add(SettingsItem("manage_hidden_games", R.string.manage_hidden_games, isEditable = true, canCycle = false))
             val scanRes = if (settings.scanLibraryAutomatically) R.string.value_automatically else R.string.value_manually
             add(SettingsItem("scan_library", R.string.setting_scan_library, valueRes = scanRes))
             add(SettingsItem("sd_root", R.string.setting_sd_root, valueText = settings.sdCardRoot, isEditable = true))

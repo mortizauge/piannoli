@@ -3,16 +3,23 @@ package dev.piannoli.scorza.input.screen
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.drawable.ColorDrawable
+import androidx.test.core.app.ApplicationProvider
 import dev.piannoli.scorza.db.AppsRepository
+import dev.piannoli.scorza.di.AppFonts
 import dev.piannoli.scorza.input.LauncherActions
 import dev.piannoli.scorza.model.App
 import dev.piannoli.scorza.model.AppType
 import dev.piannoli.scorza.navigation.LauncherScreen
 import dev.piannoli.scorza.navigation.NavigationController
 import dev.piannoli.scorza.scraper.ScrapedArtworkStore
+import dev.piannoli.scorza.settings.ContentMode
+import dev.piannoli.scorza.settings.SettingsRepository
 import dev.piannoli.scorza.ui.screens.DialogState
+import dev.piannoli.scorza.ui.viewmodel.GameListViewModel
+import dev.piannoli.scorza.ui.viewmodel.SettingsViewModel
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.spyk
 import io.mockk.verify
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +30,8 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -40,13 +49,17 @@ class SettingsInputHandlerTest {
     private val actions = mockk<LauncherActions>(relaxed = true)
     private val context = mockk<Context>(relaxed = true)
     private val packages = mockk<PackageManager>(relaxed = true)
+    private val games = mockk<GameListViewModel>(relaxed = true)
 
-    private fun handler(): SettingsInputHandler {
+    private fun handler(
+        settingsViewModel: SettingsViewModel = mockk(relaxed = true),
+        settings: SettingsRepository = mockk(relaxed = true),
+    ): SettingsInputHandler {
         every { context.packageManager } returns packages
         return SettingsInputHandler(
             nav = nav,
             ioScope = CoroutineScope(dispatcher),
-            settings = mockk(relaxed = true),
+            settings = settings,
             platformConfig = mockk(relaxed = true),
             installedCoreService = mockk(relaxed = true),
             globalOverrides = mockk(relaxed = true),
@@ -55,7 +68,8 @@ class SettingsInputHandlerTest {
             inputTesterController = mockk(relaxed = true),
             updateManager = mockk(relaxed = true),
             intentAuditor = mockk(relaxed = true),
-            settingsViewModel = mockk(relaxed = true),
+            settingsViewModel = settingsViewModel,
+            gameListViewModel = games,
             launcherActions = actions,
             activityActions = mockk(relaxed = true),
             emulatorMappingBuilder = mockk(relaxed = true),
@@ -65,6 +79,60 @@ class SettingsInputHandlerTest {
             scraper = mockk(relaxed = true),
             artworkStore = artwork,
         )
+    }
+
+    @Test fun `hidden games recovery is always available in Library`() {
+        val appContext = ApplicationProvider.getApplicationContext<Context>()
+        val settings = SettingsRepository(appContext)
+        val viewModel = SettingsViewModel(settings, AppFonts(appContext), appContext, mockk(relaxed = true))
+        viewModel.load()
+        for (mode in ContentMode.entries) {
+            settings.contentMode = mode
+            viewModel.enterSubCategory("library", dev.piannoli.scorza.R.string.settings_library)
+            viewModel.selectItem("manage_hidden_games")
+            assertEquals("manage_hidden_games", viewModel.enterSelected())
+            assertFalse(viewModel.getSelectedItem()!!.disabled)
+        }
+    }
+
+    @Test fun `opening hidden games pushes after loading and preserves Library selection and cancel snapshot`() {
+        val appContext = ApplicationProvider.getApplicationContext<Context>()
+        val settings = SettingsRepository(appContext)
+        settings.showHiddenFiles = false
+        val viewModel = spyk(SettingsViewModel(settings, AppFonts(appContext), appContext, mockk(relaxed = true)))
+        viewModel.load()
+        val handler = handler(viewModel, settings)
+        nav.push(LauncherScreen.Settings)
+        viewModel.setCategoryIndex(viewModel.state.value.categories.indexOfFirst { it.key == "library" })
+        handler.onConfirm()
+        viewModel.selectItem("hidden_files")
+        viewModel.cycleSelected(1)
+        assertTrue(settings.showHiddenFiles)
+        viewModel.selectItem("manage_hidden_games")
+        val libraryState = viewModel.state.value
+        var onReady: (() -> Unit)? = null
+        every { games.loadHiddenGames(any()) } answers { onReady = firstArg() }
+
+        handler.onConfirm()
+        assertTrue(nav.navigating)
+        assertEquals(LauncherScreen.Settings, nav.currentScreen)
+        handler.onConfirm()
+        handler.onBack()
+        verify(exactly = 1) { games.loadHiddenGames(any()) }
+        assertEquals(libraryState, viewModel.state.value)
+
+        onReady!!()
+        assertFalse(nav.navigating)
+        assertEquals(listOf(LauncherScreen.SystemList, LauncherScreen.Settings, LauncherScreen.GameList), nav.screenStack.toList())
+        nav.pop()
+        viewModel.load()
+        assertEquals(LauncherScreen.Settings, nav.currentScreen)
+        assertEquals(libraryState, viewModel.state.value)
+        assertTrue(settings.showHiddenFiles)
+        verify(exactly = 0) { viewModel.save() }
+        verify(exactly = 0) { viewModel.cancel() }
+        viewModel.cancel()
+        assertFalse(settings.showHiddenFiles)
     }
 
     @Test fun `managing tools and ports copies icons only for newly added apps`() = runTest(dispatcher) {

@@ -118,7 +118,6 @@ class SystemListViewModel @Inject constructor(
                 is PortsFolder -> "PORTS"
                 is PlatformItem -> platform.tag
                 is GameItem -> null
-                is HiddenGamesFolder -> null
             }
 
         data object RecentlyPlayedItem : ListItem()
@@ -146,7 +145,6 @@ class SystemListViewModel @Inject constructor(
         }
         data class ToolsFolder(val name: String, val count: Int) : ListItem()
         data class PortsFolder(val name: String, val count: Int) : ListItem()
-        data class HiddenGamesFolder(val count: Int) : ListItem()
     }
 
     data class State(
@@ -210,7 +208,6 @@ class SystemListViewModel @Inject constructor(
         ListItem.CollectionsFolder -> "collections"
         is ListItem.ToolsFolder -> "tools"
         is ListItem.PortsFolder -> "ports"
-        is ListItem.HiddenGamesFolder -> "hidden-games"
         null -> null
     }
 
@@ -317,9 +314,6 @@ class SystemListViewModel @Inject constructor(
                 val ordered = applyCustomOrder(reorderableItems, romsRepository.knownPlatformTags())
                 items.addAll(ordered)
             }
-            val hiddenCount = romsRepository.hiddenCount() + appsRepository.hiddenCount()
-            if (hiddenCount > 0) items.add(ListItem.HiddenGamesFolder(hiddenCount))
-
             val current = _state.value
             if (items == current.items && groupedPlatforms == current.platforms) {
                 if (current.isLoading) {

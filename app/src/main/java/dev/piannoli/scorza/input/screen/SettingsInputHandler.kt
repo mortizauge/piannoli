@@ -25,6 +25,7 @@ import dev.piannoli.scorza.settings.GlobalOverridesManager
 import dev.piannoli.scorza.settings.SettingsRepository
 import dev.piannoli.scorza.setup.SetupCoordinator
 import dev.piannoli.scorza.ui.screens.DialogState
+import dev.piannoli.scorza.ui.viewmodel.GameListViewModel
 import dev.piannoli.scorza.ui.viewmodel.SettingsViewModel
 import dev.piannoli.ui.components.KeyboardState
 import dev.piannoli.scorza.updater.UpdateManager
@@ -48,6 +49,7 @@ class SettingsInputHandler @Inject constructor(
     private val updateManager: UpdateManager,
     private val intentAuditor: IntentAuditor,
     private val settingsViewModel: SettingsViewModel,
+    private val gameListViewModel: GameListViewModel,
     private val launcherActions: LauncherActions,
     private val activityActions: ActivityActions,
     private val emulatorMappingBuilder: dev.piannoli.scorza.input.EmulatorMappingBuilder,
@@ -89,6 +91,7 @@ class SettingsInputHandler @Inject constructor(
     }
 
     override fun onConfirm() {
+        if (nav.navigating) return
         if (!settingsViewModel.state.value.inSubList) {
             val cat = settingsViewModel.state.value.categories.getOrNull(settingsViewModel.state.value.categoryIndex)
             when {
@@ -146,6 +149,13 @@ class SettingsInputHandler @Inject constructor(
             "installed_cores" -> queryInstalledCores()
             "manage_tools" -> openAppPicker("tools")
             "manage_ports" -> openAppPicker("ports")
+            "manage_hidden_games" -> {
+                nav.navigating = true
+                gameListViewModel.loadHiddenGames {
+                    nav.push(LauncherScreen.GameList)
+                    nav.navigating = false
+                }
+            }
             "regenerate_system_folders" -> {
                 val romDir = piannoliPaths.romDir
                 val tags = platformConfig.getAllTags()
@@ -214,6 +224,7 @@ class SettingsInputHandler @Inject constructor(
     }
 
     override fun onBack() {
+        if (nav.navigating) return
         if (settingsViewModel.state.value.remappingAction != null) {
             settingsViewModel.cancelRemapping()
             return

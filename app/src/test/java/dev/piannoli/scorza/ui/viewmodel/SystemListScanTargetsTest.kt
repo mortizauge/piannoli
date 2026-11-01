@@ -166,7 +166,7 @@ class SystemListScanTargetsTest {
         assertEquals(listOf("GB"), scanned)
     }
 
-    @Test fun `hidden games entry exposes recovery when hidden games exist`() {
+    @Test fun `hidden games do not add a main menu entry`() {
         val romDir = tmp.newFolder("Roms")
         val vm = viewModel(romDir, indexed = emptyMap())
         every { romsRepository.hiddenCount() } returns 2
@@ -176,7 +176,9 @@ class SystemListScanTargetsTest {
         vm.scan(scanDisk = false, onReady = { done.countDown() })
 
         assertTrue(done.await(10, TimeUnit.SECONDS))
-        assertTrue(SystemListViewModel.ListItem.HiddenGamesFolder(3) in vm.state.value.items)
+        assertTrue(vm.state.value.items.isEmpty())
+        verify(exactly = 0) { romsRepository.hiddenCount() }
+        verify(exactly = 0) { appsRepository.hiddenCount() }
     }
 
     @Test fun `saved platform identity and viewport survive recreation and changed list ordering`() {

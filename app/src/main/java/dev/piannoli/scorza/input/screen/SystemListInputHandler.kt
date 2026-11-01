@@ -223,13 +223,6 @@ class SystemListInputHandler @Inject constructor(
                     nav.navigating = false
                 }
             }
-            is SystemListViewModel.ListItem.HiddenGamesFolder -> {
-                nav.navigating = true
-                gameListViewModel.loadHiddenGames {
-                    nav.screenStack.add(LauncherScreen.GameList)
-                    nav.navigating = false
-                }
-            }
             else -> {}
         }
     }
@@ -264,10 +257,6 @@ class SystemListInputHandler @Inject constructor(
             nav.dialogState.value = DialogState.ContextMenu(gameName = menuName, options = options)
             return
         }
-        if (item is SystemListViewModel.ListItem.HiddenGamesFolder) {
-            nav.dialogState.value = DialogState.None
-            return
-        }
         nav.pendingFghItem = null
         val name = when (item) {
             is SystemListViewModel.ListItem.PlatformItem -> item.platform.displayName
@@ -277,8 +266,6 @@ class SystemListInputHandler @Inject constructor(
             is SystemListViewModel.ListItem.FavoritesItem -> context.getString(dev.piannoli.scorza.R.string.label_favorites)
             is SystemListViewModel.ListItem.CollectionsFolder -> context.getString(dev.piannoli.scorza.R.string.label_collections)
             is SystemListViewModel.ListItem.CollectionItem -> item.name
-            is SystemListViewModel.ListItem.HiddenGamesFolder ->
-                context.getString(dev.piannoli.scorza.R.string.manage_hidden_games_count, item.count)
             else -> return
         }
         val options = buildList {
