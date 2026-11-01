@@ -71,6 +71,7 @@ class InputRouter @Inject constructor(
     private val raPreloadController: dev.piannoli.scorza.ra.RaPreloadController,
     @IoScope private val ioScope: CoroutineScope,
     private val menuSounds: dev.piannoli.scorza.util.MenuSounds,
+    private val menuHaptics: dev.piannoli.scorza.util.MenuHaptics,
 ) {
     var unregisterCoreQueryReceiver: () -> Unit = {}
 
@@ -91,7 +92,10 @@ class InputRouter @Inject constructor(
             onSelectUpOverride = { onSelectUp() },
             screenResolver = { activeScreenHandler() },
             onMenuSound = { sound ->
-                if (nav.currentScreen !is LauncherScreen.InputTester) menuSounds.play(sound)
+                if (nav.currentScreen !is LauncherScreen.InputTester) {
+                    menuSounds.play(sound)
+                    menuHaptics.play(sound)
+                }
             },
         )
     }

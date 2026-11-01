@@ -513,7 +513,7 @@ fun AppNavGraph(
     onKeyboardConfirm: () -> Unit = {},
     onKeyboardCancel: () -> Unit = {},
     onKeyboardHelp: () -> Unit = {},
-    onKeyboardTick: () -> Unit = {},
+    onKeyboardEdited: (old: dev.piannoli.ui.components.KeyboardState, new: dev.piannoli.ui.components.KeyboardState) -> Unit = { _, _ -> },
 ) {
     val dialog by dialogState.collectAsStateWhileActive()
     val appSettings by settingsViewModel.appSettings.collectAsStateWhileActive()
@@ -1951,8 +1951,8 @@ fun AppNavGraph(
             appListPlatformTag = gameListViewModel?.state?.collectAsStateWhileActive()?.value?.platformTag,
             onKeyboardChange = { keyboard ->
                 val host = nav?.dialogState?.value as? KeyboardHost
-                if (host != null) {
-                    if (host.keyboard != keyboard) onKeyboardTick()
+                if (host != null && host === dialog) {
+                    if (host.keyboard != keyboard) onKeyboardEdited(host.keyboard, keyboard)
                     nav.dialogState.value = host.withKeyboard(keyboard)
                 }
             },

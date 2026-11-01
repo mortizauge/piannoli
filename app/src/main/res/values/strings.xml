@@ -7,6 +7,7 @@
     <string name="scraper_overwrite">Overwrite</string>
     <string name="scraper_overwrite_confirm">Overwrite artwork?</string>
     <string name="setting_navigation_sound">Navigation sound</string>
+    <string name="setting_haptic_feedback">Haptic feedback</string>
     <string name="setting_controller_notifications">Controller notifications</string>
     <string name="setting_scrape_fail_behavior">Fail Behavior</string>
     <string name="scrape_fail_skip">Skip</string>

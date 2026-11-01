@@ -301,6 +301,10 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         get() = jsonRead { optBoolean(KEY_NAVIGATION_SOUND, false) }
         set(value) = jsonWrite { put(KEY_NAVIGATION_SOUND, value) }
 
+    var hapticFeedback: Boolean
+        get() = jsonRead { optBoolean(KEY_HAPTIC_FEEDBACK, false) }
+        set(value) = jsonWrite { put(KEY_HAPTIC_FEEDBACK, value) }
+
     var controllerNotifications: Boolean
         get() = jsonRead { optBoolean(KEY_CONTROLLER_NOTIFICATIONS, false) }
         set(value) = jsonWrite { put(KEY_CONTROLLER_NOTIFICATIONS, value) }
@@ -569,6 +573,7 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         private const val KEY_SCRAPE_FAIL_BEHAVIOR = "scrape_fail_behavior"
         private const val KEY_KEYBOARD_TYPE = "keyboard_type"
         private const val KEY_NAVIGATION_SOUND = "navigation_sound"
+        private const val KEY_HAPTIC_FEEDBACK = "haptic_feedback"
         private const val KEY_CONTROLLER_NOTIFICATIONS = "controller_notifications"
         private const val KEY_ART_WIDTH = "art_width"
         private const val KEY_SYSTEM_ARTWORK_TYPE = "system_artwork_type"

@@ -581,16 +581,36 @@ class ConflictsApplyingStateTest {
         assertTrue(nav.dialogState.value is DialogState.RommSettingsMenu)
     }
 
-    private fun router(): InputRouter {
+    @Test fun launcher_feedback_reaches_sounds_and_haptics_but_not_the_input_tester() {
+        val sounds = mockk<dev.piannoli.scorza.util.MenuSounds>(relaxed = true)
+        val haptics = mockk<dev.piannoli.scorza.util.MenuHaptics>(relaxed = true)
+        val input = mockk<dev.piannoli.scorza.input.runtime.InputDispatcher>()
+        val feedback = io.mockk.slot<(dev.piannoli.scorza.util.MenuSound) -> Unit>()
+        every { input.wireToRegistry(any(), any(), any(), capture(feedback), any(), any()) } returns Unit
+        router(sounds, haptics).wire(input)
+        nav.push(LauncherScreen.Settings)
+        for (action in dev.piannoli.scorza.util.MenuSound.entries) feedback.captured(action)
+        nav.push(LauncherScreen.InputTester)
+        for (action in dev.piannoli.scorza.util.MenuSound.entries) feedback.captured(action)
+        for (action in dev.piannoli.scorza.util.MenuSound.entries) {
+            verify(exactly = 1) { sounds.play(action) }
+            verify(exactly = 1) { haptics.play(action) }
+        }
+    }
+
+    private fun router(
+        menuSounds: dev.piannoli.scorza.util.MenuSounds = mockk(),
+        menuHaptics: dev.piannoli.scorza.util.MenuHaptics = mockk(),
+    ): InputRouter {
         val factory = mockk<ScrollListInputHandler.Factory>()
         every { factory.create(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } answers {
             ScrollListInputHandler(nav, arg(0), arg(1), arg(2), arg(3), arg(4), arg(5),
                 arg(6), arg(7), arg(8), arg(9), arg(10), arg(11))
         }
         return InputRouter(
-            nav = nav, dialogHandler = handler, systemListHandler = mockk(), gameListHandler = mockk(),
+            nav = nav, dialogHandler = handler, systemListHandler = mockk(), gameListHandler = mockk(relaxed = true),
             settingsHandler = mockk(), onboardingHandler = mockk(), inputTesterHandler = mockk(),
-            saveStatePickerHandler = mockk(), saveSlotsHandler = mockk(), guideHandler = mockk(),
+            saveStatePickerHandler = mockk(), saveSlotsHandler = mockk(relaxed = true), guideHandler = mockk(),
             controllerDetailHandler = mockk(), controllersHandler = mockk(), editButtonsHandler = mockk(),
             loggingSettingsHandler = mockk(), scrollListFactory = factory, platformConfig = mockk(),
             gameOverrideStore = mockk(), installedCoreService = mockk(), emulatorMappingBuilder = mockk(),
@@ -598,7 +618,7 @@ class ConflictsApplyingStateTest {
             screenInputRegistry = mockk(), context = ApplicationProvider.getApplicationContext(),
             settings = mockk(), coreInstaller = mockk(), rommBrowseViewModel = mockk(),
             rommDownloader = mockk(relaxed = true), osdController = mockk(), raPreloadController = mockk(),
-            ioScope = CoroutineScope(dispatcher), menuSounds = mockk(),
+            ioScope = CoroutineScope(dispatcher), menuSounds = menuSounds, menuHaptics = menuHaptics,
         )
     }
 

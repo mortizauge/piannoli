@@ -87,6 +87,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
     @Inject lateinit var onboardingHandler: dev.piannoli.scorza.input.screen.OnboardingInputHandler
     @Inject lateinit var inputDispatcher: InputDispatcher
     @Inject lateinit var menuSounds: dev.piannoli.scorza.util.MenuSounds
+    @Inject lateinit var menuHaptics: dev.piannoli.scorza.util.MenuHaptics
     @Inject lateinit var screenInputRegistry: dev.piannoli.scorza.input.runtime.ScreenInputRegistry
     @Inject lateinit var menuNavigationPoller: dev.piannoli.scorza.input.runtime.MenuNavigationPoller
     @Inject lateinit var stickAutoRepeat: dev.piannoli.scorza.input.runtime.StickAutoRepeat
@@ -511,7 +512,10 @@ class MainActivity : ComponentActivity(), ActivityActions {
             onKeyboardConfirm = { inputDispatcher.onStart() },
             onKeyboardCancel = { inputDispatcher.onWest() },
             onKeyboardHelp = { inputDispatcher.onMenu() },
-            onKeyboardTick = { menuSounds.play(dev.piannoli.scorza.util.MenuSound.TICK) },
+            onKeyboardEdited = { old, new ->
+                menuSounds.play(dev.piannoli.scorza.util.MenuSound.TICK)
+                menuHaptics.keyboardChanged(old, new)
+            },
         )
     }
 

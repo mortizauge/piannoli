@@ -243,6 +243,7 @@ class SettingsViewModel @Inject constructor(
         val piannoliBindings: Map<dev.piannoli.ui.MenuAction, dev.piannoli.ui.MenuAction>,
         val scrapeFailBehavior: ScrapeFailBehavior,
         val navigationSound: Boolean,
+        val hapticFeedback: Boolean,
         val controllerNotifications: Boolean,
         val showHiddenFiles: Boolean,
         val textSize: TextSize,
@@ -493,6 +494,7 @@ class SettingsViewModel @Inject constructor(
                 settings.scrapeFailBehavior = entries[Math.floorMod(index + direction, entries.size)]
             }
             "navigation_sound" -> settings.navigationSound = !settings.navigationSound
+            "haptic_feedback" -> settings.hapticFeedback = !settings.hapticFeedback
             "controller_notifications" -> settings.controllerNotifications = !settings.controllerNotifications
             "text_size" -> {
                 val entries = TextSize.entries
@@ -759,6 +761,7 @@ class SettingsViewModel @Inject constructor(
         piannoliBindings = settings.piannoliBindings,
         scrapeFailBehavior = settings.scrapeFailBehavior,
         navigationSound = settings.navigationSound,
+        hapticFeedback = settings.hapticFeedback,
         controllerNotifications = settings.controllerNotifications,
         showHiddenFiles = settings.showHiddenFiles,
         textSize = settings.textSize,
@@ -809,6 +812,7 @@ class SettingsViewModel @Inject constructor(
         settings.piannoliBindings = snap.piannoliBindings
         settings.scrapeFailBehavior = snap.scrapeFailBehavior
         settings.navigationSound = snap.navigationSound
+        settings.hapticFeedback = snap.hapticFeedback
         settings.controllerNotifications = snap.controllerNotifications
         settings.showHiddenFiles = snap.showHiddenFiles
         settings.textSize = snap.textSize
@@ -985,6 +989,7 @@ class SettingsViewModel @Inject constructor(
             SettingsItem("keyboard_type", R.string.setting_keyboard, valueRes =
                 if (settings.keyboardType == KeyboardType.SYSTEM) R.string.keyboard_system else R.string.keyboard_piannoli),
             SettingsItem("navigation_sound", R.string.setting_navigation_sound, valueRes = onOff(settings.navigationSound)),
+            SettingsItem("haptic_feedback", R.string.setting_haptic_feedback, valueRes = onOff(settings.hapticFeedback)),
             SettingsItem("controller_notifications", R.string.setting_controller_notifications, valueRes = onOff(settings.controllerNotifications)),
             SettingsItem("controllers", R.string.setting_controllers, isEditable = true),
             SettingsItem("shortcuts", R.string.setting_shortcuts, isEditable = true),
