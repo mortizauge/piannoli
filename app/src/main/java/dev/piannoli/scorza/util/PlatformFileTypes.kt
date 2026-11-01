@@ -51,6 +51,7 @@ internal object PlatformFileTypes {
         "AMIGA" to "adf adz dms fdi ipf hdf hdz lha slave info cue ccd nrg mds iso chd uae m3u zip 7z rp9",
         "PC" to "steam steamappid epic gog amazon pcgame localgameid txt",
         "PS2" to "elf iso ciso cue bin gz chd cso zso mdf nrg dump img m3u",
+        "XBOX" to "iso xiso xboe dotno",
         "GC" to "iso rvz gcm gcz ciso wia tgc dol elf dff m3u",
         "WII" to "iso rvz gcm gcz ciso wia wbfs wad dol elf dff m3u",
         "3DS" to "3ds 3dsx z3dsx elf axf cci zcci cxi zcxi app",

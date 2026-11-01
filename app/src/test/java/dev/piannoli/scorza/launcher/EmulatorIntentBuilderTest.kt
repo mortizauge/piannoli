@@ -1,16 +1,25 @@
 package dev.piannoli.scorza.launcher
 
 import android.content.ComponentName
+import android.content.Intent
+import android.net.Uri
+import androidx.core.content.FileProvider
 import androidx.test.core.app.ApplicationProvider
 import dev.piannoli.scorza.config.AppConfig
 import dev.piannoli.scorza.config.DataBinding
 import dev.piannoli.scorza.config.ExtraSpec
 import dev.piannoli.scorza.config.ExtraValueKind
 import dev.piannoli.scorza.config.LaunchMethod
+import dev.piannoli.scorza.config.PlatformConfig
+import io.mockk.every
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -25,7 +34,53 @@ class EmulatorIntentBuilderTest {
 
     @get:Rule val tmp = TemporaryFolder()
 
+    @Before fun configureStorage() {
+        // AndroidX's root-path containment check uses '/', so it cannot resolve Windows files.
+        if (File.separatorChar == '\\') {
+            mockkStatic(FileProvider::class)
+            every { FileProvider.getUriForFile(any(), any(), any()) } answers {
+                Uri.Builder().scheme("content").authority(secondArg<String>())
+                    .appendPath(thirdArg<File>().canonicalPath).build()
+            }
+        }
+    }
+
+    @After fun resetStorage() {
+        if (File.separatorChar == '\\') unmockkStatic(FileProvider::class)
+    }
+
     private fun rom(): File = tmp.newFile("foo.iso").apply { writeBytes(byteArrayOf(0)) }
+
+    @Test fun `bundled X1 BOX launches with a readable content URI string extra`() {
+        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val config = PlatformConfig(tmp.root, ctx.assets).getAppConfig("XBOX", "com.izzy2lost.x1box")
+        val file = rom()
+        val resolved = EmulatorIntentBuilder.resolve(ctx, config, file)
+        val intent = EmulatorIntentBuilder.toAndroidIntent(ctx, resolved, config)
+        val uri = ctx.romFileProviderUri(file)
+
+        assertEquals(ComponentName("com.izzy2lost.x1box", "com.izzy2lost.x1box.LauncherActivity"), intent.component)
+        assertEquals(Intent.ACTION_VIEW, intent.action)
+        assertNull(intent.data)
+        assertEquals(uri.toString(), intent.getStringExtra("AutoStartFile"))
+        assertEquals(uri, intent.clipData?.getItemAt(0)?.uri)
+        assertTrue(intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+        assertEquals(setOf("AutoStartFile"), intent.extras?.keySet())
+    }
+
+    @Test fun `bundled hakuX launches its real package with readable content URI data`() {
+        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val config = PlatformConfig(tmp.root, ctx.assets).getAppConfig("XBOX", "com.rfandango.haku_x")
+        val file = tmp.newFile("Game.XISO").apply { writeBytes(byteArrayOf(0)) }
+        val resolved = EmulatorIntentBuilder.resolve(ctx, config, file)
+        val intent = EmulatorIntentBuilder.toAndroidIntent(ctx, resolved, config)
+
+        assertEquals(ComponentName("com.rfandango.haku_x", "com.rfandango.haku_x.LauncherActivity"), intent.component)
+        assertEquals(Intent.ACTION_VIEW, intent.action)
+        assertEquals(ctx.romFileProviderUri(file), intent.data)
+        assertTrue(intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+        assertNull(intent.extras)
+    }
 
     @Test fun `MAIN with explicit activity and uri_string extra`() {
         val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()

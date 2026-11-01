@@ -18,6 +18,17 @@ class PlatformConfigStandaloneDisplayTest {
         return PlatformConfig(java.io.File(ctx.cacheDir, "sd-root").apply { mkdirs() }, ctx.assets)
     }
 
+    @Test fun `Xbox offers named standalone emulators without a libretro source`() {
+        val pc = config()
+        assertEquals("Microsoft Xbox", pc.getDisplayName("xbox"))
+        assertTrue(pc.isKnownTag("Original Xbox"))
+        assertEquals("", pc.getCoreMapping("XBOX"))
+        assertEquals(listOf(EmulatorSource.Standalone), pc.availableSources("XBOX"))
+        val options = pc.emulatorOptionsForSource("XBOX", EmulatorSource.Standalone, includeAll = true)
+        assertEquals(listOf("X1 BOX", "hakuX"), options.map { it.displayName })
+        assertEquals(listOf("com.izzy2lost.x1box", "com.rfandango.haku_x"), options.map { it.appPackage })
+    }
+
     @Test fun `standalone selection renders app name not bundled core`() {
         val pc = config()
         pc.setPlatformChoice("NES", EmulatorChoice(EmulatorSource.Standalone, appPackage = "com.explusalpha.NesEmu"))

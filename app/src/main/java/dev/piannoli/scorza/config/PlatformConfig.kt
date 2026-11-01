@@ -640,6 +640,8 @@ class PlatformConfig(
         "org.ppsspp.ppsspp" to "PPSSPP",
         "org.ppsspp.ppssppgold" to "PPSSPP Gold",
         "xyz.aethersx2.android" to "NetherSX2",
+        "com.izzy2lost.x1box" to "X1 BOX",
+        "com.rfandango.haku_x" to "hakuX",
         "org.dolphinemu.dolphinemu" to "Dolphin",
         "org.dolphinemu.mmjr" to "Dolphin MMJR2",
         "dev.piannoli.delfino" to "Delfino",

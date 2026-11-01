@@ -33,5 +33,7 @@ class RommSlugMapTest {
         assertEquals("SMS", map.tagForSlug("ms"))
         assertEquals("MAME", map.tagForSlug("arcade"))
         assertEquals("FBN", map.tagForSlug("fbneo"))
+        assertEquals("XBOX", map.tagForSlug("xbox"))
+        assertNull(map.tagForSlug("xbox360"))
     }
 }

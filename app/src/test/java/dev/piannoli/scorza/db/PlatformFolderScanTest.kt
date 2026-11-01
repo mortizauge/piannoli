@@ -55,6 +55,40 @@ class PlatformFolderScanTest {
         writeText("ROM")
     }
 
+    @Test fun `Xbox compound extensions are hidden in titles without changing file identities`() {
+        val files = listOf(
+            write("Xbox/Halo.xiso.iso"),
+            write("Microsoft Xbox/Fable (USA).XISO.ISO"),
+            write("Xbox/Forza.xiso"),
+            write("Xbox/Game.xiso.edition.iso"),
+        )
+        scanner.scanPlatform("XBOX")
+        val roms = repository.allRomsForPlatform("XBOX").associateBy { it.path.name }
+        assertEquals("Halo", roms.getValue("Halo.xiso.iso").displayName)
+        assertEquals("Fable", roms.getValue("Fable (USA).XISO.ISO").displayName)
+        assertEquals("Forza", roms.getValue("Forza.xiso").displayName)
+        assertEquals("Game.xiso.edition", roms.getValue("Game.xiso.edition.iso").displayName)
+        assertEquals(files.toSet(), roms.values.map { it.path }.toSet())
+        assertTrue(files.all { it.isFile })
+    }
+
+    @Test fun `Xbox aliases merge supported formats without including Xbox 360`() {
+        write("xbox/Halo.ISO")
+        write("Microsoft Xbox/Fable.xiso")
+        write("oRiGiNaL xBoX/Game.XBOE")
+        write("XBOX/Homebrew.dotno")
+        write("Microsoft Xbox/Other.chd")
+        write("Xbox360/Not Original.iso")
+        assertEquals(4, scanner.scanPlatform("Original Xbox").inserted)
+        val roms = repository.allRomsForPlatform("XBOX")
+        assertEquals(setOf("Halo.ISO", "Fable.xiso", "Game.XBOE", "Homebrew.dotno"),
+            roms.map { it.path.name }.toSet())
+        assertTrue(roms.all { it.platformTag == "XBOX" && it.path.isFile })
+        assertEquals(mapOf("XBOX" to 4), repository.platformCounts())
+        assertEquals(RomScanner.SyncCounts(0, 0, 0), scanner.scanPlatform("Microsoft Xbox"))
+        assertEquals("Microsoft Xbox", config.resolvePlatform("original xbox", romDir, 4).displayName)
+    }
+
     @Test fun `all folders combine into one platform with launchable paths stable ids and nested browsing`() {
         write("PS/Canonical.chd")
         write("Ps1/First.chd")

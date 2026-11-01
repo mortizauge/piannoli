@@ -335,6 +335,8 @@ class RomDirectoryWalker(
             val override = nameOverrides[file.name]
             val rawName = if (file.name.endsWith(".p8.png", ignoreCase = true)) {
                 file.name.dropLast(".p8.png".length)
+            } else if (tag == "XBOX" && file.name.endsWith(".xiso.iso", ignoreCase = true)) {
+                file.name.dropLast(".xiso.iso".length)
             } else {
                 file.nameWithoutExtension
             }

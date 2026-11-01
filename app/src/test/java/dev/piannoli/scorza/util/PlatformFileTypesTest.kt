@@ -14,6 +14,15 @@ import java.io.File
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class PlatformFileTypesTest {
+    @Test fun `Xbox scans supplied formats case insensitively and rejects other disc formats`() {
+        for (extension in listOf("iso", "XISO", "xboe", "DOTNO")) {
+            assertTrue(PlatformFileTypes.accepts("xbox", File("Game.$extension")))
+        }
+        for (extension in listOf("chd", "zip", "xbe", "txt", "notarom")) {
+            assertFalse(PlatformFileTypes.accepts("XBOX", File("Other.$extension")))
+        }
+    }
+
     @Test fun `every bundled system has a restrictive file filter`() {
         val assets = ApplicationProvider.getApplicationContext<Context>().assets
         val platforms = JSONObject(assets.open("platforms.json").bufferedReader().use { it.readText() })

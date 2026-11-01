@@ -380,6 +380,13 @@
       { "package": "com.armsx2", "activity": "com.armsx2.Main", "action": "android.intent.action.VIEW", "data": { "kind": "file_provider" } }
     ]
   },
+  "XBOX": {
+    "name": "Microsoft Xbox",
+    "app": [
+      { "package": "com.izzy2lost.x1box", "activity": "com.izzy2lost.x1box.LauncherActivity", "action": "android.intent.action.VIEW", "extras": [{ "key": "AutoStartFile", "kind": "uri_string" }] },
+      { "package": "com.rfandango.haku_x", "activity": "com.rfandango.haku_x.LauncherActivity", "data": { "kind": "file_provider", "grantPermission": true } }
+    ]
+  },
   "GC": {
     "name": "GameCube",
     "app": [

@@ -49,6 +49,7 @@ object PlatformFolders {
         "AMIGA" to listOf("Commodore Amiga"),
         "PC" to listOf("PC Games"),
         "PS2" to listOf("PlayStation 2", "Sony PlayStation 2"),
+        "XBOX" to listOf("Microsoft Xbox", "Original Xbox"),
         "GC" to listOf("GameCube", "Nintendo GameCube"),
         "WII" to listOf("Nintendo Wii"),
         "3DS" to listOf("N3DS", "Nintendo 3DS"),
