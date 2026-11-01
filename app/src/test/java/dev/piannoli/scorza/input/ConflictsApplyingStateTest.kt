@@ -117,6 +117,50 @@ class ConflictsApplyingStateTest {
         }
     }
 
+    @Test fun `launcher keyboard cancel returns to captured navigation for initial and edited searches`() {
+        every { games.cancelSearch(any()) } answers { firstArg<() -> Unit>().invoke() }
+        for (global in listOf(false, true)) {
+            for (submitted in listOf(false, true)) {
+                for (systemKeyboard in listOf(false, true)) {
+                    nav.screenStack.clear()
+                    nav.push(LauncherScreen.SystemList)
+                    if (!global) nav.push(LauncherScreen.GameList)
+                    val origin = nav.screenStack.toList()
+                    nav.beginLauncherSearch()
+                    if (global && submitted) nav.push(LauncherScreen.GameList)
+                    // Reopening the keyboard must not replace the original navigation snapshot.
+                    if (submitted) assertFalse(nav.beginLauncherSearch())
+                    every { settings.keyboardType } returns if (systemKeyboard)
+                        dev.piannoli.scorza.settings.KeyboardType.SYSTEM
+                    else dev.piannoli.scorza.settings.KeyboardType.PIANNOLI
+                    nav.dialogState.value = DialogState.RenameInput(
+                        if (global) "launcher_global_search" else "launcher_search",
+                        keyboard = dev.piannoli.ui.components.KeyboardState(text = "Mario"),
+                    )
+                    if (systemKeyboard) handler.onBack() else handler.onWest()
+                    assertEquals(origin, nav.screenStack.toList())
+                    assertEquals(DialogState.None, nav.dialogState.value)
+                    assertFalse(nav.navigating)
+                }
+            }
+        }
+        verify(exactly = 8) { games.cancelSearch(any()) }
+    }
+
+    @Test fun `pending global keyboard can be cancelled while navigation is busy`() {
+        every { games.cancelSearch(any()) } answers { firstArg<() -> Unit>().invoke() }
+        nav.beginLauncherSearch()
+        nav.navigating = true
+        nav.dialogState.value = DialogState.RenameInput(
+            "launcher_global_search", keyboard = dev.piannoli.ui.components.KeyboardState(text = "Mario"),
+        )
+        handler.onWest()
+        verify { games.cancelSearch(any()) }
+        assertEquals(LauncherScreen.SystemList, nav.currentScreen)
+        assertFalse(nav.navigating)
+        assertEquals(DialogState.None, nav.dialogState.value)
+    }
+
     @Test fun `network info cycles interfaces and wraps in both directions`() {
         val addresses = listOf("192.168.1.10", "10.0.0.2")
         nav.dialogState.value = DialogState.QuickInfo(addresses)

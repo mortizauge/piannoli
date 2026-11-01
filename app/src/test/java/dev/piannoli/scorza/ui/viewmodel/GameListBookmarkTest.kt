@@ -76,6 +76,10 @@ class GameListBookmarkTest {
         model.restoreBookmark(bookmark) { continuation.resume(Unit) }
     }
 
+    private suspend fun cancelSearch() = suspendCancellableCoroutine { continuation ->
+        model.cancelSearch { continuation.resume(Unit) }
+    }
+
     @Test fun `folder artwork revisions refresh cached filtered and complete lists without losing position`() = runBlocking {
         val folder = ListItem.SubfolderItem("Adventure", "RPGs/Adventure")
         every { roms.gamesForPlatform("GB", any()) } returns listOf(folder, mario, metroid)
@@ -109,6 +113,125 @@ class GameListBookmarkTest {
             suspendCancellableCoroutine<Unit> { continuation -> model.reload { continuation.resume(Unit) } }
             assertTrue(model.state.value.artworkRevision > revision)
         }
+    }
+
+    @Test fun `cancel local search restores original folder selection scroll and parents after edits`() = runBlocking {
+        val origin = GameListBookmark(
+            platformTag = "GB", platformTags = listOf("GB"), folders = listOf("RPGs"),
+            folderPositions = listOf(BrowsePosition(index = 1, scroll = 1)),
+            position = BrowsePosition("rom:3", 1, 1),
+        )
+        restore(origin)
+        val before = model.bookmark()
+        model.beginSearch()
+        val keyboard = dev.piannoli.ui.components.KeyboardState(text = "Mario", cursorPos = 2)
+        model.setSearch("Mario", keyboard)
+        assertEquals(keyboard, model.searchKeyboard())
+        model.setSearch("Metroid")
+        cancelSearch()
+        assertEquals(before, model.bookmark())
+        assertEquals(listOf(mario, metroid), model.state.value.items)
+        assertEquals("", model.searchKeyboard().text)
+        assertTrue(model.exitSubfolder())
+        withTimeout(5_000) { model.state.first { it.subfolderPath == null && it.selectedIndex == 1 } }
+        Unit
+    }
+
+    @Test fun `cancel initial keyboard preserves list position without applying text`() = runBlocking {
+        val origin = GameListBookmark(
+            platformTag = "GB", platformTags = listOf("GB"), position = BrowsePosition("rom:3", 1, 1),
+        )
+        restore(origin)
+        val before = model.bookmark()
+        model.beginSearch()
+        cancelSearch()
+        assertEquals(before, model.bookmark())
+    }
+
+    @Test fun `cancel local Favorites search restores Favorites selection and scroll`() = runBlocking {
+        every { collections.byId(1) } returns CollectionsRepository.CollectionRow(
+            1, "Favorites", null, 0, CollectionType.FAVORITES,
+        )
+        every { collections.romIdsIn(1) } returns listOf(2, 3)
+        every { roms.gameById(2) } returns mario.rom
+        every { roms.gameById(3) } returns metroid.rom
+        restore(GameListBookmark(collectionId = 1, position = BrowsePosition("rom:3", 1, 1)))
+        val before = model.bookmark()
+        model.beginSearch()
+        model.setSearch("Mario")
+        cancelSearch()
+        assertEquals(before, model.bookmark())
+        assertTrue(model.state.value.isFavorites)
+        assertEquals(metroid, model.getSelectedItem())
+    }
+
+    @Test fun `editing restored local results does not capture applied filter as origin`() = runBlocking {
+        restore(GameListBookmark(platformTag = "GB", platformTags = listOf("GB"), search = "Mario"))
+        model.beginSearch()
+        cancelSearch()
+        assertEquals(null, model.state.value.searchTerm)
+        assertEquals(listOf(mario, metroid), model.state.value.items)
+    }
+
+    @Test fun `cancel global search restores nested collection and original position across query changes`() = runBlocking {
+        every { collections.byId(10) } returns CollectionsRepository.CollectionRow(10, "All games", null, 0, CollectionType.STANDARD)
+        every { collections.byId(20) } returns CollectionsRepository.CollectionRow(20, "Handhelds", 10, 0, CollectionType.STANDARD)
+        every { collections.romIdsIn(any()) } returns listOf(2, 3)
+        every { roms.gameById(2) } returns mario.rom
+        every { roms.gameById(3) } returns metroid.rom
+        every { roms.searchAllGames(any()) } returns listOf(mario.rom)
+        val origin = GameListBookmark(
+            collectionId = 20, position = BrowsePosition("rom:3", 1, 1),
+            collectionParents = listOf(CollectionBrowseParent(10, 1, 1)),
+        )
+        restore(origin)
+        val before = model.bookmark()
+        model.beginSearch()
+        repeat(2) {
+            val keyboard = dev.piannoli.ui.components.KeyboardState(
+                text = "  Mario$it ", cursorPos = 3, keyRow = 1, keyCol = 2,
+            )
+            model.rememberSearchKeyboard(keyboard)
+            suspendCancellableCoroutine<Unit> { continuation ->
+                model.loadGlobalSearch(dev.piannoli.scorza.model.GameSearchQuery("Mario$it")) {
+                    continuation.resume(Unit)
+                }
+            }
+            assertEquals(keyboard, model.searchKeyboard())
+        }
+        cancelSearch()
+        assertEquals(before, model.bookmark())
+        assertEquals(metroid, model.getSelectedItem())
+        assertTrue(model.exitChildCollection())
+        withTimeout(5_000) { model.state.first { it.collectionId == 10L && it.selectedIndex == 1 } }
+        Unit
+    }
+
+    @Test fun `cancel pending global search prevents late results and completion callback`() = runBlocking {
+        val started = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val finished = java.util.concurrent.CountDownLatch(1)
+        var completed = false
+        every { roms.searchAllGames(any()) } answers {
+            started.countDown()
+            check(release.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            finished.countDown()
+            listOf(mario.rom)
+        }
+        restore(GameListBookmark(platformTag = "GB", platformTags = listOf("GB")))
+        val before = model.bookmark()
+        model.beginSearch()
+        val request = model.loadGlobalSearch(dev.piannoli.scorza.model.GameSearchQuery("Mario")) { completed = true }
+        try {
+            assertTrue(started.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            cancelSearch()
+        } finally {
+            release.countDown()
+        }
+        assertTrue(finished.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        request.join()
+        assertEquals(before, model.bookmark())
+        assertEquals(false, completed)
     }
 
     @Test fun `tools ignore Favorites ordering and cannot be reordered across pin boundary`() = runBlocking {

@@ -8,8 +8,10 @@ import dev.piannoli.scorza.navigation.NavigationController
 import dev.piannoli.scorza.ui.screens.DialogState
 import dev.piannoli.scorza.ui.viewmodel.SystemListViewModel
 import dev.piannoli.scorza.ui.viewmodel.SystemListViewModel.ListItem
+import dev.piannoli.scorza.ui.viewmodel.GameListViewModel
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import org.junit.Assert.assertTrue
@@ -21,6 +23,22 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class SystemListInputHandlerTest {
+    @Test fun `global keyboard captures menu origin before submitting or cancelling`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val nav = NavigationController()
+        val games = mockk<GameListViewModel>(relaxed = true)
+        val handler = SystemListInputHandler(
+            context, nav, CoroutineScope(Dispatchers.Unconfined), mockk(relaxed = true),
+            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
+            mockk(relaxed = true), games, mockk(relaxed = true), mockk(relaxed = true),
+            mockk(relaxed = true),
+        )
+        handler.onR1()
+        verify(exactly = 1) { games.beginSearch(fromGameList = false) }
+        assertTrue(nav.dialogState.value is DialogState.RenameInput)
+        assertTrue(!nav.beginLauncherSearch())
+    }
+
     @Test fun `every platform and category opens options with choose artwork`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val nav = NavigationController()

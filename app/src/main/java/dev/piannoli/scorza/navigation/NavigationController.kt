@@ -26,6 +26,23 @@ class NavigationController @Inject constructor() {
     var selectDown = false
     var capsBeforeSymbols = false
     var pendingFghItem: dev.piannoli.scorza.model.ListItem? = null
+    private var launcherSearchOrigin: List<LauncherScreen>? = null
+
+    fun beginLauncherSearch(fromGlobalResults: Boolean = false): Boolean {
+        if (launcherSearchOrigin != null) return false
+        launcherSearchOrigin = if (fromGlobalResults && screenStack.size > 1)
+            screenStack.dropLast(1) else screenStack.toList()
+        return true
+    }
+
+    fun cancelLauncherSearch() {
+        val origin = launcherSearchOrigin
+        launcherSearchOrigin = null
+        if (origin != null) {
+            screenStack.clear()
+            screenStack.addAll(origin)
+        }
+    }
 
     fun push(screen: LauncherScreen) { screenStack.add(screen) }
 

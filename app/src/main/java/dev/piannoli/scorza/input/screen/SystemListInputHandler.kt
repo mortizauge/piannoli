@@ -68,6 +68,7 @@ class SystemListInputHandler @Inject constructor(
 
     override fun onR1() {
         if (systemListViewModel.isReorderMode()) return
+        if (nav.beginLauncherSearch()) gameListViewModel.beginSearch(fromGameList = false)
         nav.dialogState.value = DialogState.RenameInput(
             gameName = "launcher_global_search",
         )

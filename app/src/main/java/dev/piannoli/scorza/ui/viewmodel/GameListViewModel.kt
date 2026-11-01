@@ -496,10 +496,11 @@ class GameListViewModel @Inject constructor(
         query: GameSearchQuery,
         preserveId: String? = null,
         onReady: () -> Unit = {},
-    ) {
+    ): Job {
         breadcrumbStack.clear()
         indexStack.clear()
-        scope.launch(Dispatchers.IO) {
+        globalSearchJob?.cancel()
+        val job = scope.launch(Dispatchers.IO) {
             try {
                 val term = query.text.trim()
                 val games = romsRepository.searchAllGames(query).map { ListItem.RomItem(it) }
@@ -515,22 +516,26 @@ class GameListViewModel @Inject constructor(
                 val (favs, rest) = sorted.partition { isFavorite(it, favRoms, favApps) }
                 val items = favs + rest
                 val selectedIndex = preserveId?.let { findIndexById(items, it) } ?: 0
-                _state.value = State(
-                    breadcrumb = resources.getString(R.string.global_search_title, term),
-                    items = items,
-                    allItems = items,
-                    favoriteRomIds = favRoms,
-                    favoriteAppIds = favApps,
-                    selectedIndex = selectedIndex,
-                    scrollTarget = -1,
-                    isLoading = false,
-                    isGlobalSearch = true,
-                    globalSearchQuery = term,
-                )
+                withContext(Dispatchers.Main) {
+                    _state.value = State(
+                        breadcrumb = resources.getString(R.string.global_search_title, term),
+                        items = items,
+                        allItems = items,
+                        favoriteRomIds = favRoms,
+                        favoriteAppIds = favApps,
+                        selectedIndex = selectedIndex,
+                        scrollTarget = -1,
+                        isLoading = false,
+                        isGlobalSearch = true,
+                        globalSearchQuery = term,
+                    )
+                }
             } finally {
                 withContext(Dispatchers.Main) { onReady() }
             }
         }
+        globalSearchJob = job
+        return job
     }
 
     fun moveSelectedToTop() {
@@ -701,6 +706,23 @@ class GameListViewModel @Inject constructor(
     }
 
     private var submittedSearchKeyboard: dev.piannoli.ui.components.KeyboardState? = null
+    private var searchOrigin: GameListBookmark? = null
+    private var globalSearchJob: Job? = null
+
+    fun beginSearch(fromGameList: Boolean = true) {
+        searchOrigin = if (fromGameList && !_state.value.isGlobalSearch) bookmark().copy(search = null) else null
+    }
+
+    fun cancelSearch(onReady: () -> Unit) {
+        globalSearchJob?.cancel()
+        submittedSearchKeyboard = null
+        val origin = searchOrigin
+        searchOrigin = null
+        if (origin != null) restoreBookmark(origin, onReady) else {
+            clearSearch()
+            onReady()
+        }
+    }
 
     fun rememberSearchKeyboard(keyboard: dev.piannoli.ui.components.KeyboardState) {
         submittedSearchKeyboard = keyboard

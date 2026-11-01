@@ -1419,6 +1419,14 @@ class DialogInputHandler @Inject constructor(
             is DialogState.RenameInput -> when {
                 ds.gameName == "romm_device_name" ->
                     returnToSaveSyncMenu(dev.piannoli.scorza.ui.components.RommSaveSyncRow.TOGGLE)
+                ds.gameName == "launcher_search" || ds.gameName == "launcher_global_search" -> {
+                    nav.navigating = true
+                    gameListViewModel.cancelSearch {
+                        nav.cancelLauncherSearch()
+                        nav.dialogState.value = DialogState.None
+                        nav.navigating = false
+                    }
+                }
                 nav.currentScreen is LauncherScreen.Settings ||
                     nav.currentScreen is LauncherScreen.ControllerDetail ||
                     nav.currentScreen is LauncherScreen.SaveSlots ||
@@ -2372,7 +2380,11 @@ class DialogInputHandler @Inject constructor(
         }
         if (state.gameName == "launcher_search") {
             val term = state.currentName.trim()
-            if (term.isBlank()) gameListViewModel.clearSearch() else gameListViewModel.setSearch(term, state.keyboard)
+            if (term.isBlank()) {
+                cancelKeyboard(state)
+                return
+            }
+            gameListViewModel.setSearch(term, state.keyboard)
             nav.dialogState.value = DialogState.None
             return
         }
@@ -2407,7 +2419,7 @@ class DialogInputHandler @Inject constructor(
             if (nav.navigating) return
             val term = state.currentName.trim()
             if (term.isBlank()) {
-                nav.dialogState.value = DialogState.None
+                cancelKeyboard(state)
                 return
             }
             // Keep the keyboard up until results are ready so the screen underneath never flashes,

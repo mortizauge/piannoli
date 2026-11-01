@@ -136,6 +136,7 @@ class GameListInputHandler @Inject constructor(
     override fun onR1() {
         val glState = gameListViewModel.state.value
         if (glState.reorderMode || glState.multiSelectMode || glState.isCollectionsList) return
+        if (nav.beginLauncherSearch(fromGlobalResults = glState.isGlobalSearch)) gameListViewModel.beginSearch()
         nav.dialogState.value = DialogState.RenameInput(
             gameName = if (glState.isGlobalSearch && glState.searchTerm == null)
                 "launcher_global_search" else "launcher_search",
