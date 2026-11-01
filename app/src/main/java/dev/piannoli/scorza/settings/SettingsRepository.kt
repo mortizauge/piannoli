@@ -274,8 +274,12 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         set(value) = jsonWrite { put(KEY_SCAN_LIBRARY_AUTOMATICALLY, value) }
 
     var toolsName: String
-        get() = jsonRead { optString(KEY_TOOLS_NAME, "Tools").ifEmpty { "Tools" } }
-        set(value) = jsonWrite { if (value == "Tools") remove(KEY_TOOLS_NAME) else put(KEY_TOOLS_NAME, value) }
+        // Only the exact former stock name migrates; differently cased/custom names stay intact.
+        get() = jsonRead { optString(KEY_TOOLS_NAME, "Apps").takeUnless { it.isEmpty() || it == "Tools" } ?: "Apps" }
+        set(value) = jsonWrite {
+            if (value.isEmpty() || value == "Apps" || value == "Tools") remove(KEY_TOOLS_NAME)
+            else put(KEY_TOOLS_NAME, value)
+        }
 
     var portsName: String
         get() = jsonRead { optString(KEY_PORTS_NAME, "Ports").ifEmpty { "Ports" } }

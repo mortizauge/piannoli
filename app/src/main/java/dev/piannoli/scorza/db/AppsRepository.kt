@@ -74,7 +74,7 @@ class AppsRepository(
             it.getLong(0) to if (it.isNull(1)) null else it.getLong(1)
         }.toMap()
         val ids = appIds.distinct()
-        require(ids.all { it in tools }) { "Only tools can be pinned" }
+        require(ids.all { it in tools }) { "Only apps in the Apps category can be pinned" }
         val additions = ids.filter { tools[it] == null }
         if (pinned && tools.values.count { it != null } + additions.size > 5) return@transaction false
         var next = (tools.values.filterNotNull().maxOrNull() ?: 0L) + 1

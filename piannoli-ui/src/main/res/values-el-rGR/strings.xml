@@ -171,8 +171,8 @@
     <string name="setting_show_recently_played">Πρόσφατα Παίχτηκαν</string>
     <!-- Library setting: show or hide the Favorites entry on the main list. -->
     <string name="setting_show_favorites">Αγαπημένα</string>
-    <!-- Opens the Tools manager (sideloaded utility apps). -->
-    <string name="setting_manage_tools">Διαχείριση Εργαλείων</string>
+    <!-- Opens the Apps manager (installed app shortcuts). -->
+    <string name="setting_manage_tools">Διαχείριση εφαρμογών</string>
     <!-- Opens the Ports manager. "Ports" means standalone native game ports. -->
     <string name="setting_manage_ports">Διαχείριση Θύρων</string>
     <string name="setting_bg_tint">Απόχρωση Φόντου</string>
@@ -459,7 +459,7 @@
     <string name="label_collections">Συλλογές</string>
     <!-- Screen title. %1$s = the search query. -->
     <string name="global_search_title">Αναζήτηση: \"%1$s\"</string>
-    <string name="origin_tools">Εργαλεία</string>
+    <string name="origin_tools">Εφαρμογές</string>
     <!-- Section label: standalone game ports. -->
     <string name="origin_ports">Θύρες</string>
     <string name="origin_collection">Συλλογή</string>

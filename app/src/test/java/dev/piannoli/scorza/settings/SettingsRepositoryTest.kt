@@ -33,6 +33,41 @@ class SettingsRepositoryTest {
 
     @Test
     @Config(sdk = [28])
+    fun `apps category migrates only stock names and preserves custom names on reopen`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        Shadows.shadowOf(context as android.app.Application)
+            .grantPermissions(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+        for ((stored, expected) in listOf(
+            null to "Apps", "" to "Apps", "Tools" to "Apps",
+            "Utilities" to "Utilities", "TOOLS" to "TOOLS", "tools" to "tools",
+            "Outils" to "Outils",
+        )) {
+            val root = File(tmp.root, "case-${stored ?: "missing"}").apply { mkdirs() }
+            writeSettingsJson(root, org.json.JSONObject().apply {
+                if (stored != null) put("tools_name", stored)
+            }.toString())
+            val settings = newRepo()
+            try {
+                settings.sdCardRoot = root.absolutePath
+                settings.setupCompleted = true
+                assertEquals(expected, settings.toolsName)
+                assertEquals("Ports", settings.portsName)
+                settings.toolsName = settings.toolsName
+            } finally {
+                settings.shutdown()
+            }
+            val reopened = newRepo()
+            try {
+                reopened.sdCardRoot = root.absolutePath
+                assertEquals(expected, reopened.toolsName)
+            } finally {
+                reopened.shutdown()
+            }
+        }
+    }
+
+    @Test
+    @Config(sdk = [28])
     fun `launcher remapping swaps live supports reset cancel and persistence`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         Shadows.shadowOf(context as android.app.Application)

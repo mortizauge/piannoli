@@ -341,7 +341,10 @@ class SettingsInputHandler @Inject constructor(
         val appType = if (type == "tools") AppType.TOOL else AppType.PORT
         val existing = appsRepository.all(appType).map { it.packageName }.toSet()
         val initialChecked = allApps.indices.filter { allApps[it].second in existing }.toSet()
-        val title = if (type == "tools") "Manage Tools" else "Manage Ports"
+        val title = context.getString(
+            if (type == "tools") dev.piannoli.scorza.R.string.setting_manage_tools
+            else dev.piannoli.scorza.R.string.setting_manage_ports
+        )
         nav.push(LauncherScreen.AppPicker(
             type = type,
             title = title,

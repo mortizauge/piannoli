@@ -171,8 +171,8 @@
     <string name="setting_show_recently_played">最近プレイした曲</string>
     <!-- Library setting: show or hide the Favorites entry on the main list. -->
     <string name="setting_show_favorites">お気に入り</string>
-    <!-- Opens the Tools manager (sideloaded utility apps). -->
-    <string name="setting_manage_tools">ツールを管理</string>
+    <!-- Opens the Apps manager (installed app shortcuts). -->
+    <string name="setting_manage_tools">アプリを管理</string>
     <!-- Opens the Ports manager. "Ports" means standalone native game ports. -->
     <string name="setting_manage_ports">ポートの管理</string>
     <string name="setting_bg_tint">背景の色</string>
@@ -465,7 +465,7 @@
     <string name="label_collections">コレクション</string>
     <!-- Screen title. %1$s = the search query. -->
     <string name="global_search_title">検索: \"%1$s\"</string>
-    <string name="origin_tools">ツール</string>
+    <string name="origin_tools">アプリ</string>
     <!-- Section label: standalone game ports. -->
     <string name="origin_ports">ポート</string>
     <string name="origin_collection">コレクション</string>

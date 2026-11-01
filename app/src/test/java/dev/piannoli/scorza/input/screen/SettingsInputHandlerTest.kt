@@ -52,6 +52,29 @@ class SettingsInputHandlerTest {
     private val packages = mockk<PackageManager>(relaxed = true)
     private val games = mockk<GameListViewModel>(relaxed = true)
 
+    @Test fun `Manage Apps opens localized picker backed by unchanged app type`() {
+        val appContext = ApplicationProvider.getApplicationContext<Context>()
+        val settings = SettingsRepository(appContext)
+        try {
+            val viewModel = SettingsViewModel(settings, AppFonts(appContext), appContext, mockk(relaxed = true))
+            val input = handler(viewModel, settings)
+            every { context.getString(dev.piannoli.scorza.R.string.setting_manage_tools) } returns
+                appContext.getString(dev.piannoli.scorza.R.string.setting_manage_tools)
+            viewModel.load()
+            nav.push(LauncherScreen.Settings)
+            viewModel.enterSubCategory("library", dev.piannoli.scorza.R.string.settings_library)
+            viewModel.selectItem("manage_tools")
+            assertEquals("Manage Apps", appContext.getString(viewModel.getSelectedItem()!!.labelRes))
+            input.onConfirm()
+            val picker = nav.currentScreen as LauncherScreen.AppPicker
+            assertEquals("Manage Apps", picker.title)
+            assertEquals("tools", picker.type)
+            verify(exactly = 1) { apps.all(AppType.TOOL) }
+        } finally {
+            settings.shutdown()
+        }
+    }
+
     @Test fun `held settings navigation clamps categories and sublists then fresh presses wrap`() {
         val appContext = ApplicationProvider.getApplicationContext<Context>()
         val settings = SettingsRepository(appContext)
@@ -199,7 +222,7 @@ class SettingsInputHandlerTest {
             every { apps.all(AppType.TOOL) } returns emptyList()
             every { packages.getApplicationIcon("dev.gone") } throws PackageManager.NameNotFoundException()
             val state = LauncherScreen.AppPicker(
-                type = "tools", title = "Manage Tools", apps = listOf("Gone"),
+                type = "tools", title = "Manage Apps", apps = listOf("Gone"),
                 packages = listOf("dev.gone"), checkedIndices = setOf(0),
             )
             nav.push(state)

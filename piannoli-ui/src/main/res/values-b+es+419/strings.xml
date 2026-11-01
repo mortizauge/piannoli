@@ -40,7 +40,7 @@
     <!-- Library setting: which content layout to show (platforms, collections only, or Five Game Handheld). -->
     <!-- Library setting for the Five Game Handheld collection. Keep "5GH" as-is. -->
     <!-- Library setting: show or hide the Favorites entry on the main list. -->
-    <!-- Opens the Tools manager (sideloaded utility apps). -->
+    <!-- Opens the Apps manager (installed app shortcuts). -->
     <!-- Opens the Ports manager. "Ports" means standalone native game ports. -->
     <!-- Theme color for the title heading text. -->
     <!-- Theme color: text drawn on the highlighted/selected row. -->

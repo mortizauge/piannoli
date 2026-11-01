@@ -136,7 +136,7 @@
     <string name="setting_content_mode">Content Mode</string>
     <string name="setting_fgh_collection">5GH Collection</string>
     <string name="setting_show_recently_played">Recently Played</string>
-    <string name="setting_manage_tools">Manage Tools</string>
+    <string name="setting_manage_tools">إدارة التطبيقات</string>
     <string name="setting_manage_ports">Manage Ports</string>
     <string name="setting_bg_tint">Background Tint</string>
     <string name="setting_color_title">Title</string>
@@ -388,7 +388,7 @@
     <string name="label_favorites">Favorites</string>
     <string name="label_collections">Collections</string>
     <string name="global_search_title">Search: \"%1$s\"</string>
-    <string name="origin_tools">Tools</string>
+    <string name="origin_tools">التطبيقات</string>
     <string name="origin_ports">Ports</string>
     <string name="origin_collection">Collection</string>
     <!-- About -->

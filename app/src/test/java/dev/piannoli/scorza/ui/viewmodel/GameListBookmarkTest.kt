@@ -269,7 +269,7 @@ class GameListBookmarkTest {
         every { apps.all(dev.piannoli.scorza.model.AppType.TOOL) } returns listOf(pinned.app, other.app)
         every { collections.favoriteAppIds() } returns setOf(2)
         suspendCancellableCoroutine<Unit> { continuation ->
-            model.loadApkList("tools", "Tools") { continuation.resume(Unit) }
+            model.loadApkList("tools", "Apps") { continuation.resume(Unit) }
         }
         assertEquals(listOf(pinned, other), model.state.value.items)
         assertTrue(model.state.value.favoriteAppIds.isEmpty())

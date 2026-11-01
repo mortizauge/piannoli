@@ -77,23 +77,23 @@ class GameListViewModelSearchTest {
 
     @Test fun `origin tag is platform tag for rom`() {
         val item = ListItem.RomItem(rom(1, "Zelda"))
-        assertEquals("SNES", globalOriginTag(item, "Tools", "Ports", "Collection"))
+        assertEquals("SNES", globalOriginTag(item, "Apps", "Ports", "Collection"))
     }
 
     @Test fun `origin tag is tools or ports label for app`() {
         val tool = ListItem.AppItem(App(id = 1, type = AppType.TOOL, displayName = "Files", packageName = "com.files"))
         val port = ListItem.AppItem(App(id = 2, type = AppType.PORT, displayName = "Quake", packageName = "com.quake"))
-        assertEquals("Tools", globalOriginTag(tool, "Tools", "Ports", "Collection"))
-        assertEquals("Ports", globalOriginTag(port, "Tools", "Ports", "Collection"))
+        assertEquals("Apps", globalOriginTag(tool, "Apps", "Ports", "Collection"))
+        assertEquals("Ports", globalOriginTag(port, "Apps", "Ports", "Collection"))
     }
 
     @Test fun `origin tag is collection label for collection`() {
         val col = ListItem.CollectionItem(Collection(id = 1, displayName = "JRPGs"))
-        assertEquals("Collection", globalOriginTag(col, "Tools", "Ports", "Collection"))
+        assertEquals("Collection", globalOriginTag(col, "Apps", "Ports", "Collection"))
     }
 
     @Test fun `origin tag is null for subfolder`() {
         val folder = ListItem.SubfolderItem(name = "RPG", path = "/roms/RPG")
-        assertNull(globalOriginTag(folder, "Tools", "Ports", "Collection"))
+        assertNull(globalOriginTag(folder, "Apps", "Ports", "Collection"))
     }
 }

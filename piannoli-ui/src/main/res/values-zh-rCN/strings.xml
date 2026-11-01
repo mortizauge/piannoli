@@ -172,8 +172,8 @@
     <string name="setting_show_recently_played">最近玩过的</string>
     <!-- Library setting: show or hide the Favorites entry on the main list. -->
     <string name="setting_show_favorites">最爱的</string>
-    <!-- Opens the Tools manager (sideloaded utility apps). -->
-    <string name="setting_manage_tools">管理工具</string>
+    <!-- Opens the Apps manager (installed app shortcuts). -->
+    <string name="setting_manage_tools">管理应用</string>
     <!-- Opens the Ports manager. "Ports" means standalone native game ports. -->
     <string name="setting_manage_ports">管理移植游戏</string>
     <string name="setting_bg_tint">背景色调</string>
@@ -467,7 +467,7 @@
     <string name="label_collections">收藏集</string>
     <!-- Screen title. %1$s = the search query. -->
     <string name="global_search_title">搜索: \"%1$s\"</string>
-    <string name="origin_tools">工具</string>
+    <string name="origin_tools">应用</string>
     <!-- Section label: standalone game ports. -->
     <string name="origin_ports">移植游戏</string>
     <string name="origin_collection">收藏集</string>

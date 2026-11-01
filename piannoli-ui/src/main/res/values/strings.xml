@@ -212,8 +212,8 @@
     <string name="setting_show_recently_played">Recently Played</string>
     <!-- Library setting: show or hide the Favorites entry on the main list. -->
     <string name="setting_show_favorites">Favorites</string>
-    <!-- Opens the Tools manager (sideloaded utility apps). -->
-    <string name="setting_manage_tools">Manage Tools</string>
+    <!-- Opens the Apps manager (installed app shortcuts). -->
+    <string name="setting_manage_tools">Manage Apps</string>
     <!-- Opens the Ports manager. "Ports" means standalone native game ports. -->
     <string name="setting_manage_ports">Manage Ports</string>
     <string name="setting_bg_tint">Background Tint</string>
@@ -528,7 +528,7 @@
     <string name="label_collections">Collections</string>
     <!-- Screen title. %1$s = the search query. -->
     <string name="global_search_title">Search: \"%1$s\"</string>
-    <string name="origin_tools">Tools</string>
+    <string name="origin_tools">Apps</string>
     <!-- Section label: standalone game ports. -->
     <string name="origin_ports">Ports</string>
     <string name="origin_collection">Collection</string>

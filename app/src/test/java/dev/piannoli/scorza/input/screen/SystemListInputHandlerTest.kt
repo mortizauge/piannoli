@@ -52,7 +52,7 @@ class SystemListInputHandlerTest {
         val items = listOf(
             ListItem.RecentlyPlayedItem, ListItem.FavoritesItem, ListItem.CollectionsFolder,
             ListItem.CollectionItem(7, "My collection", 2),
-            ListItem.ToolsFolder("Tools", 1), ListItem.PortsFolder("Ports", 1),
+            ListItem.ToolsFolder("Apps", 1), ListItem.PortsFolder("Ports", 1),
             ListItem.PlatformItem(Platform("GB", "Game Boy", null)),
         )
         items.forEach { item ->
