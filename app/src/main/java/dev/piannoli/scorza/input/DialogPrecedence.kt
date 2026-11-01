@@ -1,6 +1,10 @@
 package dev.piannoli.scorza.input
 
 interface DialogPrecedence {
+    /** Immutable dialog state reference, including its current list or keyboard. */
+    val navigationContext: Any? get() = this
+    val keyboardInputActive: Boolean get() = false
+    fun deleteHoldAction(confirm: Boolean): (() -> Boolean)? = null
     fun onUp(): Boolean = false
     fun onDown(): Boolean = false
     fun onLeft(): Boolean = false

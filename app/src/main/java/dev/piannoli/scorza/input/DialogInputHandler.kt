@@ -100,6 +100,8 @@ class DialogInputHandler @Inject constructor(
     private val scraper: dev.piannoli.scorza.scraper.ScraperController,
     private val bulkScraper: dev.piannoli.scorza.scraper.BulkScraperController,
 ) : DialogPrecedence {
+    override val navigationContext: Any get() = nav.dialogState.value
+
     private val applyingConflicts = java.util.concurrent.atomic.AtomicBoolean(false)
     private val quickMenuRebuild = java.util.concurrent.atomic.AtomicBoolean(false)
     private val selectHoldHandler = Handler(Looper.getMainLooper())
@@ -131,6 +133,43 @@ class DialogInputHandler @Inject constructor(
 
     override fun cancelSelectHold() {
         selectHoldHandler.removeCallbacks(selectHoldRunnable)
+    }
+
+    override val keyboardInputActive: Boolean
+        get() = nav.dialogState.value is KeyboardHost || nav.dialogState.value is DialogState.HexColorInput
+
+    override fun deleteHoldAction(confirm: Boolean): (() -> Boolean)? {
+        val initial = nav.dialogState.value
+        when (initial) {
+            is KeyboardHost -> {
+                if (settings.keyboardType != dev.piannoli.scorza.settings.KeyboardType.PIANNOLI ||
+                    (confirm && !KeyboardController.isBackspaceSelected(initial.keyboard))) return null
+            }
+            is DialogState.HexColorInput ->
+                if (!confirm || HEX_KEYS.getOrNull(initial.selectedIndex) != KEY_BACKSPACE) return null
+            else -> return null
+        }
+        var expected = initial
+        return delete@{
+            // Only our own updates may advance this hold; never follow a replacement dialog.
+            if (nav.dialogState.value !== expected) return@delete false
+            val next = when (val current = expected) {
+                is KeyboardHost -> {
+                    if (settings.keyboardType != dev.piannoli.scorza.settings.KeyboardType.PIANNOLI) return@delete false
+                    val keyboard = KeyboardController.backspace(current.keyboard)
+                    if (keyboard == current.keyboard) return@delete false
+                    current.withKeyboard(keyboard)
+                }
+                is DialogState.HexColorInput -> {
+                    if (current.currentHex.isEmpty()) return@delete false
+                    current.copy(currentHex = current.currentHex.dropLast(1))
+                }
+                else -> return@delete false
+            }
+            expected = next
+            nav.dialogState.value = next
+            true
+        }
     }
 
     private suspend fun quickMenuState(selected: dev.piannoli.scorza.ui.quickmenu.QuickMenuRow? = null): DialogState.QuickMenu {
@@ -249,7 +288,7 @@ class DialogInputHandler @Inject constructor(
         if (ds == DialogState.None) return false
         when (ds) {
             is DialogState.ExtensionFilters -> if (ds.extensions.isNotEmpty())
-                nav.dialogState.value = ds.copy(selectedIndex = Math.floorMod(ds.selectedIndex - 1, ds.extensions.size))
+                nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, -1, ds.extensions.size))
             is DialogState.ContextMenu,
             is DialogState.ScraperMenu,
             is DialogState.BulkContextMenu,
@@ -258,41 +297,41 @@ class DialogInputHandler @Inject constructor(
                 ds.withMenuDelta(-1)?.let { nav.dialogState.value = it }
             }
             is DialogState.QuickMenu -> {
-                val newIdx = (ds.selectedIndex - 1).mod(ds.rows.size)
+                val newIdx = ListNavigation.move(ds.selectedIndex, -1, ds.rows.size)
                 nav.dialogState.value = ds.copy(selectedIndex = newIdx)
             }
             is DialogState.RommActionsMenu -> {
                 val size = dev.piannoli.scorza.ui.components.RommActionRow.visibleRows(ds.hasDownloads).size
-                nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex - 1).mod(size))
+                nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, -1, size))
             }
             is DialogState.RommSettingsMenu -> {
                 val size = dev.piannoli.scorza.ui.components.RommSettingsRow.entries.size
-                nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex - 1).mod(size))
+                nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, -1, size))
             }
             is DialogState.RommAdvancedMenu -> {
-                nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex - 1).mod(dev.piannoli.scorza.ui.components.ROMM_ADVANCED_ROWS.size))
+                nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, -1, dev.piannoli.scorza.ui.components.ROMM_ADVANCED_ROWS.size))
             }
             is DialogState.RommSaveSyncMenu -> {
                 val size = dev.piannoli.scorza.ui.components.RommSaveSyncRow.visibleRows(ds.supported, ds.enabled, ds.pendingConflicts, ds.syncErrors, ds.hasBackups).size
-                nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex - 1).mod(size))
+                nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, -1, size))
             }
             is DialogState.SyncHistory -> {
-                if (ds.entries.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex - 1).mod(ds.entries.size))
+                if (ds.entries.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, -1, ds.entries.size))
             }
             is DialogState.SyncErrors -> {
-                if (ds.errors.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex - 1).mod(ds.errors.size))
+                if (ds.errors.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, -1, ds.errors.size))
             }
             is DialogState.RommSavesMenu -> {
-                if (ds.options.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex - 1).mod(ds.options.size))
+                if (ds.options.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, -1, ds.options.size))
             }
             is DialogState.SaveBackupGames -> {
-                if (ds.games.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex - 1).mod(ds.games.size))
+                if (ds.games.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, -1, ds.games.size))
             }
             is DialogState.SaveBackupList -> {
-                if (ds.backups.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex - 1).mod(ds.backups.size))
+                if (ds.backups.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, -1, ds.backups.size))
             }
             is DialogState.ConflictsMenu -> {
-                if (ds.rows.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex - 1).mod(ds.rows.size))
+                if (ds.rows.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, -1, ds.rows.size))
             }
             is KeyboardHost -> nav.dialogState.value = ds.withKeyboard(KeyboardController.moveSelection(ds.keyboard, Direction.UP))
             is DialogState.ColorPicker -> {
@@ -312,22 +351,22 @@ class DialogInputHandler @Inject constructor(
             is DialogState.RommDownloads -> {
                 val size = rommDownloader.queue.state.value.size
                 if (size > 0) {
-                    val idx = (ds.selectedIndex - 1).mod(size)
+                    val idx = ListNavigation.move(ds.selectedIndex, -1, size)
                     nav.dialogState.value = ds.copy(selectedIndex = idx)
                 }
             }
             is DialogState.RommArtResults -> {
                 val size = artResultRowCount(ds)
-                if (size > 0) nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex - 1).mod(size))
+                if (size > 0) nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, -1, size))
             }
             is DialogState.RommPlatformToggle -> {
-                if (ds.items.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex - 1).mod(ds.items.size))
+                if (ds.items.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, -1, ds.items.size))
             }
             is DialogState.RommCollectionToggle -> {
-                if (ds.items.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex - 1).mod(ds.items.size))
+                if (ds.items.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, -1, ds.items.size))
             }
             is DialogState.RommVersionPicker -> {
-                if (ds.members.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex - 1).mod(ds.members.size))
+                if (ds.members.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, -1, ds.members.size))
             }
             else -> {}
         }
@@ -339,7 +378,7 @@ class DialogInputHandler @Inject constructor(
         if (ds == DialogState.None) return false
         when (ds) {
             is DialogState.ExtensionFilters -> if (ds.extensions.isNotEmpty())
-                nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex + 1) % ds.extensions.size)
+                nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, 1, ds.extensions.size))
             is DialogState.ContextMenu,
             is DialogState.ScraperMenu,
             is DialogState.BulkContextMenu,
@@ -348,41 +387,41 @@ class DialogInputHandler @Inject constructor(
                 ds.withMenuDelta(1)?.let { nav.dialogState.value = it }
             }
             is DialogState.QuickMenu -> {
-                val newIdx = (ds.selectedIndex + 1).mod(ds.rows.size)
+                val newIdx = ListNavigation.move(ds.selectedIndex, 1, ds.rows.size)
                 nav.dialogState.value = ds.copy(selectedIndex = newIdx)
             }
             is DialogState.RommActionsMenu -> {
                 val size = dev.piannoli.scorza.ui.components.RommActionRow.visibleRows(ds.hasDownloads).size
-                nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex + 1).mod(size))
+                nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, 1, size))
             }
             is DialogState.RommSettingsMenu -> {
                 val size = dev.piannoli.scorza.ui.components.RommSettingsRow.entries.size
-                nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex + 1).mod(size))
+                nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, 1, size))
             }
             is DialogState.RommAdvancedMenu -> {
-                nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex + 1).mod(dev.piannoli.scorza.ui.components.ROMM_ADVANCED_ROWS.size))
+                nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, 1, dev.piannoli.scorza.ui.components.ROMM_ADVANCED_ROWS.size))
             }
             is DialogState.RommSaveSyncMenu -> {
                 val size = dev.piannoli.scorza.ui.components.RommSaveSyncRow.visibleRows(ds.supported, ds.enabled, ds.pendingConflicts, ds.syncErrors, ds.hasBackups).size
-                nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex + 1).mod(size))
+                nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, 1, size))
             }
             is DialogState.SyncHistory -> {
-                if (ds.entries.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex + 1).mod(ds.entries.size))
+                if (ds.entries.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, 1, ds.entries.size))
             }
             is DialogState.SyncErrors -> {
-                if (ds.errors.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex + 1).mod(ds.errors.size))
+                if (ds.errors.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, 1, ds.errors.size))
             }
             is DialogState.RommSavesMenu -> {
-                if (ds.options.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex + 1).mod(ds.options.size))
+                if (ds.options.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, 1, ds.options.size))
             }
             is DialogState.SaveBackupGames -> {
-                if (ds.games.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex + 1).mod(ds.games.size))
+                if (ds.games.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, 1, ds.games.size))
             }
             is DialogState.SaveBackupList -> {
-                if (ds.backups.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex + 1).mod(ds.backups.size))
+                if (ds.backups.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, 1, ds.backups.size))
             }
             is DialogState.ConflictsMenu -> {
-                if (ds.rows.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex + 1).mod(ds.rows.size))
+                if (ds.rows.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, 1, ds.rows.size))
             }
             is KeyboardHost -> nav.dialogState.value = ds.withKeyboard(KeyboardController.moveSelection(ds.keyboard, Direction.DOWN))
             is DialogState.ColorPicker -> {
@@ -402,26 +441,26 @@ class DialogInputHandler @Inject constructor(
             is DialogState.RommDownloads -> {
                 val size = rommDownloader.queue.state.value.size
                 if (size > 0) {
-                    val idx = (ds.selectedIndex + 1).mod(size)
+                    val idx = ListNavigation.move(ds.selectedIndex, 1, size)
                     nav.dialogState.value = ds.copy(selectedIndex = idx)
                 }
             }
             is DialogState.RommArtResults -> {
                 val size = artResultRowCount(ds)
-                if (size > 0) nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex + 1).mod(size))
+                if (size > 0) nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, 1, size))
             }
             is DialogState.RommPlatformToggle -> {
                 if (ds.items.isNotEmpty()) {
-                    nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex + 1).mod(ds.items.size))
+                    nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, 1, ds.items.size))
                 }
             }
             is DialogState.RommCollectionToggle -> {
                 if (ds.items.isNotEmpty()) {
-                    nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex + 1).mod(ds.items.size))
+                    nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, 1, ds.items.size))
                 }
             }
             is DialogState.RommVersionPicker -> {
-                if (ds.members.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = (ds.selectedIndex + 1).mod(ds.members.size))
+                if (ds.members.isNotEmpty()) nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, 1, ds.members.size))
             }
             else -> {}
         }
@@ -435,7 +474,7 @@ class DialogInputHandler @Inject constructor(
             is DialogState.ScraperMenu -> if (ds.bulk) bulkScraper.cycle(ds)
             is DialogState.QuickInfo -> {
                 if (ds.addresses.size > 1) {
-                    val newIdx = (ds.selectedIndex - 1 + ds.addresses.size) % ds.addresses.size
+                    val newIdx = ListNavigation.move(ds.selectedIndex, -1, ds.addresses.size)
                     nav.dialogState.value = ds.copy(selectedIndex = newIdx)
                 }
             }
@@ -466,7 +505,7 @@ class DialogInputHandler @Inject constructor(
             is DialogState.ScraperMenu -> if (ds.bulk) bulkScraper.cycle(ds)
             is DialogState.QuickInfo -> {
                 if (ds.addresses.size > 1) {
-                    val newIdx = (ds.selectedIndex + 1) % ds.addresses.size
+                    val newIdx = ListNavigation.move(ds.selectedIndex, 1, ds.addresses.size)
                     nav.dialogState.value = ds.copy(selectedIndex = newIdx)
                 }
             }

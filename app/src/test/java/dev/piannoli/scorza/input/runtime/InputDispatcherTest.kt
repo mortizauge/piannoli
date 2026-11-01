@@ -1,6 +1,8 @@
 package dev.piannoli.scorza.input.runtime
 
+import android.view.KeyEvent
 import dev.piannoli.scorza.input.CanonicalButton
+import dev.piannoli.scorza.input.ListNavigation
 import dev.piannoli.scorza.input.ConnectedDevice
 import dev.piannoli.scorza.input.DeviceMatchRule
 import dev.piannoli.scorza.input.DeviceMapping
@@ -22,6 +24,254 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class InputDispatcherTest {
+
+    @Test fun list_boundary_latches_before_callbacks_and_feedback_in_both_directions() {
+        for ((key, delta) in listOf(KeyEvent.KEYCODE_DPAD_UP to -1, KeyEvent.KEYCODE_DPAD_DOWN to 1)) {
+            val (dispatcher, _, _) = setup(westernTemplate().copy(bindings = emptyMap()))
+            var index = 2
+            var calls = 0
+            val sounds = mutableListOf<MenuSound>()
+            val handler = object : ScreenInputHandler {
+                private fun move(delta: Int) { calls++; index = ListNavigation.move(index, delta, 5) }
+                override fun onUp() = move(-1)
+                override fun onDown() = move(1)
+            }
+            dispatcher.wireToRegistry(screenResolver = { handler }, onMenuSound = { sounds += it })
+            fun key(code: Int, action: Int = KeyEvent.ACTION_DOWN, repeats: Int = 0) {
+                assertTrue(dispatcher.handleKeyboardDirectionForTest(999, code, action, repeats))
+            }
+            key(key)
+            key(key, repeats = 1)
+            assertEquals(if (delta < 0) 0 else 4, index)
+            assertEquals(2, calls)
+            repeat(8) { key(key, repeats = it + 2) }
+            key(key, KeyEvent.ACTION_MULTIPLE)
+            assertEquals(2, calls)
+            assertEquals(listOf(MenuSound.TICK, MenuSound.TICK), sounds)
+
+            // A direction change can work immediately, even when it arrives as a repeat.
+            val opposite = if (delta < 0) KeyEvent.KEYCODE_DPAD_DOWN else KeyEvent.KEYCODE_DPAD_UP
+            key(opposite, repeats = 1)
+            assertEquals(if (delta < 0) 1 else 3, index)
+            assertEquals(3, calls)
+            key(key, repeats = 1)
+            assertEquals(if (delta < 0) 0 else 4, index)
+            assertEquals(4, calls)
+            repeat(4) { key(key, repeats = it + 2) }
+            assertEquals(4, calls)
+            key(key, KeyEvent.ACTION_UP)
+            key(key)
+            assertEquals(if (delta < 0) 4 else 0, index)
+            assertEquals(5, calls)
+            assertEquals(5, sounds.size)
+        }
+    }
+
+    @Test fun boundary_latch_resets_for_list_dialog_screen_and_registry_changes() {
+        val (dispatcher, _, _) = setup(westernTemplate().copy(bindings = emptyMap()))
+        var index = 1
+        var calls = 0
+        var feedback = 0
+        var listContext = Any()
+        var dialogContext = Any()
+        var screenContext = Any()
+        val handler = object : ScreenInputHandler {
+            override val navigationContext: Any get() = listContext
+            override fun onDown() { calls++; index = ListNavigation.move(index, 1, 3) }
+        }
+        val dialog = object : DialogPrecedence {
+            override val navigationContext: Any get() = dialogContext
+        }
+        var active: ScreenInputHandler = handler
+        dispatcher.wireToRegistry(
+            dialogHandler = dialog, screenResolver = { active },
+            navigationContext = { screenContext }, onMenuSound = { feedback++ },
+        )
+        dispatcher.onDown()
+        ListNavigation.withRepeat(true) {
+            repeat(4) { dispatcher.onDown() }
+            assertEquals(1, calls)
+            for (change in listOf<() -> Unit>(
+                { listContext = Any() }, { dialogContext = Any() }, { screenContext = Any() },
+                { active = object : ScreenInputHandler {
+                    override fun onDown() = handler.onDown()
+                } },
+            )) {
+                index = 1
+                change()
+                repeat(4) { dispatcher.onDown() }
+            }
+        }
+        assertEquals(5, calls)
+        assertEquals(5, feedback)
+        dispatcher.wireToRegistry(screenResolver = { handler }, onMenuSound = { feedback++ })
+        index = 1
+        ListNavigation.withRepeat(true) { dispatcher.onDown() }
+        assertEquals(6, calls)
+        assertEquals(6, feedback)
+    }
+
+    @Test fun page_boundary_stops_repeats_but_setting_value_cycles_keep_working() {
+        val (dispatcher, _, _) = setup(westernTemplate().copy(bindings = emptyMap()))
+        var index = 0
+        var pageCalls = 0
+        var cycles = 0
+        var feedback = 0
+        val handler = object : ScreenInputHandler {
+            override fun onRight() { cycles++ }
+            override fun onR1() {
+                pageCalls++
+                index = dev.piannoli.scorza.input.PageJump.compute(1, 20, index, null)
+            }
+        }
+        dispatcher.wireToRegistry(screenResolver = { handler }, onMenuSound = { feedback++ })
+        dispatcher.onR1()
+        ListNavigation.withRepeat(true) { repeat(6) { dispatcher.onR1() } }
+        assertEquals(19, index)
+        assertEquals(1, pageCalls)
+        assertEquals(1, feedback)
+        ListNavigation.withRepeat(true) { repeat(6) { dispatcher.onRight() } }
+        assertEquals(6, cycles)
+        assertEquals(7, feedback)
+        assertEquals(19, index)
+    }
+
+    @Test fun repeat_already_at_a_boundary_latches_without_feedback_even_for_a_single_item() {
+        for (size in listOf(0, 1, 3)) {
+            val (dispatcher, _, _) = setup(westernTemplate().copy(bindings = emptyMap()))
+            var calls = 0
+            var feedback = 0
+            val handler = object : ScreenInputHandler {
+                override fun onDown() { calls++; ListNavigation.move((size - 1).coerceAtLeast(0), 1, size) }
+            }
+            dispatcher.wireToRegistry(screenResolver = { handler }, onMenuSound = { feedback++ })
+            ListNavigation.withRepeat(true) { repeat(6) { dispatcher.onDown() } }
+            assertEquals(1, calls)
+            assertEquals(0, feedback)
+            dispatcher.onDown()
+            assertEquals(2, calls)
+            assertEquals(1, feedback)
+        }
+    }
+
+    @Test fun hat_bridge_stops_at_boundary_and_fresh_assertion_wraps() {
+        val (dispatcher, _, _) = setup(westernTemplate().copy(bindings = emptyMap()))
+        var index = 0
+        var calls = 0
+        var feedback = 0
+        val handler = object : ScreenInputHandler {
+            override fun onDown() { calls++; index = ListNavigation.move(index, 1, 3) }
+        }
+        dispatcher.wireToRegistry(screenResolver = { handler }, onMenuSound = { feedback++ })
+        repeat(8) { dispatcher.handleKeyboardHat(7, KeyEvent.KEYCODE_DPAD_DOWN, true) }
+        assertEquals(2, index)
+        assertEquals(2, calls)
+        assertEquals(2, feedback)
+        dispatcher.handleKeyboardHat(7, KeyEvent.KEYCODE_DPAD_DOWN, false)
+        dispatcher.handleKeyboardHat(7, KeyEvent.KEYCODE_DPAD_DOWN, true)
+        assertEquals(0, index)
+        assertEquals(3, calls)
+        assertEquals(3, feedback)
+    }
+
+    @Test fun keyboard_direction_fallback_marks_OS_repeats_but_not_quick_fresh_presses() {
+        val (dispatcher, _, _) = setup(westernTemplate().copy(bindings = emptyMap()))
+        var index = 1
+        dispatcher.onUp = { index = ListNavigation.move(index, -1, 3) }
+        dispatcher.onDown = { index = ListNavigation.move(index, 1, 3) }
+        for ((key, boundary, wrapped) in listOf(
+            Triple(KeyEvent.KEYCODE_DPAD_UP, 0, 2),
+            Triple(KeyEvent.KEYCODE_DPAD_DOWN, 2, 0),
+        )) {
+            index = 1
+            dispatcher.handleKeyboardDirectionForTest(999, key, KeyEvent.ACTION_DOWN, 0)
+            assertEquals(boundary, index)
+            for (count in 1..4) {
+                dispatcher.handleKeyboardDirectionForTest(999, key, KeyEvent.ACTION_DOWN, count)
+                assertEquals(boundary, index)
+            }
+            dispatcher.handleKeyboardDirectionForTest(999, key, KeyEvent.ACTION_MULTIPLE)
+            assertEquals(boundary, index)
+            dispatcher.handleKeyboardDirectionForTest(999, key, KeyEvent.ACTION_UP, 4)
+            dispatcher.handleKeyboardDirectionForTest(999, key, KeyEvent.ACTION_DOWN, 0)
+            assertEquals(wrapped, index)
+        }
+    }
+
+    @Test fun hat_bridge_repeated_assertions_clamp_and_release_resets() {
+        val (dispatcher, _, _) = setup(westernTemplate().copy(bindings = emptyMap()))
+        var index = 1
+        dispatcher.onDown = { index = ListNavigation.move(index, 1, 3) }
+        repeat(5) { dispatcher.handleKeyboardHat(7, KeyEvent.KEYCODE_DPAD_DOWN, pressed = true) }
+        assertEquals(2, index)
+        dispatcher.handleKeyboardHat(7, KeyEvent.KEYCODE_DPAD_DOWN, pressed = false)
+        dispatcher.handleKeyboardHat(7, KeyEvent.KEYCODE_DPAD_DOWN, pressed = true)
+        assertEquals(0, index)
+    }
+
+    @Test fun android_back_and_mode_repeats_are_consumed_before_actions_and_feedback_even_without_a_route() {
+        for (code in listOf(KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_BUTTON_MODE)) {
+            val mapping = westernTemplate().copy(bindings = mapOf(
+                CanonicalButton.BTN_MENU to listOf(InputBinding.Button(code)),
+            ))
+            val (dispatcher, router, _) = setup(mapping)
+            var actions = 0
+            val feedback = mutableListOf<MenuSound>()
+            dispatcher.wireToRegistry(
+                screenResolver = { object : ScreenInputHandler { override fun onMenu() { actions++ } } },
+                onMenuSound = { feedback += it },
+            )
+            assertTrue(dispatcher.handleKeyEventForTest(7, code, KeyEvent.ACTION_DOWN, 0))
+            for (repeat in 1..3) {
+                assertTrue(dispatcher.handleKeyEventForTest(7, code, KeyEvent.ACTION_DOWN, repeat))
+            }
+            assertTrue(dispatcher.handleKeyEventForTest(7, code, KeyEvent.ACTION_MULTIPLE, 0))
+            assertTrue(dispatcher.handleKeyEventForTest(999, code, KeyEvent.ACTION_DOWN, 1))
+            assertTrue(dispatcher.handleKeyEventForTest(999, code, KeyEvent.ACTION_MULTIPLE, 0))
+            assertEquals(1, actions)
+            assertEquals(listOf(MenuSound.CONFIRM), feedback)
+            assertTrue(router.evaluatorFor(7)!!.currentlyPressed().contains(CanonicalButton.BTN_MENU))
+            dispatcher.handleKeyEventForTest(7, code, KeyEvent.ACTION_UP, 3)
+            assertTrue(router.evaluatorFor(7)!!.currentlyPressed().isEmpty())
+            dispatcher.handleKeyEventForTest(7, code, KeyEvent.ACTION_DOWN, 0)
+            dispatcher.handleKeyEventForTest(7, code, KeyEvent.ACTION_UP, 0)
+            assertEquals(2, actions)
+            assertEquals(2, feedback.size)
+        }
+    }
+
+    @Test fun android_button_filter_keeps_initial_presses_releases_and_other_keys() {
+        for (code in listOf(KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_BUTTON_MODE)) {
+            assertFalse(InputDispatcher.isAndroidButtonRepeat(code, KeyEvent.ACTION_DOWN, 0))
+            assertFalse(InputDispatcher.isAndroidButtonRepeat(code, KeyEvent.ACTION_UP, 5))
+        }
+        for (code in listOf(KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_MENU,
+                KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_BUTTON_START)) {
+            assertFalse(InputDispatcher.isAndroidButtonRepeat(code, KeyEvent.ACTION_DOWN, 1))
+            assertFalse(InputDispatcher.isAndroidButtonRepeat(code, KeyEvent.ACTION_MULTIPLE, 1))
+        }
+    }
+
+    @Test fun gpio_back_shim_suppresses_repeats_and_preserves_remapped_release() {
+        val (dispatcher, _, _) = setup(westernTemplate())
+        val events = mutableListOf<String>()
+        val feedback = mutableListOf<MenuSound>()
+        dispatcher.wireToRegistry(
+            screenResolver = { object : ScreenInputHandler {
+                override fun onConfirm() { events += "down" }
+                override fun onConfirmUp() { events += "up" }
+            } },
+            remap = { button, mapping -> if (button == CanonicalButton.BTN_MENU) mapping.menuConfirm else button },
+            onMenuSound = { feedback += it },
+        )
+        repeat(2) {
+            dispatcher.handleMenuKey(true)
+            dispatcher.handleMenuKey(true, isRepeat = true)
+            dispatcher.handleMenuKey(false)
+        }
+        assertEquals(listOf("down", "up", "down", "up"), events)
+        assertEquals(listOf(MenuSound.CONFIRM, MenuSound.CONFIRM), feedback)
+    }
 
     @Test fun keyboard_dpad_fallback_handles_unbound_and_unregistered_devices_without_changing_caret() {
         val (dispatcher, _, _) = setup(westernTemplate().copy(bindings = emptyMap()))

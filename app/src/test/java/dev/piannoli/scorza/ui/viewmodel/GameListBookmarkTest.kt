@@ -3,6 +3,7 @@ package dev.piannoli.scorza.ui.viewmodel
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import dev.piannoli.scorza.config.PlatformConfig
+import dev.piannoli.scorza.input.ListNavigation
 import dev.piannoli.scorza.db.AppsRepository
 import dev.piannoli.scorza.db.CollectionsRepository
 import dev.piannoli.scorza.db.RecentlyPlayedRepository
@@ -112,6 +113,32 @@ class GameListBookmarkTest {
             val revision = model.state.value.artworkRevision
             suspendCancellableCoroutine<Unit> { continuation -> model.reload { continuation.resume(Unit) } }
             assertTrue(model.state.value.artworkRevision > revision)
+        }
+    }
+
+    @Test fun `local and global game results clamp repeated and accelerated moves but fresh presses wrap`() = runBlocking {
+        every { roms.searchAllGames(any()) } returns listOf(mario.rom, metroid.rom)
+        for (global in listOf(false, true)) {
+            if (global) {
+                suspendCancellableCoroutine<Unit> { continuation ->
+                    model.loadGlobalSearch(dev.piannoli.scorza.model.GameSearchQuery("m")) {
+                        continuation.resume(Unit)
+                    }
+                }
+            } else {
+                restore(GameListBookmark(platformTag = "GB", platformTags = listOf("GB"), search = "m"))
+            }
+            assertEquals(2, model.state.value.items.size)
+            ListNavigation.withRepeat(true) { repeat(5) { model.moveSelection(1) } }
+            assertEquals(1, model.state.value.selectedIndex)
+            model.moveSelection(1)
+            assertEquals(0, model.state.value.selectedIndex)
+            ListNavigation.withRepeat(true) { repeat(5) { model.moveSelection(-1) } }
+            assertEquals(0, model.state.value.selectedIndex)
+            model.moveSelection(-1)
+            assertEquals(1, model.state.value.selectedIndex)
+            model.moveSelection(-4)
+            assertEquals(0, model.state.value.selectedIndex)
         }
     }
 

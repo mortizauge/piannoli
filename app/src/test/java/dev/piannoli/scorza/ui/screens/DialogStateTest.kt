@@ -1,5 +1,7 @@
 package dev.piannoli.scorza.ui.screens
 
+import dev.piannoli.scorza.input.ListNavigation
+
 import dev.piannoli.ui.components.KeyboardController
 import dev.piannoli.ui.components.KeyboardState
 import org.junit.Assert.assertEquals
@@ -38,12 +40,30 @@ class DialogStateTest {
         assertEquals(2, wrapped.selectedOption)
     }
 
-    @Test fun `menu delta on bulk menu also wraps`() {
+    @Test fun `multi item menu delta clamps rather than wraps`() {
         val bulk = DialogState.BulkContextMenu(
             gamePaths = listOf("/x"), selectedOption = 1, options = listOf("a", "b")
         )
-        val wrapped = bulk.withMenuDelta(2) as DialogState.BulkContextMenu
-        assertEquals(1, wrapped.selectedOption)
+        val moved = bulk.withMenuDelta(-2) as DialogState.BulkContextMenu
+        assertEquals(0, moved.selectedOption)
+    }
+
+    @Test fun `held context bulk and scraper menu directions clamp at both ends`() {
+        val options = listOf("a", "b", "c")
+        val menus = listOf(
+            DialogState.ContextMenu(gameName = "g", options = options),
+            DialogState.BulkContextMenu(gamePaths = emptyList(), options = options),
+            DialogState.ScraperMenu(title = "scrape", options = options),
+        )
+        for (menu in menus) {
+            val end = menu.withMenuDelta(-1)!!
+            ListNavigation.withRepeat(true) {
+                assertEquals(menu, menu.withMenuDelta(-1))
+                assertEquals(end, end.withMenuDelta(1))
+            }
+            assertEquals(menu, end.withMenuDelta(1))
+            assertEquals(end, menu.withMenuDelta(-1))
+        }
     }
 
     @Test fun `menu delta on non-menu states returns null`() {

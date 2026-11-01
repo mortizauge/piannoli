@@ -158,6 +158,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
         if (active) menuNavigationPoller.start() else {
             menuNavigationPoller.stop()
             stickAutoRepeat.stop()
+            inputDispatcher.cancelKeyboardDeleteHold()
         }
         if (isReady) romDirectoryWatcher.get().setLauncherActive(active)
     }
@@ -672,6 +673,14 @@ class MainActivity : ComponentActivity(), ActivityActions {
             if (bootVal !is BootState.NeedsSetup && bootVal !is BootState.NeedsPermission) return true
         }
         val cs = nav.currentScreen
+        if (cs !is LauncherScreen.InputTester &&
+            !(cs is LauncherScreen.EditButtons && editButtonsController.isListening &&
+                event.action == KeyEvent.ACTION_DOWN) &&
+            InputDispatcher.isAndroidButtonRepeat(event.keyCode, event.action, event.repeatCount)
+        ) {
+            // Keep raw capture hooks, but consume repeats before keyboard and platform fallbacks.
+            return inputDispatcher.handleKeyEvent(event)
+        }
         if (nav.dialogState.value is KeyboardHost &&
             settings.keyboardType == dev.piannoli.scorza.settings.KeyboardType.SYSTEM &&
             event.keyCode == KeyEvent.KEYCODE_BACK &&
@@ -775,10 +784,18 @@ class MainActivity : ComponentActivity(), ActivityActions {
         // using v2 routing as-is.
         if (currentScreenForKey is LauncherScreen.OnboardingPermissions) {
             when (keyCode) {
-                KeyEvent.KEYCODE_DPAD_UP -> { inputDispatcher.onUp(); return true }
-                KeyEvent.KEYCODE_DPAD_DOWN -> { inputDispatcher.onDown(); return true }
-                KeyEvent.KEYCODE_DPAD_LEFT -> { inputDispatcher.onLeft(); return true }
-                KeyEvent.KEYCODE_DPAD_RIGHT -> { inputDispatcher.onRight(); return true }
+                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
+                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    dev.piannoli.scorza.input.ListNavigation.withRepeat(event.repeatCount > 0) {
+                        when (keyCode) {
+                            KeyEvent.KEYCODE_DPAD_UP -> inputDispatcher.onUp()
+                            KeyEvent.KEYCODE_DPAD_DOWN -> inputDispatcher.onDown()
+                            KeyEvent.KEYCODE_DPAD_LEFT -> inputDispatcher.onLeft()
+                            KeyEvent.KEYCODE_DPAD_RIGHT -> inputDispatcher.onRight()
+                        }
+                    }
+                    return true
+                }
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A ->
                     { inputDispatcher.onConfirm(); return true }
                 KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_BUTTON_B ->

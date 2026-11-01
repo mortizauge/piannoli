@@ -1,5 +1,7 @@
 package dev.piannoli.scorza.input.screen
 
+import dev.piannoli.scorza.input.ListNavigation
+
 import dagger.hilt.android.scopes.ActivityScoped
 import dev.piannoli.scorza.di.IoScope
 import dev.piannoli.scorza.input.ScreenInputHandler
@@ -32,14 +34,14 @@ class SaveSlotsInputHandler @Inject constructor(
     override fun onUp() {
         val s = current() ?: return
         if (s.slots.isEmpty()) return
-        val next = (s.selectedIndex - 1).mod(s.slots.size)
+        val next = ListNavigation.move(s.selectedIndex, -1, s.slots.size)
         nav.replaceTop(s.copy(selectedIndex = next))
     }
 
     override fun onDown() {
         val s = current() ?: return
         if (s.slots.isEmpty()) return
-        val next = (s.selectedIndex + 1).mod(s.slots.size)
+        val next = ListNavigation.move(s.selectedIndex, 1, s.slots.size)
         nav.replaceTop(s.copy(selectedIndex = next))
     }
 

@@ -91,6 +91,7 @@ class InputRouter @Inject constructor(
             remap = { button, mapping -> PiannoliRemapping.translate(button, mapping, settings.piannoliBindings) },
             onSelectUpOverride = { onSelectUp() },
             screenResolver = { activeScreenHandler() },
+            navigationContext = { nav.currentScreen },
             onMenuSound = { sound ->
                 if (nav.currentScreen !is LauncherScreen.InputTester) {
                     menuSounds.play(sound)

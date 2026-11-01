@@ -7,6 +7,7 @@ import dev.piannoli.scorza.input.screen.ScrollListInputHandler
 import dev.piannoli.scorza.romm.sync.SaveSyncStatusHolder
 import dev.piannoli.scorza.ui.screens.ConflictRow
 import dev.piannoli.scorza.ui.screens.DialogState
+import dev.piannoli.scorza.ui.screens.KeyboardHost
 import dev.piannoli.scorza.ui.quickmenu.QuickMenuRow
 import dev.piannoli.scorza.scraper.BulkScraperController
 import dev.piannoli.scorza.util.NetworkInfo
@@ -102,6 +103,138 @@ class ConflictsApplyingStateTest {
         )
     }
 
+    @Test fun `dialog pickers and RomM menus clamp held directions and fresh presses wrap`() {
+        val origin = DialogState.ContextMenu(gameName = "g", options = listOf("a", "b"))
+        val dialogs = listOf(
+            origin,
+            DialogState.RommSettingsMenu(),
+            DialogState.ExtensionFilters("GB", "Extensions", listOf("gb", "zip"), emptySet(), origin),
+            DialogState.QuickMenu(rows = listOf(QuickMenuRow.INFO, QuickMenuRow.ROMM)),
+            DialogState.RommPlatformToggle(items = listOf(
+                dev.piannoli.scorza.ui.screens.RommPlatformToggleItem("GB", "GB", true),
+                dev.piannoli.scorza.ui.screens.RommPlatformToggleItem("SNES", "SNES", true),
+            )),
+        )
+        for (dialog in dialogs) {
+            nav.dialogState.value = dialog
+            ListNavigation.withRepeat(true) { repeat(4) { handler.onUp() } }
+            assertEquals(dialog, nav.dialogState.value)
+            handler.onUp()
+            val end = nav.dialogState.value
+            assertTrue(end != dialog)
+            ListNavigation.withRepeat(true) { repeat(4) { handler.onDown() } }
+            assertEquals(end, nav.dialogState.value)
+            handler.onDown()
+            assertEquals(dialog, nav.dialogState.value)
+        }
+    }
+
+    @Test fun `keyboard grid retains wrapping during held navigation`() {
+        nav.dialogState.value = DialogState.RenameInput(gameName = "g")
+        ListNavigation.withRepeat(true) { handler.onUp() }
+        assertTrue((nav.dialogState.value as KeyboardHost).keyboard.keyRow > 0)
+    }
+
+    @Test fun `dialog and picker holds stop before handlers and changing dialog releases the latch`() {
+        val spy = io.mockk.spyk(handler)
+        val input = dev.piannoli.scorza.input.runtime.InputDispatcher(
+            dev.piannoli.scorza.input.runtime.PortRouter(),
+            dev.piannoli.scorza.input.runtime.ActiveMappingHolder(),
+        )
+        var feedback = 0
+        input.wireToRegistry(dialogHandler = spy, onMenuSound = { feedback++ })
+        val origin = DialogState.ContextMenu(gameName = "g", options = listOf("a", "b", "c"))
+        for (dialog in listOf(
+            origin, DialogState.RommSettingsMenu(),
+            DialogState.ExtensionFilters("GB", "Extensions", listOf("gb", "zip"), emptySet(), origin),
+            DialogState.QuickMenu(rows = listOf(QuickMenuRow.INFO, QuickMenuRow.ROMM)),
+        )) {
+            nav.dialogState.value = dialog
+            val before = feedback
+            ListNavigation.withRepeat(true) { repeat(20) { input.onDown() } }
+            assertTrue(feedback > before)
+            val atEnd = feedback
+            io.mockk.clearMocks(spy, answers = false, recordedCalls = true)
+            ListNavigation.withRepeat(true) { repeat(20) { input.onDown() } }
+            verify(exactly = 0) { spy.onDown() }
+            assertEquals(atEnd, feedback)
+            // The opposite direction is usable without releasing the original direction.
+            ListNavigation.withRepeat(true) { input.onUp() }
+            assertEquals(atEnd + 1, feedback)
+            ListNavigation.withRepeat(true) { repeat(20) { input.onDown() } }
+        }
+        nav.dialogState.value = DialogState.RenameInput(gameName = "g")
+        val before = feedback
+        ListNavigation.withRepeat(true) { repeat(20) { input.onDown() } }
+        assertEquals(before + 20, feedback)
+        nav.dialogState.value = DialogState.RenameInput(
+            gameName = "g", keyboard = dev.piannoli.ui.components.KeyboardState(text = "Game", cursorPos = 0),
+        )
+        val beforeCaret = feedback
+        ListNavigation.withRepeat(true) { repeat(8) { input.onR1() } }
+        assertEquals(4, (nav.dialogState.value as KeyboardHost).keyboard.cursorPos)
+        assertEquals(beforeCaret + 8, feedback)
+    }
+
+    @Test fun `RomM library and global results share bounded repeat navigation`() {
+        val screens = listOf(
+            LauncherScreen.RommPlatformList(itemCount = 4),
+            LauncherScreen.RommGlobalSearch(term = "m", itemCount = 4),
+            LauncherScreen.RommCollectionGroups(itemCount = 4),
+        )
+        val router = router()
+        for (screen in screens) {
+            nav.push(screen)
+            val input = router.currentHandler()
+            fun index() = (nav.currentScreen as LauncherScreen.ScrollableScreen).selectedIndex
+            ListNavigation.withRepeat(true) { repeat(8) { input.onDown() } }
+            assertEquals(3, index())
+            input.onRight()
+            assertEquals(3, index())
+            input.onDown()
+            assertEquals(0, index())
+            ListNavigation.withRepeat(true) { repeat(8) { input.onUp() } }
+            assertEquals(0, index())
+            input.onUp()
+            assertEquals(3, index())
+            nav.pop()
+        }
+    }
+
+    @Test fun `RomM boundary skips handlers and updated results release the latch`() {
+        val registry = dev.piannoli.scorza.input.runtime.ScreenInputRegistry()
+        val input = dev.piannoli.scorza.input.runtime.InputDispatcher(
+            dev.piannoli.scorza.input.runtime.PortRouter(),
+            dev.piannoli.scorza.input.runtime.ActiveMappingHolder(), registry,
+        )
+        var feedback = 0
+        input.wireToRegistry(navigationContext = { nav.currentScreen }, onMenuSound = { feedback++ })
+        val router = router()
+        for (screen in listOf(
+            LauncherScreen.RommPlatformList(itemCount = 4),
+            LauncherScreen.RommGlobalSearch(term = "m", itemCount = 4),
+            LauncherScreen.RommCollectionGroups(itemCount = 4),
+        )) {
+            nav.push(screen)
+            val spy = io.mockk.spyk(router.currentHandler())
+            registry.push(spy)
+            val before = feedback
+            input.onDown()
+            ListNavigation.withRepeat(true) { repeat(12) { input.onDown() } }
+            verify(exactly = 3) { spy.onDown() }
+            assertEquals(before + 3, feedback)
+            val end = nav.currentScreen as LauncherScreen.ScrollableScreen
+            nav.replaceTop(end.withScroll(1, 1))
+            ListNavigation.withRepeat(true) { repeat(12) { input.onDown() } }
+            verify(exactly = 5) { spy.onDown() }
+            assertEquals(before + 5, feedback)
+            input.onDown()
+            assertEquals(0, (nav.currentScreen as LauncherScreen.ScrollableScreen).selectedIndex)
+            registry.pop(spy)
+            nav.pop()
+        }
+    }
+
     @Test fun `network info opens with local addresses`() {
         mockkObject(NetworkInfo)
         try {
@@ -115,6 +248,248 @@ class ConflictsApplyingStateTest {
         } finally {
             unmockkObject(NetworkInfo)
         }
+    }
+
+    private fun keyboardDispatcher(
+        confirm: CanonicalButton = CanonicalButton.BTN_SOUTH,
+        remap: (CanonicalButton, DeviceMapping) -> CanonicalButton = { button, _ -> button },
+        feedback: () -> Unit = {},
+    ): dev.piannoli.scorza.input.runtime.InputDispatcher {
+        every { settings.keyboardType } returns dev.piannoli.scorza.settings.KeyboardType.PIANNOLI
+        val router = dev.piannoli.scorza.input.runtime.PortRouter()
+        val mapping = DeviceMapping(
+            id = "keyboard-test", displayName = "Pad", match = DeviceMatchRule(),
+            bindings = mapOf(
+                CanonicalButton.BTN_SOUTH to listOf(InputBinding.Button(96)),
+                CanonicalButton.BTN_EAST to listOf(InputBinding.Button(97)),
+                CanonicalButton.BTN_SELECT to listOf(InputBinding.Button(109)),
+                CanonicalButton.BTN_MENU to listOf(
+                    InputBinding.Button(android.view.KeyEvent.KEYCODE_BACK),
+                    InputBinding.Button(android.view.KeyEvent.KEYCODE_BUTTON_MODE),
+                ),
+            ),
+            menuConfirm = confirm,
+            menuBack = if (confirm == CanonicalButton.BTN_SOUTH) CanonicalButton.BTN_EAST else CanonicalButton.BTN_SOUTH,
+            source = MappingSource.ANDROID_DEFAULT,
+        )
+        router.onConnect(
+            ConnectedDevice(7, "pad", "Pad", 1, 1, "test", 0, 0), mapping,
+        )
+        return dev.piannoli.scorza.input.runtime.InputDispatcher(
+            router, dev.piannoli.scorza.input.runtime.ActiveMappingHolder(),
+        ).also {
+            it.wireToRegistry(dialogHandler = handler, remap = remap, onMenuSound = { feedback() })
+        }
+    }
+
+    private fun advanceDeleteTime(millis: Long) {
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(java.time.Duration.ofMillis(millis))
+    }
+
+    private fun dev.piannoli.scorza.input.runtime.InputDispatcher.key(code: Int, down: Boolean, repeats: Int = 0) {
+        handleKeyEventForTest(7, code, if (down) android.view.KeyEvent.ACTION_DOWN else android.view.KeyEvent.ACTION_UP, repeats)
+    }
+
+    @Test fun `Android button repeat filtering leaves raw capture visible without action feedback`() {
+        val input = keyboardDispatcher()
+        val raw = mutableListOf<Int>()
+        var feedback = 0
+        input.wireToRegistry(
+            screenResolver = { object : ScreenInputHandler {
+                override fun onRawKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean {
+                    raw += keyCode
+                    return false
+                }
+            } },
+            onMenuSound = { feedback++ },
+        )
+        for (code in listOf(android.view.KeyEvent.KEYCODE_BACK, android.view.KeyEvent.KEYCODE_BUTTON_MODE)) {
+            assertTrue(input.handleKeyEvent(android.view.KeyEvent(
+                0, 0, android.view.KeyEvent.ACTION_DOWN, code, 1,
+            )))
+        }
+        assertEquals(listOf(android.view.KeyEvent.KEYCODE_BACK, android.view.KeyEvent.KEYCODE_BUTTON_MODE), raw)
+        assertEquals(0, feedback)
+    }
+
+    @Test
+    @org.robolectric.annotation.LooperMode(org.robolectric.annotation.LooperMode.Mode.PAUSED)
+    fun `Android back and mode delete once while controller B keeps held deletion`() {
+        var feedback = 0
+        val input = keyboardDispatcher(
+            remap = { button, mapping -> if (button == CanonicalButton.BTN_MENU) mapping.menuBack else button },
+            feedback = { feedback++ },
+        )
+        fun open() {
+            nav.dialogState.value = DialogState.RenameInput(
+                "game", keyboard = dev.piannoli.ui.components.KeyboardState(text = "abcdef", cursorPos = 6),
+            )
+        }
+        fun text() = (nav.dialogState.value as KeyboardHost).keyboard.text
+        for (code in listOf(android.view.KeyEvent.KEYCODE_BACK, android.view.KeyEvent.KEYCODE_BUTTON_MODE)) {
+            open()
+            val before = feedback
+            input.key(code, true)
+            input.key(code, true, repeats = 1)
+            input.handleKeyEventForTest(7, code, android.view.KeyEvent.ACTION_MULTIPLE, 2)
+            advanceDeleteTime(1000)
+            assertEquals("abcde", text())
+            assertEquals(before + 1, feedback)
+            input.key(code, false)
+        }
+        open()
+        val beforeShim = feedback
+        input.handleMenuKey(true)
+        input.handleMenuKey(true, isRepeat = true)
+        advanceDeleteTime(1000)
+        input.handleMenuKey(false)
+        assertEquals("abcde", text())
+        assertEquals(beforeShim + 1, feedback)
+
+        open()
+        val beforeB = feedback
+        input.key(android.view.KeyEvent.KEYCODE_BUTTON_B, true)
+        input.key(android.view.KeyEvent.KEYCODE_BUTTON_B, true, repeats = 1)
+        advanceDeleteTime(460)
+        assertEquals("abc", text())
+        assertEquals(beforeB + 3, feedback)
+        input.key(android.view.KeyEvent.KEYCODE_BUTTON_B, false)
+        advanceDeleteTime(1000)
+        assertEquals("abc", text())
+    }
+
+    @Test
+    @org.robolectric.annotation.LooperMode(org.robolectric.annotation.LooperMode.Mode.PAUSED)
+    fun `remapped delete holds use device mapping repeat without OS events and stop at release and cursor boundary`() {
+        val bindings = dev.piannoli.ui.MenuAction.swap(
+            emptyMap(), dev.piannoli.ui.MenuAction.BACK, dev.piannoli.ui.MenuAction.SELECT,
+        )
+        var feedback = 0
+        val input = keyboardDispatcher(
+            confirm = CanonicalButton.BTN_EAST,
+            remap = { button, mapping -> PiannoliRemapping.translate(button, mapping, bindings) },
+            feedback = { feedback++ },
+        )
+        nav.dialogState.value = DialogState.RenameInput(
+            "game", keyboard = dev.piannoli.ui.components.KeyboardState(text = "abcXYZ", cursorPos = 3),
+        )
+        fun text() = (nav.dialogState.value as KeyboardHost).keyboard.text
+        input.key(109, true)
+        assertEquals("abXYZ", text())
+        advanceDeleteTime(399)
+        assertEquals("abXYZ", text())
+        input.key(109, true, repeats = 1)
+        assertEquals("abXYZ", text())
+        advanceDeleteTime(1)
+        assertEquals("aXYZ", text())
+        advanceDeleteTime(60)
+        assertEquals("XYZ", text())
+        advanceDeleteTime(600)
+        assertEquals("XYZ", text())
+        assertEquals(3, feedback)
+        input.key(109, false)
+        nav.dialogState.value = DialogState.RenameInput(
+            "next", keyboard = dev.piannoli.ui.components.KeyboardState(text = "new", cursorPos = 3),
+        )
+        advanceDeleteTime(1000)
+        assertEquals("new", text())
+        input.key(109, true)
+        input.key(109, false)
+        advanceDeleteTime(1000)
+        assertEquals("ne", text())
+        assertEquals(4, feedback)
+    }
+
+    @Test
+    @org.robolectric.annotation.LooperMode(org.robolectric.annotation.LooperMode.Mode.PAUSED)
+    fun `delete stops on focus cancellation dialog replacement remapping and rewiring without leaking into menus`() {
+        var bindings = emptyMap<dev.piannoli.ui.MenuAction, dev.piannoli.ui.MenuAction>()
+        val input = keyboardDispatcher(
+            remap = { button, mapping -> PiannoliRemapping.translate(button, mapping, bindings) },
+        )
+        fun open() {
+            nav.dialogState.value = DialogState.RenameInput(
+                "game", keyboard = dev.piannoli.ui.components.KeyboardState(text = "abcdef", cursorPos = 6),
+            )
+        }
+        open()
+        input.key(97, true)
+        input.cancelKeyboardDeleteHold()
+        advanceDeleteTime(1000)
+        assertEquals("abcde", (nav.dialogState.value as KeyboardHost).keyboard.text)
+        input.key(97, false)
+        input.key(97, true)
+        nav.dialogState.value = DialogState.None
+        advanceDeleteTime(400)
+        open()
+        advanceDeleteTime(600)
+        assertEquals("abcdef", (nav.dialogState.value as KeyboardHost).keyboard.text)
+        input.key(97, false)
+        input.key(97, true)
+        open()
+        advanceDeleteTime(1000)
+        assertEquals("abcdef", (nav.dialogState.value as KeyboardHost).keyboard.text)
+        input.key(97, false)
+        input.key(97, true)
+        val beforeHelp = nav.dialogState.value
+        input.onMenu()
+        assertTrue(nav.dialogState.value is DialogState.KeyboardHelp)
+        input.onBack()
+        advanceDeleteTime(1000)
+        assertEquals(beforeHelp, nav.dialogState.value)
+        input.key(97, false)
+        open()
+        input.key(97, true)
+        bindings = dev.piannoli.ui.MenuAction.swap(bindings, dev.piannoli.ui.MenuAction.BACK, dev.piannoli.ui.MenuAction.SELECT)
+        advanceDeleteTime(1000)
+        assertEquals("abcde", (nav.dialogState.value as KeyboardHost).keyboard.text)
+        input.key(97, false)
+        input.key(109, true)
+        var backs = 0
+        input.wireToRegistry(screenResolver = {
+            object : ScreenInputHandler { override fun onBack() { backs++ } }
+        })
+        advanceDeleteTime(1000)
+        assertEquals(0, backs)
+        input.key(109, false)
+        input.key(97, true)
+        advanceDeleteTime(1000)
+        input.key(97, true, repeats = 1)
+        input.key(97, false)
+        assertEquals(1, backs)
+    }
+
+    @Test
+    @org.robolectric.annotation.LooperMode(org.robolectric.annotation.LooperMode.Mode.PAUSED)
+    fun `confirm hold only repeats selected backspace including number and hex keyboards`() {
+        val input = keyboardDispatcher()
+        nav.dialogState.value = DialogState.RenameInput(
+            "number", keyboard = dev.piannoli.ui.components.KeyboardState(
+                text = "12345", cursorPos = 3, layout = dev.piannoli.ui.components.KeyboardLayout.Number,
+                keyRow = 3, keyCol = 0,
+            ),
+        )
+        input.key(96, true)
+        advanceDeleteTime(460)
+        input.key(96, false)
+        assertEquals("45", (nav.dialogState.value as KeyboardHost).keyboard.text)
+        nav.dialogState.value = DialogState.RenameInput(
+            "letters", keyboard = dev.piannoli.ui.components.KeyboardState(keyRow = 1, keyCol = 0),
+        )
+        input.key(96, true)
+        input.key(96, true, repeats = 1)
+        advanceDeleteTime(1000)
+        input.key(96, false)
+        assertEquals("q", (nav.dialogState.value as KeyboardHost).keyboard.text)
+        nav.dialogState.value = DialogState.HexColorInput(
+            settingKey = "test", title = "Hex", currentHex = "ABCDEF",
+            selectedIndex = dev.piannoli.ui.components.HEX_KEYS.indexOf(dev.piannoli.ui.KEY_BACKSPACE),
+        )
+        input.key(96, true)
+        advanceDeleteTime(460)
+        input.key(96, false)
+        assertEquals("ABC", (nav.dialogState.value as DialogState.HexColorInput).currentHex)
     }
 
     @Test fun `launcher keyboard cancel returns to captured navigation for initial and edited searches`() {

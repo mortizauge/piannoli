@@ -1,5 +1,7 @@
 package dev.piannoli.scorza.input.screen
 
+import dev.piannoli.scorza.input.ListNavigation
+
 import dagger.hilt.android.scopes.ActivityScoped
 import dev.piannoli.igm.GuideController
 import dev.piannoli.igm.GuideFile
@@ -52,7 +54,7 @@ class GuideInputHandler @Inject constructor(
         val p = picker()
         if (p != null) {
             if (p.files.isEmpty()) return
-            nav.replaceTop(p.copy(selectedIndex = (p.selectedIndex - 1).mod(p.files.size)))
+            nav.replaceTop(p.copy(selectedIndex = ListNavigation.move(p.selectedIndex, -1, p.files.size)))
             return
         }
         if (guide() != null) controller.scroll(-1)
@@ -62,7 +64,7 @@ class GuideInputHandler @Inject constructor(
         val p = picker()
         if (p != null) {
             if (p.files.isEmpty()) return
-            nav.replaceTop(p.copy(selectedIndex = (p.selectedIndex + 1).mod(p.files.size)))
+            nav.replaceTop(p.copy(selectedIndex = ListNavigation.move(p.selectedIndex, 1, p.files.size)))
             return
         }
         if (guide() != null) controller.scroll(1)

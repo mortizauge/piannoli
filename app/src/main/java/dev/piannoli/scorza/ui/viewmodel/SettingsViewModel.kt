@@ -1,5 +1,7 @@
 package dev.piannoli.scorza.ui.viewmodel
 
+import dev.piannoli.scorza.input.ListNavigation
+
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -342,14 +344,12 @@ class SettingsViewModel @Inject constructor(
             if (current.inSubList) {
                 if (current.items.isEmpty()) return@update current
                 val size = current.items.size
-                val raw = current.selectedIndex + delta
-                val newIndex = ((raw % size) + size) % size
+                val newIndex = ListNavigation.move(current.selectedIndex, delta, size)
                 current.copy(selectedIndex = newIndex)
             } else {
                 if (current.categories.isEmpty()) return@update current
                 val size = current.categories.size
-                val raw = current.categoryIndex + delta
-                val newIndex = ((raw % size) + size) % size
+                val newIndex = ListNavigation.move(current.categoryIndex, delta, size)
                 current.copy(categoryIndex = newIndex)
             }
         }

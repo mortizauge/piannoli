@@ -2,6 +2,7 @@ package dev.piannoli.scorza.input.screen
 
 import dagger.hilt.android.scopes.ActivityScoped
 import dev.piannoli.scorza.input.ActivityActions
+import dev.piannoli.scorza.input.ListNavigation
 import dev.piannoli.scorza.input.LauncherActions
 import dev.piannoli.scorza.input.ScreenInputHandler
 import dev.piannoli.scorza.navigation.BrowsePurpose
@@ -32,7 +33,7 @@ class OnboardingInputHandler @Inject constructor(
                 val hasSelect = screen.currentPath != "/storage/"
                 val count = screen.entries.size + if (hasSelect) 1 else 0
                 if (count > 0) {
-                    val newIdx = (screen.selectedIndex - 1 + count) % count
+                    val newIdx = ListNavigation.move(screen.selectedIndex, -1, count)
                     nav.replaceTop(screen.copy(selectedIndex = newIdx))
                 }
             }
@@ -47,7 +48,7 @@ class OnboardingInputHandler @Inject constructor(
                 val hasSelect = screen.currentPath != "/storage/"
                 val count = screen.entries.size + if (hasSelect) 1 else 0
                 if (count > 0) {
-                    val newIdx = (screen.selectedIndex + 1) % count
+                    val newIdx = ListNavigation.move(screen.selectedIndex, 1, count)
                     nav.replaceTop(screen.copy(selectedIndex = newIdx))
                 }
             }

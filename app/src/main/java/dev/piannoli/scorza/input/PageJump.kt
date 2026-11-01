@@ -5,12 +5,12 @@ import androidx.compose.foundation.lazy.LazyListState
 object PageJump {
 
     fun compute(direction: Int, itemCount: Int, selectedIndex: Int, listState: LazyListState?): Int {
-        if (itemCount == 0) return selectedIndex
+        if (itemCount == 0) return ListNavigation.recordMove(selectedIndex, selectedIndex, direction, itemCount)
         val lastIndex = itemCount - 1
         val viewport = readViewport(listState, lastIndex)
         val page = (viewport.last - viewport.first + 1).coerceAtLeast(1)
 
-        return if (direction > 0) {
+        val next = if (direction > 0) {
             when {
                 selectedIndex < viewport.last -> viewport.last.coerceAtMost(lastIndex)
                 selectedIndex >= lastIndex -> selectedIndex
@@ -23,6 +23,7 @@ object PageJump {
                 else -> (selectedIndex - page).coerceAtLeast(0)
             }
         }
+        return ListNavigation.recordMove(selectedIndex, next, direction, itemCount)
     }
 
     private data class Viewport(val first: Int, val last: Int)

@@ -1,5 +1,7 @@
 package dev.piannoli.scorza.navigation
 
+import dev.piannoli.scorza.input.ListNavigation
+
 import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -472,11 +474,14 @@ sealed class LauncherScreen {
                 return if (isCustomVolume) customPath else selectedVolume!!.second + "Piannoli/"
             }
         fun moved(delta: Int) = copy(
-            selectedIndex = (selectedIndex + delta).coerceIn(0, (focusableCount - 1).coerceAtLeast(0))
+            selectedIndex = ListNavigation.recordMove(
+                selectedIndex, (selectedIndex + delta).coerceIn(0, (focusableCount - 1).coerceAtLeast(0)),
+                delta, focusableCount,
+            )
         )
         fun cycledVolume(delta: Int): OnboardingPermissions {
             if (volumes.size <= 1) return this
-            val next = ((volumeIndex + delta) % volumes.size + volumes.size) % volumes.size
+            val next = ListNavigation.move(volumeIndex, delta, volumes.size)
             return copy(volumeIndex = next, customPath = null)
         }
     }

@@ -1,5 +1,7 @@
 package dev.piannoli.scorza.ui.viewmodel
 
+import dev.piannoli.scorza.input.ListNavigation
+
 import dagger.hilt.android.scopes.ActivityScoped
 import dev.piannoli.scorza.config.PlatformConfig
 import dev.piannoli.scorza.config.PlatformFolders
@@ -376,8 +378,7 @@ class SystemListViewModel @Inject constructor(
         _state.update { current ->
             val size = current.items.size
             if (size == 0) return@update current
-            val raw = current.selectedIndex + delta
-            val target = ((raw % size) + size) % size
+            val target = ListNavigation.move(current.selectedIndex, delta, size)
             current.copy(selectedIndex = target)
         }
     }

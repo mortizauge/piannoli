@@ -1,6 +1,7 @@
 package dev.piannoli.scorza.ui.viewmodel
 
 import dev.piannoli.scorza.config.PlatformConfig
+import dev.piannoli.scorza.input.ListNavigation
 import dev.piannoli.scorza.db.AppsRepository
 import dev.piannoli.scorza.db.CollectionsRepository
 import dev.piannoli.scorza.db.RecentlyPlayedRepository
@@ -97,6 +98,25 @@ class SystemListScanTargetsTest {
         vm.scan(reconcileOrphans = reconcileOrphans, onReady = { done.countDown() })
         assertTrue("scan did not finish", done.await(10, TimeUnit.SECONDS))
         return tags
+    }
+
+    @Test fun `system selection clamps held and multi row moves while fresh presses wrap`() {
+        val vm = viewModel(File("."), indexed = mapOf("GB" to 1, "SNES" to 4))
+        val ready = CountDownLatch(1)
+        vm.scan(scanDisk = false, onReady = { ready.countDown() })
+        assertTrue("load did not finish", ready.await(10, TimeUnit.SECONDS))
+        val count = vm.state.value.items.size
+        assertTrue(count > 1)
+        ListNavigation.withRepeat(true) { repeat(count + 3) { vm.moveSelection(1) } }
+        assertEquals(count - 1, vm.state.value.selectedIndex)
+        vm.moveSelection(1)
+        assertEquals(0, vm.state.value.selectedIndex)
+        ListNavigation.withRepeat(true) { repeat(3) { vm.moveSelection(-1) } }
+        assertEquals(0, vm.state.value.selectedIndex)
+        vm.moveSelection(-1)
+        assertEquals(count - 1, vm.state.value.selectedIndex)
+        vm.moveSelection(-count * 2)
+        assertEquals(0, vm.state.value.selectedIndex)
     }
 
     @Test fun `reconcile visits a platform that lost its folder`() {

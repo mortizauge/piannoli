@@ -26,10 +26,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,6 +40,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -51,6 +55,8 @@ import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -111,9 +117,37 @@ fun KeyboardOverlay(
     }
 
     val uiActive = LocalUiActive.current
+    val touchRepeat = remember { DeleteKeyRepeat() }
+    val touchState = remember { object { var expected = state } }
+    SideEffect {
+        if (state !== touchState.expected) touchRepeat.stop()
+        touchState.expected = state
+    }
+    DisposableEffect(touchRepeat) {
+        onDispose { touchRepeat.stop() }
+    }
+    val deleteTouch by rememberUpdatedState<() -> Boolean> {
+        if (!uiActive.value || state !== touchState.expected || onStateChange == null) {
+            false
+        } else {
+            val next = KeyboardController.backspace(state)
+            if (next == state) {
+                false
+            } else {
+                val backspaceRow = rows.indexOfFirst { KEY_BACKSPACE in it }
+                val selected = next.copy(keyRow = backspaceRow, keyCol = rows[backspaceRow].indexOf(KEY_BACKSPACE))
+                touchState.expected = selected
+                onStateChange(selected)
+                true
+            }
+        }
+    }
     LaunchedEffect(uiActive) {
         uiActive.collectLatest { focused ->
-            if (!focused) return@collectLatest
+            if (!focused) {
+                touchRepeat.stop()
+                return@collectLatest
+            }
             cursorVisible = true
             while (true) {
                 delay(530)
@@ -163,6 +197,7 @@ fun KeyboardOverlay(
             .then(
                 if (onStateChange == null) Modifier else Modifier
                     .focusRequester(rootFocusRequester)
+                    .onFocusChanged { if (!it.hasFocus) touchRepeat.stop() }
                     .focusable()
                     .onPreviewKeyEvent { event ->
                         handlePhysicalKey(event, state, safeCursor, onStateChange, onConfirm, insertText)
@@ -287,7 +322,29 @@ fun KeyboardOverlay(
                                     .size(keySize)
                                     .clip(RoundedCornerShape(Radius.Md))
                                     .background(keyBg)
-                                    .clickable(enabled = onStateChange != null) { pressKey(ri, ci) },
+                                    .then(
+                                        if (key == KEY_BACKSPACE && onStateChange != null) {
+                                            Modifier
+                                                .semantics {
+                                                    onClick {
+                                                        deleteTouch()
+                                                        true
+                                                    }
+                                                }
+                                                .pointerInput(uiActive, state.layout) {
+                                                    detectTapGestures(onPress = {
+                                                        touchRepeat.start { deleteTouch() }
+                                                        try {
+                                                            tryAwaitRelease()
+                                                        } finally {
+                                                            touchRepeat.stop()
+                                                        }
+                                                    })
+                                                }
+                                        } else {
+                                            Modifier.clickable(enabled = onStateChange != null) { pressKey(ri, ci) }
+                                        }
+                                    ),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(

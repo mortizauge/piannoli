@@ -47,6 +47,29 @@ class OnboardingInputHandlerTest {
 
     private fun show(screen: LauncherScreen.OnboardingPermissions) = nav.replaceTop(screen)
 
+    @Test fun heldNavigationStopsBeforeHandlersAtTheLastFocusableRow() {
+        show(LauncherScreen.OnboardingPermissions(
+            permissions = storagePerm, granted = allGranted, volumes = volumes,
+        ))
+        val spy = io.mockk.spyk(handler)
+        val input = dev.piannoli.scorza.input.runtime.InputDispatcher(
+            dev.piannoli.scorza.input.runtime.PortRouter(),
+            dev.piannoli.scorza.input.runtime.ActiveMappingHolder(),
+        )
+        var feedback = 0
+        input.wireToRegistry(
+            screenResolver = { spy }, navigationContext = { nav.currentScreen }, onMenuSound = { feedback++ },
+        )
+        input.onDown()
+        dev.piannoli.scorza.input.ListNavigation.withRepeat(true) { repeat(8) { input.onDown() } }
+        assertEquals(continueRow, (nav.currentScreen as LauncherScreen.OnboardingPermissions).selectedIndex)
+        io.mockk.verify(exactly = 2) { spy.onDown() }
+        assertEquals(2, feedback)
+        dev.piannoli.scorza.input.ListNavigation.withRepeat(true) { input.onUp() }
+        assertEquals(storageRow, (nav.currentScreen as LauncherScreen.OnboardingPermissions).selectedIndex)
+        assertEquals(3, feedback)
+    }
+
     @Test fun confirmContinuesWhenContinueRowFocused() {
         show(LauncherScreen.OnboardingPermissions(
             permissions = storagePerm, granted = allGranted, volumes = volumes,

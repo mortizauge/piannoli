@@ -2,6 +2,7 @@ package dev.piannoli.scorza.input.screen
 
 import dev.piannoli.scorza.input.LauncherActions
 import dev.piannoli.scorza.navigation.NavigationController
+import dev.piannoli.scorza.navigation.LauncherScreen
 import dev.piannoli.scorza.settings.SettingsRepository
 import dev.piannoli.scorza.ui.viewmodel.GameListViewModel
 import io.mockk.every
@@ -62,6 +63,23 @@ class GameListSelectReleaseTest {
         val dialog = nav.dialogState.value as DialogState.RenameInput
         assertEquals("launcher_global_search", dialog.gameName)
         assertEquals(keyboard, dialog.keyboard)
+    }
+
+    @Test fun reopening_search_keyboard_does_not_replace_original_list_bookmark() {
+        handler.onR1()
+        every { glvm.isSearching() } returns true
+        handler.onBack()
+        handler.onBack()
+        verify(exactly = 1) { glvm.beginSearch() }
+    }
+
+    @Test fun editing_restored_global_results_never_uses_results_as_cancel_destination() {
+        nav.push(LauncherScreen.GameList)
+        every { glvm.state } returns MutableStateFlow(GameListViewModel.State(
+            isGlobalSearch = true, globalSearchQuery = "Mario"))
+        handler.onBack()
+        nav.cancelLauncherSearch()
+        assertEquals(LauncherScreen.SystemList, nav.currentScreen)
     }
 
     @Test fun select_release_without_a_press_does_not_enter_reorder() {

@@ -36,6 +36,7 @@ class GameListInputHandler @Inject constructor(
     private val gameListViewModel: GameListViewModel,
     private val launcherActions: LauncherActions,
 ) : ScreenInputHandler {
+    override val navigationContext: Any get() = gameListViewModel.state.value
 
     var buildContextOptions: ((item: ListItem, glState: GameListViewModel.State) -> List<String>)? = null
 

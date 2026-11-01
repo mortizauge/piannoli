@@ -117,10 +117,13 @@ object KeyboardController {
     }
 
     fun backspace(s: KeyboardState): KeyboardState {
-        if (s.cursorPos <= 0) return s
+        if (s.cursorPos <= 0 || s.text.isEmpty()) return s
         val pos = s.cursorPos.coerceIn(1, s.text.length)
         return s.copy(text = s.text.removeRange(pos - 1, pos), cursorPos = pos - 1)
     }
+
+    fun isBackspaceSelected(s: KeyboardState): Boolean =
+        getKeyboardRows(s.layout, s.caps, s.symbols).getOrNull(s.keyRow)?.getOrNull(s.keyCol) == KEY_BACKSPACE
 
     fun press(s: KeyboardState): KeyboardPress {
         val rows = getKeyboardRows(s.layout, s.caps, s.symbols)

@@ -1,5 +1,7 @@
 package dev.piannoli.scorza.ui.viewmodel
 
+import dev.piannoli.scorza.input.ListNavigation
+
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.scopes.ActivityScoped
 import dev.piannoli.scorza.R
@@ -636,8 +638,7 @@ class GameListViewModel @Inject constructor(
         _state.update { current ->
             if (current.items.isEmpty()) return@update current
             val size = current.items.size
-            val raw = current.selectedIndex + delta
-            val newIndex = ((raw % size) + size) % size
+            val newIndex = ListNavigation.move(current.selectedIndex, delta, size)
             current.copy(selectedIndex = newIndex)
         }
     }

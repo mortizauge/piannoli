@@ -2,6 +2,7 @@ package dev.piannoli.scorza.input.screen
 
 import dagger.hilt.android.scopes.ActivityScoped
 import dev.piannoli.scorza.input.LauncherActions
+import dev.piannoli.scorza.input.ListNavigation
 import dev.piannoli.scorza.input.ScreenInputHandler
 import dev.piannoli.scorza.navigation.LauncherScreen
 import dev.piannoli.scorza.navigation.NavigationController
@@ -21,7 +22,7 @@ class SaveStatePickerInputHandler @Inject constructor(
 
     private fun move(delta: Int) {
         val s = current() ?: return
-        val next = (s.selectedSlotIndex + delta).mod(11)
+        val next = ListNavigation.move(s.selectedSlotIndex, delta, 11)
         nav.replaceTop(s.copy(selectedSlotIndex = next))
     }
 

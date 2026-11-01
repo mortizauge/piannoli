@@ -7,6 +7,7 @@ import androidx.test.core.app.ApplicationProvider
 import dev.piannoli.scorza.db.AppsRepository
 import dev.piannoli.scorza.di.AppFonts
 import dev.piannoli.scorza.input.LauncherActions
+import dev.piannoli.scorza.input.ListNavigation
 import dev.piannoli.scorza.model.App
 import dev.piannoli.scorza.model.AppType
 import dev.piannoli.scorza.navigation.LauncherScreen
@@ -50,6 +51,32 @@ class SettingsInputHandlerTest {
     private val context = mockk<Context>(relaxed = true)
     private val packages = mockk<PackageManager>(relaxed = true)
     private val games = mockk<GameListViewModel>(relaxed = true)
+
+    @Test fun `held settings navigation clamps categories and sublists then fresh presses wrap`() {
+        val appContext = ApplicationProvider.getApplicationContext<Context>()
+        val settings = SettingsRepository(appContext)
+        val viewModel = SettingsViewModel(settings, AppFonts(appContext), appContext, mockk(relaxed = true))
+        val input = handler(viewModel, settings)
+        viewModel.load()
+        for (inSubList in listOf(false, true)) {
+            if (inSubList) viewModel.enterSubCategory("library", dev.piannoli.scorza.R.string.settings_library)
+            val count = if (inSubList) viewModel.state.value.items.size else viewModel.state.value.categories.size
+            fun index() = if (inSubList) viewModel.state.value.selectedIndex else viewModel.state.value.categoryIndex
+            assertTrue(count > 1)
+            ListNavigation.withRepeat(true) {
+                repeat(count + 3) { input.onDown() }
+                assertEquals(count - 1, index())
+            }
+            input.onDown()
+            assertEquals(0, index())
+            ListNavigation.withRepeat(true) { repeat(3) { input.onUp() } }
+            assertEquals(0, index())
+            input.onUp()
+            assertEquals(count - 1, index())
+            viewModel.moveSelection(-count * 2)
+            assertEquals(0, index())
+        }
+    }
 
     private fun handler(
         settingsViewModel: SettingsViewModel = mockk(relaxed = true),

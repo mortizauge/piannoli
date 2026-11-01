@@ -1,5 +1,7 @@
 package dev.piannoli.scorza.input.screen
 
+import dev.piannoli.scorza.input.ListNavigation
+
 import dagger.hilt.android.scopes.ActivityScoped
 import dev.piannoli.scorza.input.ScreenInputHandler
 import dev.piannoli.scorza.navigation.LauncherScreen
@@ -26,14 +28,14 @@ class ControllersInputHandler @Inject constructor(
         val screen = current() ?: return
         val count = items().size
         if (count <= 0) return
-        nav.replaceTop(screen.copy(selectedIndex = (screen.selectedIndex - 1).mod(count)))
+        nav.replaceTop(screen.copy(selectedIndex = ListNavigation.move(screen.selectedIndex, -1, count)))
     }
 
     override fun onDown() {
         val screen = current() ?: return
         val count = items().size
         if (count <= 0) return
-        nav.replaceTop(screen.copy(selectedIndex = (screen.selectedIndex + 1).mod(count)))
+        nav.replaceTop(screen.copy(selectedIndex = ListNavigation.move(screen.selectedIndex, 1, count)))
     }
 
     override fun onConfirm() {

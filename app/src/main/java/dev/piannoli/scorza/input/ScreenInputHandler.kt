@@ -3,6 +3,8 @@ package dev.piannoli.scorza.input
 import android.view.KeyEvent
 
 interface ScreenInputHandler {
+    /** Immutable list state reference; replacing it releases a held navigation boundary latch. */
+    val navigationContext: Any? get() = this
     fun onCaptureButton(button: CanonicalButton, mapping: DeviceMapping): Boolean = false
     fun onUp() {}
     fun onDown() {}

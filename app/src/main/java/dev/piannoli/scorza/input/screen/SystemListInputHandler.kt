@@ -43,6 +43,7 @@ class SystemListInputHandler @Inject constructor(
     private val launcherActions: LauncherActions,
     private val rommConnectionStore: dev.piannoli.scorza.romm.RommConnectionStore,
 ) : ScreenInputHandler {
+    override val navigationContext: Any get() = systemListViewModel.state.value
 
     private var selectDown = false
 

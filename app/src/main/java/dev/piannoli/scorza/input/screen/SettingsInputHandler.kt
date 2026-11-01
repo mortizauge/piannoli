@@ -59,6 +59,7 @@ class SettingsInputHandler @Inject constructor(
     private val scraper: dev.piannoli.scorza.scraper.ScraperController,
     private val artworkStore: dev.piannoli.scorza.scraper.ScrapedArtworkStore,
 ) : ScreenInputHandler {
+    override val navigationContext: Any get() = settingsViewModel.state.value
 
     override fun onUp() {
         settingsViewModel.moveSelection(-1)

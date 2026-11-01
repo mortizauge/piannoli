@@ -95,6 +95,11 @@ class KeyboardControllerTest {
         assertEquals("a", r.state.text)
     }
 
+    @Test fun `backspace with empty text and stale positive cursor is a no-op`() {
+        val state = KeyboardState(cursorPos = 4)
+        assertEquals(state, KeyboardController.backspace(state))
+    }
+
     @Test fun `layout capability flags`() {
         assertEquals(true, KeyboardLayout.Default.supportsCaps)
         assertEquals(true, KeyboardLayout.Default.supportsSymbols)

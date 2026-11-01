@@ -4,6 +4,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.MotionEvent
 import dagger.hilt.android.scopes.ActivityScoped
+import dev.piannoli.scorza.input.ListNavigation
 import javax.inject.Inject
 
 /**
@@ -28,7 +29,7 @@ class StickAutoRepeat @Inject constructor(
     private var heldDir = 0
     private val runnable = object : Runnable {
         override fun run() {
-            fireForDir(heldDir)
+            ListNavigation.withRepeat(true) { fireForDir(heldDir) }
             if (heldDir != 0) handler.postDelayed(this, REPEAT_INTERVAL_MS)
         }
     }
@@ -50,7 +51,7 @@ class StickAutoRepeat @Inject constructor(
             // direction), the canonical's auto-repeat is owned by MenuNavigationPoller. Firing
             // here would double-scroll, so we only track the transition.
             if (newDir != 0 && !dispatcherHandled) {
-                fireForDir(newDir)
+                ListNavigation.withRepeat(false) { fireForDir(newDir) }
                 handler.postDelayed(runnable, INITIAL_DELAY_MS)
             }
         }
@@ -59,6 +60,7 @@ class StickAutoRepeat @Inject constructor(
     fun stop() {
         handler.removeCallbacks(runnable)
         heldDir = 0
+        dispatcher.cancelNavigationRepeat()
     }
 
     private fun fireForDir(dir: Int) {

@@ -4,6 +4,7 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dev.piannoli.scorza.input.PageJump
+import dev.piannoli.scorza.input.ListNavigation
 import dev.piannoli.scorza.input.ScreenInputHandler
 import dev.piannoli.scorza.navigation.NavigationController
 
@@ -41,14 +42,15 @@ class ScrollListInputHandler @AssistedInject constructor(
         ): ScrollListInputHandler
     }
 
-    private fun wrap(delta: Int): Int {
+    private fun move(delta: Int) {
         val count = itemCount()
-        if (count == 0) return 0
-        return (selectedIndex() + delta).mod(count)
+        if (count == 0) return
+        val next = ListNavigation.move(selectedIndex(), delta, count)
+        if (next != selectedIndex()) onMove(next)
     }
 
-    override fun onUp() = onMove(wrap(-1))
-    override fun onDown() = onMove(wrap(1))
+    override fun onUp() = move(-1)
+    override fun onDown() = move(1)
 
     override fun onLeft() {
         if (onLeftOverride != null) {

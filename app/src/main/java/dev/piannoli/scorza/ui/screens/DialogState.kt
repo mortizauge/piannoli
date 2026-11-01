@@ -1,6 +1,7 @@
 package dev.piannoli.scorza.ui.screens
 
 import dev.piannoli.ui.ELLIPSIS
+import dev.piannoli.scorza.input.ListNavigation
 import dev.piannoli.ui.components.KeyboardLayout
 import dev.piannoli.ui.components.KeyboardState
 
@@ -247,17 +248,17 @@ interface KeyboardHost {
 
 fun DialogState.withMenuDelta(delta: Int): DialogState? = when (this) {
     is DialogState.ScraperMenu -> {
-        if (options.isEmpty()) null else copy(selectedIndex = (selectedIndex + delta).mod(options.size))
+        if (options.isEmpty()) null else copy(selectedIndex = ListNavigation.move(selectedIndex, delta, options.size))
     }
     is DialogState.ContextMenu -> {
         if (options.isEmpty()) null
-        else copy(selectedOption = (selectedOption + delta).mod(options.size))
+        else copy(selectedOption = ListNavigation.move(selectedOption, delta, options.size))
     }
     is DialogState.BulkContextMenu -> {
         if (options.isEmpty()) null
-        else copy(selectedOption = (selectedOption + delta).mod(options.size))
+        else copy(selectedOption = ListNavigation.move(selectedOption, delta, options.size))
     }
-    is DialogState.SaveSyncConflict -> copy(selectedIndex = (selectedIndex + delta).mod(2))
-    is DialogState.SaveSyncStaleBlock -> copy(selectedIndex = (selectedIndex + delta).mod(2))
+    is DialogState.SaveSyncConflict -> copy(selectedIndex = ListNavigation.move(selectedIndex, delta, 2))
+    is DialogState.SaveSyncStaleBlock -> copy(selectedIndex = ListNavigation.move(selectedIndex, delta, 2))
     else -> null
 }

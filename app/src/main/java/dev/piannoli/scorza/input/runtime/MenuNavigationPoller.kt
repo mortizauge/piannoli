@@ -5,6 +5,7 @@ import android.os.Looper
 import android.os.SystemClock
 import dagger.hilt.android.scopes.ActivityScoped
 import dev.piannoli.scorza.input.CanonicalButton
+import dev.piannoli.scorza.input.ListNavigation
 import javax.inject.Inject
 
 /**
@@ -34,10 +35,11 @@ class MenuNavigationPoller @Inject constructor(
             val now = SystemClock.uptimeMillis()
             val current = readDir()
             if (current != heldDir) {
+                heldDir?.let { dispatcher.cancelNavigationRepeat(it) }
                 heldDir = current
                 if (current != null) nextFireAt = now + INITIAL_DELAY_MS
             } else if (current != null && now >= nextFireAt) {
-                fire(current)
+                ListNavigation.withRepeat(true) { fire(current) }
                 nextFireAt = now + REPEAT_INTERVAL_MS
             }
             // Wake just before the next fire if a direction is held; otherwise idle-poll. This
@@ -63,6 +65,7 @@ class MenuNavigationPoller @Inject constructor(
         handler.removeCallbacks(tick)
         heldDir = null
         nextFireAt = 0L
+        dispatcher.cancelNavigationRepeat()
     }
 
     private fun readDir(): CanonicalButton? {

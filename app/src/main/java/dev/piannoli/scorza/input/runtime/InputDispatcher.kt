@@ -4,7 +4,9 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import dev.piannoli.scorza.input.CanonicalButton
 import dev.piannoli.scorza.input.DeviceMapping
+import dev.piannoli.scorza.input.ListNavigation
 import dev.piannoli.scorza.util.MenuSound
+import dev.piannoli.ui.components.DeleteKeyRepeat
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -54,25 +56,79 @@ class InputDispatcher @Inject constructor(
     private val capturedButtons = mutableSetOf<Pair<Int, CanonicalButton>>()
     private var menuKeyAction: CanonicalButton? = null
     private var menuKeyCaptured = false
+    private var deleteRepeat: DeleteKeyRepeat? = null
+    private var deleteOwner: Pair<Int, CanonicalButton>? = null
+    private val keyboardButtons = mutableSetOf<Pair<Int, CanonicalButton>>()
+    private var keyboardInputActive: () -> Boolean = { false }
+    private var deleteHoldAction: (Boolean) -> (() -> Boolean)? = { null }
+    private var deleteFeedback: (MenuSound) -> Unit = {}
+    private val navigationRepeat = NavigationRepeatGate()
+
+    fun cancelNavigationRepeat(button: CanonicalButton? = null) {
+        navigationRepeat.reset(button)
+    }
+
+    fun cancelKeyboardDeleteHold() {
+        deleteRepeat?.stop()
+        deleteOwner = null
+    }
+
+    private fun dispatchPressed(
+        deviceId: Int,
+        physical: CanonicalButton,
+        mapped: CanonicalButton,
+        mapping: DeviceMapping,
+        allowDeleteRepeat: Boolean = true,
+    ): Boolean {
+        val key = deviceId to physical
+        if (keyboardInputActive()) keyboardButtons.add(key)
+        val confirm = mapped == mapping.menuConfirm
+        val delete = if (allowDeleteRepeat && (confirm || mapped == mapping.menuBack)) deleteHoldAction(confirm) else null
+        if (delete == null) return dispatchMapped(mapped, mapping)
+        cancelKeyboardDeleteHold()
+        deleteOwner = key
+        val repeater = deleteRepeat ?: DeleteKeyRepeat().also { deleteRepeat = it }
+        repeater.start {
+            val currentMapping = if (deviceId == MENU_DEVICE_ID) {
+                activeMappingHolder.active.value ?: DEFAULT_MENU_MAPPING
+            } else portRouter.mappingFor(deviceId)
+            if (deleteOwner != key || currentMapping != mapping || remap(physical, mapping) != mapped) {
+                false
+            } else {
+                delete().also { changed ->
+                    if (changed) deleteFeedback(if (confirm) MenuSound.CONFIRM else MenuSound.BACK)
+                }
+            }
+        }
+        return true
+    }
+
+    private fun releaseKeyboardButton(deviceId: Int, physical: CanonicalButton) {
+        val key = deviceId to physical
+        keyboardButtons.remove(key)
+        if (deleteOwner == key) cancelKeyboardDeleteHold()
+    }
 
     private fun activeScreen(): dev.piannoli.scorza.input.ScreenInputHandler =
         screenResolver?.invoke() ?: screenInputRegistry.top
 
     fun handleMenuKey(pressed: Boolean, isRepeat: Boolean = false) {
+        if (pressed && isRepeat) return
         val mapping = activeMappingHolder.active.value ?: DEFAULT_MENU_MAPPING
         if (menuKeyCaptured) {
             if (!pressed) menuKeyCaptured = false
             return
         }
-        if (pressed && !isRepeat && activeScreen().onCaptureButton(CanonicalButton.BTN_MENU, mapping)) {
+        if (pressed && activeScreen().onCaptureButton(CanonicalButton.BTN_MENU, mapping)) {
             menuKeyCaptured = true
             return
         }
         val button = menuKeyAction ?: remap(CanonicalButton.BTN_MENU, mapping)
         if (pressed) {
             menuKeyAction = button
-            if (!isRepeat || button != mapping.menuBack) dispatchMapped(button, mapping)
+            dispatchPressed(MENU_DEVICE_ID, CanonicalButton.BTN_MENU, button, mapping, allowDeleteRepeat = false)
         } else {
+            releaseKeyboardButton(MENU_DEVICE_ID, CanonicalButton.BTN_MENU)
             menuKeyAction = null
             menuKeyCaptured = false
             dispatchReleased(button, mapping)
@@ -92,7 +148,7 @@ class InputDispatcher @Inject constructor(
             }
             if (consumed) return true
         }
-        if (keyboardNavigation && handleKeyboardDirectionForTest(event.deviceId, event.keyCode, event.action)) return true
+        if (keyboardNavigation && handleKeyboardDirectionForTest(event.deviceId, event.keyCode, event.action, event.repeatCount)) return true
         return handleKeyEventForTest(
             deviceId = event.deviceId,
             keyCode = event.keyCode,
@@ -101,7 +157,7 @@ class InputDispatcher @Inject constructor(
         )
     }
 
-    internal fun handleKeyboardDirectionForTest(deviceId: Int, keyCode: Int, action: Int): Boolean {
+    internal fun handleKeyboardDirectionForTest(deviceId: Int, keyCode: Int, action: Int, repeatCount: Int = 0): Boolean {
         val direction = when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> CanonicalButton.BTN_UP
             KeyEvent.KEYCODE_DPAD_DOWN -> CanonicalButton.BTN_DOWN
@@ -117,7 +173,10 @@ class InputDispatcher @Inject constructor(
         // Hat motion may already have dispatched this direction and owns its held repeat.
         if (portRouter.evaluatorFor(deviceId)?.currentlyPressed()?.contains(direction) == true) return true
         when (action) {
-            KeyEvent.ACTION_DOWN, KeyEvent.ACTION_MULTIPLE -> dispatchMapped(direction, DEFAULT_MENU_MAPPING)
+            KeyEvent.ACTION_DOWN, KeyEvent.ACTION_MULTIPLE ->
+                ListNavigation.withRepeat(action == KeyEvent.ACTION_MULTIPLE || repeatCount > 0) {
+                    dispatchMapped(direction, DEFAULT_MENU_MAPPING)
+                }
             KeyEvent.ACTION_UP -> dispatchReleased(direction, DEFAULT_MENU_MAPPING)
         }
         return true
@@ -144,12 +203,18 @@ class InputDispatcher @Inject constructor(
             return bridgedKeyboardHat.remove(key) && dispatchReleased(direction, DEFAULT_MENU_MAPPING)
         }
         if (portRouter.evaluatorFor(deviceId)?.currentlyPressed()?.contains(direction) == true) return true
-        bridgedKeyboardHat.add(key)
+        val isRepeat = !bridgedKeyboardHat.add(key)
         dev.piannoli.scorza.util.InputLog.write("keyboard hat id=$deviceId -> ${direction.name}")
-        return dispatchMapped(direction, DEFAULT_MENU_MAPPING)
+        return ListNavigation.withRepeat(isRepeat) { dispatchMapped(direction, DEFAULT_MENU_MAPPING) }
     }
 
-    internal fun handleKeyEventForTest(deviceId: Int, keyCode: Int, action: Int, repeatCount: Int): Boolean {
+    internal fun handleKeyEventForTest(deviceId: Int, keyCode: Int, action: Int, repeatCount: Int): Boolean =
+        ListNavigation.withRepeat(action == KeyEvent.ACTION_MULTIPLE || repeatCount > 0) {
+            handleKeyEventInternal(deviceId, keyCode, action, repeatCount)
+        }
+
+    private fun handleKeyEventInternal(deviceId: Int, keyCode: Int, action: Int, repeatCount: Int): Boolean {
+        if (isAndroidButtonRepeat(keyCode, action, repeatCount)) return true
         if (keyCode == KeyEvent.KEYCODE_UNKNOWN) return false
         val evaluator = portRouter.evaluatorFor(deviceId) ?: return false
         val mapping = portRouter.mappingFor(deviceId) ?: return false
@@ -159,6 +224,7 @@ class InputDispatcher @Inject constructor(
                 if (isRepeat) {
                     val direct = evaluator.canonicalsHeldByKeyCode(keyCode)
                     if (direct.any { deviceId to it in capturedButtons }) return true
+                    if (direct.any { deviceId to it in keyboardButtons }) return true
                     val fallback = if (direct.isEmpty()) dpadFallbackForRepeat(evaluator, keyCode) else emptyList()
                     val canonicals = (if (direct.isNotEmpty()) direct else fallback)
                         .map { pressedActions[deviceId to it] ?: remap(it, mapping) }
@@ -196,7 +262,8 @@ class InputDispatcher @Inject constructor(
                         if (delta is CanonicalEvent.Pressed) {
                             if (captureButton(deviceId, delta.button, mapping)) { fired = true; continue }
                             val mapped = pressedActions.getOrPut(deviceId to delta.button) { remap(delta.button, mapping) }
-                            if (dispatchMapped(mapped, mapping)) fired = true
+                            if (dispatchPressed(deviceId, delta.button, mapped, mapping,
+                                    allowDeleteRepeat = !isAndroidButton(keyCode))) fired = true
                         }
                     }
                     fired
@@ -208,6 +275,7 @@ class InputDispatcher @Inject constructor(
                 var fired = false
                 for (delta in deltas) {
                     if (delta !is CanonicalEvent.Released) continue
+                    releaseKeyboardButton(deviceId, delta.button)
                     if (capturedButtons.remove(deviceId to delta.button)) { fired = true; continue }
                     val mapped = pressedActions.remove(deviceId to delta.button) ?: remap(delta.button, mapping)
                     if (dispatchReleased(mapped, mapping)) fired = true
@@ -230,8 +298,9 @@ class InputDispatcher @Inject constructor(
                 activeMappingHolder.set(mapping)
                 if (captureButton(deviceId, delta.button, mapping)) { fired = true; continue }
                 val mapped = pressedActions.getOrPut(deviceId to delta.button) { remap(delta.button, mapping) }
-                if (dispatchMapped(mapped, mapping)) fired = true
+                if (dispatchPressed(deviceId, delta.button, mapped, mapping)) fired = true
             } else if (delta is CanonicalEvent.Released) {
+                releaseKeyboardButton(deviceId, delta.button)
                 if (capturedButtons.remove(deviceId to delta.button)) { fired = true; continue }
                 val mapped = pressedActions.remove(deviceId to delta.button) ?: remap(delta.button, mapping)
                 if (dispatchReleased(mapped, mapping)) fired = true
@@ -265,6 +334,7 @@ class InputDispatcher @Inject constructor(
     }
 
     private fun dispatchReleased(button: CanonicalButton, mapping: DeviceMapping): Boolean {
+        cancelNavigationRepeat(button)
         when (button) {
             mapping.menuConfirm -> onConfirmUp()
             CanonicalButton.BTN_SELECT -> onSelectUp()
@@ -328,18 +398,39 @@ class InputDispatcher @Inject constructor(
         screenResolver: (() -> dev.piannoli.scorza.input.ScreenInputHandler)? = null,
         onMenuSound: (MenuSound) -> Unit = {},
         remap: (CanonicalButton, DeviceMapping) -> CanonicalButton = { button, _ -> button },
+        navigationContext: () -> Any? = { null },
     ) {
         this.screenResolver = screenResolver
         this.remap = remap
+        cancelNavigationRepeat()
+        cancelKeyboardDeleteHold()
+        keyboardButtons.clear()
+        keyboardInputActive = { dialogHandler?.keyboardInputActive == true }
+        deleteHoldAction = { confirm -> dialogHandler?.deleteHoldAction(confirm) }
+        deleteFeedback = onMenuSound
         pressedActions.clear()
         capturedButtons.clear()
         menuKeyAction = null
         fun screen(): dev.piannoli.scorza.input.ScreenInputHandler = activeScreen()
-        fun sounding(sound: MenuSound, action: () -> Unit): () -> Unit = { onMenuSound(sound); action() }
-        onUp = sounding(MenuSound.TICK) { if (dialogHandler?.onUp() != true) screen().onUp() }
-        onDown = sounding(MenuSound.TICK) { if (dialogHandler?.onDown() != true) screen().onDown() }
-        onLeft = sounding(MenuSound.TICK) { if (dialogHandler?.onLeft() != true) screen().onLeft() }
-        onRight = sounding(MenuSound.TICK) { if (dialogHandler?.onRight() != true) screen().onRight() }
+        fun sounding(sound: MenuSound, action: () -> Unit): () -> Unit = {
+            cancelKeyboardDeleteHold()
+            onMenuSound(sound)
+            action()
+        }
+        fun navigating(button: CanonicalButton, action: () -> Unit): () -> Unit = {
+            val feedback = navigationRepeat.dispatch(
+                button,
+                { NavigationRepeatGate.Context(screen().navigationContext, dialogHandler?.navigationContext, navigationContext()) },
+            ) {
+                cancelKeyboardDeleteHold()
+                action()
+            }
+            if (feedback) onMenuSound(MenuSound.TICK)
+        }
+        onUp = navigating(CanonicalButton.BTN_UP) { if (dialogHandler?.onUp() != true) screen().onUp() }
+        onDown = navigating(CanonicalButton.BTN_DOWN) { if (dialogHandler?.onDown() != true) screen().onDown() }
+        onLeft = navigating(CanonicalButton.BTN_LEFT) { if (dialogHandler?.onLeft() != true) screen().onLeft() }
+        onRight = navigating(CanonicalButton.BTN_RIGHT) { if (dialogHandler?.onRight() != true) screen().onRight() }
         onUpRelease = { screen().onUpRelease() }
         onDownRelease = { screen().onDownRelease() }
         onLeftRelease = { screen().onLeftRelease() }
@@ -356,8 +447,8 @@ class InputDispatcher @Inject constructor(
         onNorthUp = { if (dialogHandler?.onNorthUp() != true) screen().onNorthUp() }
         onNorth = sounding(MenuSound.CONFIRM) { if (dialogHandler?.onNorth() != true) screen().onNorth() }
         onWest = sounding(MenuSound.BACK) { if (dialogHandler?.onWest() != true) screen().onWest() }
-        onL1 = sounding(MenuSound.TICK) { if (dialogHandler?.onL1() != true) screen().onL1() }
-        onR1 = sounding(MenuSound.TICK) { if (dialogHandler?.onR1() != true) screen().onR1() }
+        onL1 = navigating(CanonicalButton.BTN_L) { if (dialogHandler?.onL1() != true) screen().onL1() }
+        onR1 = navigating(CanonicalButton.BTN_R) { if (dialogHandler?.onR1() != true) screen().onR1() }
         onL2 = { if (dialogHandler?.onL2() != true) screen().onL2() }
         onR2 = { if (dialogHandler?.onR2() != true) screen().onR2() }
         onL3 = { if (dialogHandler?.onL3() != true) screen().onL3() }
@@ -366,6 +457,14 @@ class InputDispatcher @Inject constructor(
     }
 
     companion object {
+        private fun isAndroidButton(keyCode: Int): Boolean =
+            keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_BUTTON_MODE
+
+        internal fun isAndroidButtonRepeat(keyCode: Int, action: Int, repeatCount: Int): Boolean =
+            isAndroidButton(keyCode) &&
+                (action == KeyEvent.ACTION_MULTIPLE || action == KeyEvent.ACTION_DOWN && repeatCount > 0)
+
+        private const val MENU_DEVICE_ID = Int.MIN_VALUE
         private val DEFAULT_MENU_MAPPING = DeviceMapping(
             id = "menu-key",
             displayName = "Menu key",
