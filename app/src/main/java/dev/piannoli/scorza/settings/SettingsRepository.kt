@@ -313,6 +313,14 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         get() = jsonRead { optBoolean(KEY_CONTROLLER_NOTIFICATIONS, false) }
         set(value) = jsonWrite { put(KEY_CONTROLLER_NOTIFICATIONS, value) }
 
+    var showGameArtwork: Boolean
+        get() = jsonRead { optBoolean(KEY_SHOW_GAME_ARTWORK, true) }
+        set(value) = jsonWrite { put(KEY_SHOW_GAME_ARTWORK, value) }
+
+    var showSystemArtwork: Boolean
+        get() = jsonRead { optBoolean(KEY_SHOW_SYSTEM_ARTWORK, true) }
+        set(value) = jsonWrite { put(KEY_SHOW_SYSTEM_ARTWORK, value) }
+
     var artWidth: Int
         get() = jsonRead { optInt(KEY_ART_WIDTH, 40) }
         set(value) = jsonWrite { put(KEY_ART_WIDTH, value) }
@@ -580,6 +588,8 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         private const val KEY_HAPTIC_FEEDBACK = "haptic_feedback"
         private const val KEY_CONTROLLER_NOTIFICATIONS = "controller_notifications"
         private const val KEY_ART_WIDTH = "art_width"
+        private const val KEY_SHOW_GAME_ARTWORK = "show_game_artwork"
+        private const val KEY_SHOW_SYSTEM_ARTWORK = "show_system_artwork"
         private const val KEY_SYSTEM_ARTWORK_TYPE = "system_artwork_type"
         private const val KEY_SYSTEM_ART_SCALE = "system_art_scale"
         private const val KEY_SYSTEM_ART_WIDTH = "system_art_width"

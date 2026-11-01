@@ -522,6 +522,10 @@ fun AppNavGraph(
 ) {
     val dialog by dialogState.collectAsStateWhileActive()
     val appSettings by settingsViewModel.appSettings.collectAsStateWhileActive()
+    dev.piannoli.scorza.ui.components.ArtworkVisibility(
+        gameEnabled = appSettings.effectiveArtWidth > 0,
+        systemEnabled = appSettings.effectiveSystemArtWidth > 0,
+    )
 
     val pillScale = pillScaleFor(appSettings.textSize.sp)
     val listFontSize = appSettings.textSize.sp.sp
@@ -622,7 +626,7 @@ fun AppNavGraph(
                     onListStateChanged = onListStateChanged,
                     title = appSettings.title,
                     mainMenuQuit = appSettings.mainMenuQuit,
-                    artWidth = appSettings.artWidth,
+                    artWidth = appSettings.effectiveArtWidth,
                     artRadius = appSettings.artRadius,
                     artScale = appSettings.artScale,
                     resumableGames = resumableGames,
@@ -630,7 +634,7 @@ fun AppNavGraph(
                     fiveGameHandheld = appSettings.contentMode == dev.piannoli.scorza.settings.ContentMode.FIVE_GAME_HANDHELD,
                     systemArtworkType = appSettings.systemArtworkType,
                     systemArtScale = appSettings.systemArtScale,
-                    systemArtWidth = appSettings.systemArtWidth,
+                    systemArtWidth = appSettings.effectiveSystemArtWidth,
                     systemArtRadius = appSettings.systemArtRadius,
                     buttonStyle = labels,
                 )
@@ -648,7 +652,7 @@ fun AppNavGraph(
                     onListStateChanged = onListStateChanged,
                     resumableGames = resumableGames,
                     swapPlayResume = appSettings.swapPlayResume,
-                    artWidth = appSettings.artWidth,
+                    artWidth = appSettings.effectiveArtWidth,
                     artRadius = appSettings.artRadius,
                     artScale = appSettings.artScale,
                     buttonStyle = labels,
@@ -1659,7 +1663,7 @@ fun AppNavGraph(
                         selectedIndex = currentScreen.selectedIndex,
                         scrollTarget = currentScreen.scrollTarget,
                         host = rommHost,
-                        artWidth = appSettings.artWidth,
+                        artWidth = appSettings.effectiveArtWidth,
                         artRadius = appSettings.artRadius,
                         artType = rommArtType,
                         multiSelect = multiSelect,
@@ -1805,7 +1809,7 @@ fun AppNavGraph(
                         selectedIndex = currentScreen.selectedIndex,
                         scrollTarget = currentScreen.scrollTarget,
                         host = rommHost,
-                        artWidth = appSettings.artWidth,
+                        artWidth = appSettings.effectiveArtWidth,
                         artRadius = appSettings.artRadius,
                         artType = rommArtType,
                         multiSelect = multiSelect,
@@ -1847,7 +1851,7 @@ fun AppNavGraph(
                         selectedIndex = currentScreen.selectedIndex,
                         scrollTarget = currentScreen.scrollTarget,
                         host = rommHost,
-                        artWidth = appSettings.artWidth,
+                        artWidth = appSettings.effectiveArtWidth,
                         artRadius = appSettings.artRadius,
                         artType = rommArtType,
                         imageLoader = loader,
@@ -1913,6 +1917,7 @@ fun AppNavGraph(
                         localState = currentScreen.localState,
                         host = rommHost,
                         artType = rommArtType,
+                        showArtwork = appSettings.showGameArtwork,
                         imageLoader = loader,
                         scrollStep = currentScreen.scrollStep,
                         onScrollStepChanged = { nav?.replaceTop(currentScreen.copy(scrollStep = it)) },

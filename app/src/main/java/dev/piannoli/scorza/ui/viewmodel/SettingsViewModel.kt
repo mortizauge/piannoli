@@ -154,6 +154,8 @@ class SettingsViewModel @Inject constructor(
         val mainMenuQuit: Boolean = false,
         val keyboardType: KeyboardType = KeyboardType.PIANNOLI,
         val piannoliBindings: Map<dev.piannoli.ui.MenuAction, dev.piannoli.ui.MenuAction> = emptyMap(),
+        val showGameArtwork: Boolean = true,
+        val showSystemArtwork: Boolean = true,
         val artWidth: Int = 40,
         val artRadius: Int = 25,
         val systemArtScale: ArtScale = ArtScale.FIT,
@@ -169,7 +171,10 @@ class SettingsViewModel @Inject constructor(
         val screenGeometryHeight: Int = 100,
         val screenGeometryX: Int = 0,
         val screenGeometryY: Int = 0,
-    )
+    ) {
+        val effectiveArtWidth: Int get() = if (showGameArtwork) artWidth else 0
+        val effectiveSystemArtWidth: Int get() = if (showSystemArtwork) systemArtWidth else 0
+    }
 
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state
@@ -203,6 +208,8 @@ class SettingsViewModel @Inject constructor(
         mainMenuQuit = settings.mainMenuQuit,
         keyboardType = settings.keyboardType,
         piannoliBindings = settings.piannoliBindings,
+        showGameArtwork = settings.showGameArtwork,
+        showSystemArtwork = settings.showSystemArtwork,
         artWidth = settings.artWidth,
         artRadius = settings.artRadius,
         systemArtScale = settings.systemArtScale,
@@ -277,6 +284,8 @@ class SettingsViewModel @Inject constructor(
         val toolsName: String,
         val portsName: String,
         val releaseChannel: String,
+        val showGameArtwork: Boolean,
+        val showSystemArtwork: Boolean,
         val artWidth: Int,
         val artRadius: Int,
         val systemArtScale: ArtScale,
@@ -522,6 +531,8 @@ class SettingsViewModel @Inject constructor(
                     settings.showClock = false
                 }
             }
+            "show_game_artwork" -> settings.showGameArtwork = !settings.showGameArtwork
+            "show_system_artwork" -> settings.showSystemArtwork = !settings.showSystemArtwork
             "art_width", "system_art_width" -> {
                 val system = item.key == "system_art_width"
                 val steps = (35..65 step 5) + 0
@@ -793,6 +804,8 @@ class SettingsViewModel @Inject constructor(
         toolsName = settings.toolsName,
         portsName = settings.portsName,
         releaseChannel = settings.releaseChannel,
+        showGameArtwork = settings.showGameArtwork,
+        showSystemArtwork = settings.showSystemArtwork,
         artWidth = settings.artWidth,
         artRadius = settings.artRadius,
         systemArtScale = settings.systemArtScale,
@@ -844,6 +857,8 @@ class SettingsViewModel @Inject constructor(
         settings.toolsName = snap.toolsName
         settings.portsName = snap.portsName
         settings.releaseChannel = snap.releaseChannel
+        settings.showGameArtwork = snap.showGameArtwork
+        settings.showSystemArtwork = snap.showSystemArtwork
         settings.artWidth = snap.artWidth
         settings.artRadius = snap.artRadius
         settings.systemArtScale = snap.systemArtScale
@@ -1044,6 +1059,8 @@ class SettingsViewModel @Inject constructor(
         }
         "game_artwork", "system_artwork" -> buildList {
             val system = categoryKey == "system_artwork"
+            add(SettingsItem(if (system) "show_system_artwork" else "show_game_artwork", R.string.settings_artwork,
+                valueRes = showHide(if (system) settings.showSystemArtwork else settings.showGameArtwork)))
             val scale = if (system) settings.systemArtScale else settings.artScale
             val width = if (system) settings.systemArtWidth else settings.artWidth
             val radius = if (system) settings.systemArtRadius else settings.artRadius

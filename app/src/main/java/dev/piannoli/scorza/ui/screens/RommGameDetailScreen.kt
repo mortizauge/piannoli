@@ -64,11 +64,12 @@ fun RommGameDetailScreen(
     listFontSize: TextUnit = 22.sp,
     listLineHeight: TextUnit = 32.sp,
     buttonStyle: ButtonStyle = ButtonStyle(),
+    showArtwork: Boolean = true,
 ) {
     ScreenBackground() {
         BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(screenInsets())) {
             val scale = RommGameDetailLayout.scaleFor(maxWidth.value, maxHeight.value)
-            val coverW = maxWidth * 0.32f
+            val coverW = if (showArtwork) maxWidth * 0.32f else 0.dp
 
             val scrollState = rememberScrollState()
             val stepPx = with(LocalDensity.current) { SCROLL_STEP.toPx() }
@@ -98,7 +99,7 @@ fun RommGameDetailScreen(
                     ) {
                         DetailBody(game, scale)
                     }
-                    val coverUrl = RommArtUrl.forType(host, game, artType)
+                    val coverUrl = if (showArtwork) RommArtUrl.forType(host, game, artType) else null
                     if (coverUrl != null) {
                         Spacer(modifier = Modifier.width((20 * scale).dp))
                         GameCover(coverUrl, imageLoader, Modifier.width(coverW).fillMaxHeight())

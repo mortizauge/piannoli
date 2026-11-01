@@ -33,6 +33,78 @@ class SettingsRepositoryTest {
 
     @Test
     @Config(sdk = [28])
+    fun `artwork visibility defaults show toggles independently and supports preview cancel save and reopen`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        Shadows.shadowOf(context as android.app.Application)
+            .grantPermissions(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+        writeSettingsJson(tmp.root, """{"art_width":55,"system_art_width":60,"system_artwork_type":"GRID"}""")
+        val settings = newRepo()
+        try {
+            settings.sdCardRoot = tmp.root.absolutePath
+            settings.setupCompleted = true
+            assertEquals(true, settings.showGameArtwork)
+            assertEquals(true, settings.showSystemArtwork)
+            val viewModel = SettingsViewModel(settings, AppFonts(context), context, mockk(relaxed = true))
+            viewModel.load()
+            for ((category, key, label) in listOf(
+                Triple("game_artwork", "show_game_artwork", R.string.settings_game_artwork),
+                Triple("system_artwork", "show_system_artwork", R.string.setting_system_artwork),
+            )) {
+                viewModel.enterSubCategory(category, label)
+                assertEquals(key, viewModel.state.value.items.first().key)
+                assertEquals(R.string.settings_artwork, viewModel.state.value.items.first().labelRes)
+                viewModel.selectItem(key)
+                assertEquals(R.string.value_show, viewModel.getSelectedItem()?.valueRes)
+                viewModel.cycleSelected(-1)
+                assertEquals(R.string.value_hide, viewModel.getSelectedItem()?.valueRes)
+                assertEquals(false, if (category == "game_artwork") settings.showGameArtwork else settings.showSystemArtwork)
+                if (category == "game_artwork") {
+                    assertEquals(0, viewModel.appSettings.value.effectiveArtWidth)
+                    assertEquals(60, viewModel.appSettings.value.effectiveSystemArtWidth)
+                } else {
+                    assertEquals(0, viewModel.appSettings.value.effectiveSystemArtWidth)
+                }
+                viewModel.load()
+                viewModel.cancel()
+                assertEquals(true, settings.showGameArtwork)
+                assertEquals(true, settings.showSystemArtwork)
+                assertEquals(55, viewModel.appSettings.value.effectiveArtWidth)
+                assertEquals(60, viewModel.appSettings.value.effectiveSystemArtWidth)
+                viewModel.load()
+                viewModel.cycleSelected(1)
+                viewModel.save()
+                viewModel.cycleSelected(1)
+                viewModel.cancel()
+                assertEquals(false, if (category == "game_artwork") settings.showGameArtwork else settings.showSystemArtwork)
+                if (category == "game_artwork") {
+                    // Reset the baseline before exercising the independent system option.
+                    settings.showGameArtwork = true
+                    viewModel.save()
+                }
+            }
+            settings.showGameArtwork = false
+            viewModel.save()
+            assertEquals(55, settings.artWidth)
+            assertEquals(60, settings.systemArtWidth)
+            assertEquals(SystemArtworkType.GRID, settings.systemArtworkType)
+        } finally {
+            settings.shutdown()
+        }
+        val reopened = newRepo()
+        try {
+            reopened.sdCardRoot = tmp.root.absolutePath
+            assertFalse(reopened.showGameArtwork)
+            assertFalse(reopened.showSystemArtwork)
+            assertEquals(55, reopened.artWidth)
+            assertEquals(60, reopened.systemArtWidth)
+            assertEquals(SystemArtworkType.GRID, reopened.systemArtworkType)
+        } finally {
+            reopened.shutdown()
+        }
+    }
+
+    @Test
+    @Config(sdk = [28])
     fun `apps category migrates only stock names and preserves custom names on reopen`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         Shadows.shadowOf(context as android.app.Application)
