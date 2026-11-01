@@ -11,6 +11,7 @@
     { "name": "Nerd Fonts", "what": "NerdSymbols", "license": "OFL" }
   ],
   "libraries": [
+    { "name": "Font Awesome Free 6.7.2 — Copyright 2024 Fonticons, Inc. (https://fontawesome.com)", "what": "Category artwork: star, clock-rotate-left, table-cells-large (Apps grid); SVG converted to tinted Android vectors", "license": "Category artwork: star, history clock, Apps grid — CC BY 4.0 — https://creativecommons.org/licenses/by/4.0/ (converted to Android vectors)" },
     { "name": "Apache Commons Compress", "what": "Archive Extraction", "license": "Apache 2.0" },
     { "name": "PdfiumAndroid (io.legere)", "what": "PDF Renderer", "license": "Apache 2.0" },
     { "name": "XZ for Java", "what": "7z Decompression", "license": "Public domain" },

@@ -1,6 +1,5 @@
 package dev.piannoli.scorza.ui.screens
 
-import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.rememberLazyListState
 import dev.piannoli.scorza.ui.components.artworkClip
+import dev.piannoli.scorza.ui.components.rememberSelectedArtwork
 import androidx.compose.ui.geometry.Size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -21,13 +21,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import dev.piannoli.ui.components.collectAsStateWhileActive
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.FilterQuality
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
@@ -55,9 +52,6 @@ import dev.piannoli.ui.components.listTitleSpacing
 import dev.piannoli.ui.components.pillItemHeight
 import dev.piannoli.ui.components.screenInsets
 import dev.piannoli.ui.theme.LocalPiannoliColors
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.withContext
 
 private fun ListItem.rowDisplayName(): String = when (this) {
     is ListItem.RomItem -> rom.displayName
@@ -118,30 +112,8 @@ fun GameListScreen(
     val resumeKey = selected?.resumeKey
     val hasResumeState = resumeKey != null && resumableGames.contains(resumeKey)
 
-    val artPath = selected?.artPath
-    val uiActive = dev.piannoli.ui.components.LocalUiActive.current
-    val selectedArt by produceState<ImageBitmap?>(null, artPath, state.artworkRevision, uiActive) {
-        var loaded = false
-        uiActive.collectLatest { focused ->
-            if (!focused || loaded) return@collectLatest
-            value = if (artPath != null) {
-                withContext(Dispatchers.IO) {
-                    try {
-                        val opts = BitmapFactory.Options()
-                        opts.inJustDecodeBounds = true
-                        BitmapFactory.decodeFile(artPath, opts)
-                        val maxDim = 1024
-                        var sampleSize = 1
-                        while (opts.outWidth / sampleSize > maxDim || opts.outHeight / sampleSize > maxDim) sampleSize *= 2
-                        opts.inJustDecodeBounds = false
-                        opts.inSampleSize = sampleSize
-                        BitmapFactory.decodeFile(artPath, opts)?.asImageBitmap()
-                    } catch (_: Exception) { null }
-                }
-            } else null
-            loaded = true
-        }
-    }
+    val artPath = if (artWidth > 0) selected?.artPath else null
+    val selectedArt by rememberSelectedArtwork(artPath, state.artworkRevision, artWidth > 0)
 
     val inFavoritesCollection = state.isCollection && state.isFavorites
     val showFavoriteStars = viewModel.showFavoriteStars && !inFavoritesCollection
@@ -185,7 +157,7 @@ fun GameListScreen(
                 .fillMaxSize()
                 .padding(screenInsets())
         ) {
-            val showArt = selectedArt != null && artWidth > 0
+            val showArt = artPath != null && artWidth > 0
             Column(
                 modifier = Modifier
                     .fillMaxSize()

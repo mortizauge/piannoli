@@ -1,0 +1,22 @@
+Font Awesome Free 6.7.2 by Fonticons, Inc.
+Copyright 2024 Fonticons, Inc. https://fontawesome.com
+
+Icons licensed under Creative Commons Attribution 4.0 International (CC BY 4.0):
+https://creativecommons.org/licenses/by/4.0/
+Full legal text: https://creativecommons.org/licenses/by/4.0/legalcode
+See licenses/CC-BY-4.0.txt for the bundled full license text.
+Upstream license: https://github.com/FortAwesome/Font-Awesome/blob/6.7.2/LICENSE.txt
+
+Piannoli bundles these solid icons as default category artwork:
+star.svg (Favorites), clock-rotate-left.svg (Recently Played),
+table-cells-large.svg (Apps).
+Sources: https://github.com/FortAwesome/Font-Awesome/tree/6.7.2/svgs/solid
+
+Changes: SVG paths converted to Android vector drawables, intrinsic display size
+set to 288dp high, and tinted at runtime to match the theme. Paths are unchanged.
+No Font Awesome fonts, code, brand icons, or runtime library are bundled.
+
+CC BY 4.0 permits sharing and adaptation, including commercial use, without
+royalties, subject to attribution and the license terms. Attribution must retain
+the creator, copyright notice and license link and indicate modifications.
+No endorsement by Fonticons, Inc. is implied.

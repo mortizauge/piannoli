@@ -1,7 +1,5 @@
 package dev.piannoli.scorza.ui.screens
 
-import android.graphics.BitmapFactory
-import android.util.LruCache
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +14,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.rememberLazyListState
 import dev.piannoli.scorza.ui.components.artworkClip
+import dev.piannoli.scorza.ui.components.rememberSelectedArtwork
+import dev.piannoli.scorza.ui.components.SystemArtworkPanel
 import androidx.compose.ui.geometry.Size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -23,14 +23,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import dev.piannoli.ui.components.collectAsStateWhileActive
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.FilterQuality
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -55,9 +53,6 @@ import dev.piannoli.ui.components.listTitleSpacing
 import dev.piannoli.ui.components.pillItemHeight
 import dev.piannoli.ui.components.screenInsets
 import dev.piannoli.ui.theme.LocalPiannoliColors
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.withContext
 
 @Composable
 fun SystemListScreen(
@@ -107,42 +102,28 @@ fun SystemListScreen(
     val selectedArtScale = if (isSystemArtwork) systemArtScale else artScale
     val selectedArtRadius = if (isSystemArtwork) systemArtRadius else artRadius
     val artworkRevision by dev.piannoli.scorza.scraper.SystemArtwork.revision.collectAsStateWhileActive()
-    val artworkCache = remember(artworkRevision) {
-        object : LruCache<String, ImageBitmap>(8 * 1024 * 1024) {
-            override fun sizeOf(key: String, value: ImageBitmap): Int = value.width * value.height * 4
-        }
+    val defaultCategoryArtwork = if (selectedArtWidth <= 0) null else when (selectedItem) {
+        ListItem.FavoritesItem -> R.drawable.category_favorites
+        ListItem.RecentlyPlayedItem -> R.drawable.category_recently_played
+        is ListItem.ToolsFolder -> R.drawable.category_apps
+        else -> null
     }
-    val artPath = when (selectedItem) {
+    val artPath = if (selectedArtWidth <= 0) null else when (selectedItem) {
         is ListItem.GameItem -> selectedItem.artFile?.absolutePath
-        else -> selectedItem?.artworkTag?.let { viewModel.systemArtworkFile(it, systemArtworkType)?.absolutePath }
-    }
-    val uiActive = dev.piannoli.ui.components.LocalUiActive.current
-    val selectedArt by key(artPath, artworkRevision) {
-        produceState<ImageBitmap?>(artPath?.let { artworkCache.get(it) }, uiActive) {
-            var loaded = false
-            uiActive.collectLatest { focused ->
-                if (!focused || loaded) return@collectLatest
-                value = if (artPath != null) {
-                    withContext(Dispatchers.IO) {
-                        try {
-                            artworkCache.get(artPath)?.let { return@withContext it }
-                            val opts = BitmapFactory.Options()
-                            opts.inJustDecodeBounds = true
-                            BitmapFactory.decodeFile(artPath, opts)
-                            val maxDim = 1024
-                            var sampleSize = 1
-                            while (opts.outWidth / sampleSize > maxDim || opts.outHeight / sampleSize > maxDim) sampleSize *= 2
-                            opts.inJustDecodeBounds = false
-                            opts.inSampleSize = sampleSize
-                            BitmapFactory.decodeFile(artPath, opts)?.asImageBitmap()?.also { artworkCache.put(artPath, it) }
-                        } catch (_: Exception) { null }
-                    }
-                } else null
-                loaded = true
-            }
+        else -> selectedItem?.artworkTag?.let {
+            viewModel.systemArtworkFile(it, systemArtworkType)
+                ?.takeIf { file -> defaultCategoryArtwork == null || file.isFile }?.absolutePath
         }
     }
-    val showArt = selectedArtWidth > 0 && (hasPlatforms || state.hasGameItems || selectedArt != null)
+    // An assigned image keeps priority even while decoding or if corrupt; only absent files use defaults.
+    val categoryArtwork = defaultCategoryArtwork.takeIf { artPath == null }
+    val selectedArt by rememberSelectedArtwork(
+        artPath, artworkRevision, selectedArtWidth > 0,
+        if (isSystemArtwork) dev.piannoli.scorza.ui.components.ArtworkKind.SYSTEM
+        else dev.piannoli.scorza.ui.components.ArtworkKind.GAME,
+    )
+    val showArt = selectedArtWidth > 0 &&
+        (hasPlatforms || state.hasGameItems || artPath != null || categoryArtwork != null)
     val duplicateGameNames = remember(state.items) {
         state.items.asSequence()
             .filterIsInstance<ListItem.GameItem>()
@@ -270,7 +251,32 @@ fun SystemListScreen(
                             .padding(start = 16.dp, top = artTopPadding),
                         contentAlignment = Alignment.Center
                     ) {
-                        val art = selectedArt ?: return@Box
+                        val art = selectedArt
+                        val categoryPainter = categoryArtwork?.let { painterResource(it) }
+                        if (art == null && categoryPainter == null) return@Box
+                        if (isSystemArtwork) {
+                            val painter = art?.let { BitmapPainter(it, filterQuality = FilterQuality.High) }
+                                ?: categoryPainter ?: return@Box
+                            val label = if (art == null) {
+                                when (selectedItem) {
+                                    ListItem.FavoritesItem -> favoritesLabel
+                                    ListItem.RecentlyPlayedItem -> recentlyPlayedLabel
+                                    is ListItem.ToolsFolder -> selectedItem.name
+                                    else -> null
+                                }
+                            } else {
+                                null
+                            }
+                            SystemArtworkPanel(
+                                painter = painter,
+                                contentDescription = label,
+                                scale = selectedArtScale,
+                                radius = selectedArtRadius,
+                                colorFilter = if (art == null) ColorFilter.tint(LocalPiannoliColors.current.text) else null,
+                                isFallback = art == null,
+                            )
+                            return@Box
+                        }
                         val artModifier: Modifier
                         val artContentScale: ContentScale
                         when (selectedArtScale) {
@@ -279,13 +285,15 @@ fun SystemListScreen(
                             ArtScale.FIT_WIDTH -> { artModifier = Modifier.fillMaxWidth(); artContentScale = ContentScale.FillWidth }
                             ArtScale.FIT_HEIGHT -> { artModifier = Modifier.fillMaxHeight(); artContentScale = ContentScale.FillHeight }
                         }
-                        Image(
-                            bitmap = art,
-                            contentDescription = null,
-                            modifier = artModifier.artworkClip(selectedArtRadius, Size(art.width.toFloat(), art.height.toFloat()), artContentScale),
-                            contentScale = artContentScale,
-                            filterQuality = FilterQuality.High
-                        )
+                        if (art != null) {
+                            Image(
+                                bitmap = art,
+                                contentDescription = null,
+                                modifier = artModifier.artworkClip(selectedArtRadius, Size(art.width.toFloat(), art.height.toFloat()), artContentScale),
+                                contentScale = artContentScale,
+                                filterQuality = FilterQuality.High
+                            )
+                        }
                     }
                 }
             }

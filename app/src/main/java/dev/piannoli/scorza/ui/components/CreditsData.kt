@@ -54,6 +54,7 @@ val CREDITS_FONTS: List<CreditEntry> = listOf(
 )
 
 val CREDITS_LIBRARIES: List<CreditEntry> = listOf(
+    CreditEntry("Font Awesome Free 6.7.2 — Copyright 2024 Fonticons, Inc. (https://fontawesome.com)", "Category artwork: star, history clock, Apps grid — CC BY 4.0 — https://creativecommons.org/licenses/by/4.0/ (converted to Android vectors)"),
     CreditEntry("Apache Commons Compress", "Apache 2.0"),
     CreditEntry("PdfiumAndroid (io.legere)", "Apache 2.0"),
     CreditEntry("XZ for Java", "Public domain"),
