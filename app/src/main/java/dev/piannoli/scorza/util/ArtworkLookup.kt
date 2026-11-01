@@ -2,6 +2,9 @@ package dev.piannoli.scorza.util
 
 import dev.piannoli.scorza.config.PiannoliPaths
 import dev.piannoli.scorza.di.PiannoliPathsProvider
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import java.io.File
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
@@ -9,6 +12,8 @@ import java.util.concurrent.ConcurrentHashMap
 class ArtworkLookup(private val pathsProvider: PiannoliPathsProvider) {
     private val artDir: File get() = PiannoliPaths(pathsProvider.root).artDir
     private val cache = ConcurrentHashMap<String, Map<String, File>>()
+    private val _folderRevision = MutableStateFlow(0L)
+    val folderRevision = _folderRevision.asStateFlow()
 
     fun find(platformTag: String, romFile: File): File? {
         val hit = findByName(platformTag, artBasename(romFile))
@@ -22,6 +27,10 @@ class ArtworkLookup(private val pathsProvider: PiannoliPathsProvider) {
 
     fun findFolder(platformTag: String, relativePath: String): File? =
         customFolderFile(platformTag, relativePath)?.takeIf { it.isFile }
+            ?: legacyFolderFile(platformTag, relativePath)?.takeIf { it.isFile }
+
+    fun hasSharedFolderArtwork(platformTag: String, relativePath: String): Boolean =
+        customFolderFile(platformTag, relativePath)?.isFile == true
 
     fun customGameFile(platformTag: String, basename: String): File? {
         if (!isSafeTag(platformTag) || !isSafeName(basename)) return null
@@ -29,20 +38,36 @@ class ArtworkLookup(private val pathsProvider: PiannoliPathsProvider) {
     }
 
     fun customFolderFile(platformTag: String, relativePath: String): File? {
+        val normalized = validatedFolderPath(platformTag, relativePath) ?: return null
+        val identity = normalized.substringAfterLast('/').lowercase()
+        return File(File(artDir, ".folders"), "${folderDigest(identity)}.png")
+    }
+
+    private fun legacyFolderFile(platformTag: String, relativePath: String): File? {
+        val normalized = validatedFolderPath(platformTag, relativePath) ?: return null
+        val digest = folderDigest("${platformTag.uppercase()}/$normalized")
+        return File(File(File(artDir, platformTag.uppercase()), ".folders"), "$digest.png")
+    }
+
+    private fun validatedFolderPath(platformTag: String, relativePath: String): String? {
         if (!isSafeTag(platformTag)) return null
         val normalized = relativePath.replace('\\', '/')
-        val segments = normalized.split('/')
-        if (segments.isEmpty() || segments.any { it.isEmpty() || it == "." || it == ".." }) return null
-        val identity = "${platformTag.uppercase()}/$normalized"
-        val digest = MessageDigest.getInstance("SHA-256")
+        if (Regex("^[A-Za-z]:").containsMatchIn(normalized)) return null
+        return normalized.takeIf { it.split('/').all(::isSafeName) }
+    }
+
+    private fun folderDigest(identity: String): String =
+        MessageDigest.getInstance("SHA-256")
             .digest(identity.toByteArray(Charsets.UTF_8))
             .joinToString("") { "%02x".format(it) }
-        return File(File(File(artDir, platformTag.uppercase()), ".folders"), "$digest.png")
+
+    fun notifyFolderArtworkChanged() {
+        _folderRevision.update { it + 1 }
     }
 
     fun deleteFolder(platformTag: String, relativePath: String): Boolean {
         val existing = findFolder(platformTag, relativePath) ?: return false
-        return existing.delete()
+        return existing.delete().also { if (it) notifyFolderArtworkChanged() }
     }
 
     fun renameArt(platformTag: String, oldBasename: String, newBasename: String): Boolean {

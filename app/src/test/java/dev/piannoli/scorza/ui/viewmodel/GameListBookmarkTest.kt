@@ -20,6 +20,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -51,11 +52,14 @@ class GameListBookmarkTest {
     private lateinit var model: GameListViewModel
     private val mario = ListItem.RomItem(Rom(2, File("Mario.gb"), "GB", "Mario"))
     private val metroid = ListItem.RomItem(Rom(3, File("Metroid.gb"), "GB", "Metroid"))
+    private val folderRevision = MutableStateFlow(0L)
 
     @Before fun setup() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         every { platforms.getDisplayName("GB") } returns "Game Boy"
         every { scans.results } returns MutableSharedFlow()
+        every { roms.folderArtworkRevision } returns folderRevision
+        every { roms.refreshFolderArtwork(any(), any()) } answers { secondArg() }
         every { roms.gamesForPlatform("GB", any()) } returns listOf(mario, metroid)
         model = GameListViewModel(
             roms, apps, collections, recent, platforms, scans, mockk(), mockk(relaxed = true),
@@ -70,6 +74,41 @@ class GameListBookmarkTest {
 
     private suspend fun restore(bookmark: GameListBookmark) = suspendCancellableCoroutine { continuation ->
         model.restoreBookmark(bookmark) { continuation.resume(Unit) }
+    }
+
+    @Test fun `folder artwork revisions refresh cached filtered and complete lists without losing position`() = runBlocking {
+        val folder = ListItem.SubfolderItem("Adventure", "RPGs/Adventure")
+        every { roms.gamesForPlatform("GB", any()) } returns listOf(folder, mario, metroid)
+        restore(GameListBookmark(platformTag = "GB", platformTags = listOf("GB"), search = "Adventure"))
+        val shared = File("Art/.folders/shared.png")
+        every { roms.refreshFolderArtwork(any(), any()) } answers {
+            secondArg<List<ListItem>>().map {
+                if (it is ListItem.SubfolderItem) it.copy(artFile = shared) else it
+            }
+        }
+        val before = model.state.value
+        folderRevision.value++
+        val refreshed = withTimeout(5_000) {
+            model.state.first { (it.items.firstOrNull() as? ListItem.SubfolderItem)?.artFile == shared }
+        }
+        assertEquals(listOf(folder.copy(artFile = shared)), refreshed.items)
+        assertEquals(listOf(folder.copy(artFile = shared), mario, metroid), refreshed.allItems)
+        assertEquals(before.selectedIndex, refreshed.selectedIndex)
+        assertEquals(before.searchTerm, refreshed.searchTerm)
+        assertTrue(refreshed.artworkRevision > before.artworkRevision)
+        val revision = refreshed.artworkRevision
+        folderRevision.value++
+        withTimeout(5_000) { model.state.first { it.artworkRevision > revision } }
+        Unit
+    }
+
+    @Test fun `repeated reloads advance bitmap revision even when the artwork path stays unchanged`() = runBlocking {
+        restore(GameListBookmark(platformTag = "GB", platformTags = listOf("GB")))
+        repeat(2) {
+            val revision = model.state.value.artworkRevision
+            suspendCancellableCoroutine<Unit> { continuation -> model.reload { continuation.resume(Unit) } }
+            assertTrue(model.state.value.artworkRevision > revision)
+        }
     }
 
     @Test fun `tools ignore Favorites ordering and cannot be reordered across pin boundary`() = runBlocking {

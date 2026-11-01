@@ -108,12 +108,58 @@ class ScrapedArtworkStoreTest {
             store.importFolderArtwork("SNES", "RPGs/Arcade", it)
         }
         assertEquals(first, artwork.findFolder("SNES", "RPGs/Adventure"))
+        assertEquals(first, artwork.findFolder("GB", "Adventure"))
+        assertEquals(first, artwork.findFolder("PS", "Other\\adventure"))
         assertFalse(first == sibling)
         assertNull(artwork.customFolderFile("SNES", "../outside"))
         assertNull(artwork.customFolderFile("../SNES", "RPGs/Adventure"))
         assertTrue(artwork.deleteFolder("SNES", "RPGs/Adventure"))
         assertFalse(first.exists())
+        assertNull(artwork.findFolder("GB", "Adventure"))
         assertEquals(sibling, artwork.findFolder("SNES", "RPGs/Arcade"))
+    }
+
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    @Test fun `shared folder replacement refreshes revisions and never changes game covers`() {
+        val gameArt = store.install(rom, png())
+        val gameBytes = gameArt.readBytes()
+        val firstRevision = artwork.folderRevision.value
+        val shared = png().inputStream().use { store.importFolderArtwork("SNES", "RPGs/Adventure", it) }
+        assertTrue(artwork.folderRevision.value > firstRevision)
+        val replacement = ByteArrayOutputStream().use { output ->
+            ImageIO.write(BufferedImage(5, 3, BufferedImage.TYPE_INT_RGB), "jpeg", output)
+            output.toByteArray()
+        }
+        val revision = artwork.folderRevision.value
+        assertEquals(shared, replacement.inputStream().use { store.importFolderArtwork("GB", "Adventure", it) })
+        assertTrue(artwork.folderRevision.value > revision)
+        assertEquals(shared, artwork.findFolder("SNES", "RPGs/Adventure"))
+        val options = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeFile(shared.absolutePath, options)
+        assertEquals(5, options.outWidth)
+        assertEquals(3, options.outHeight)
+        assertFalse(shared.parentFile!!.listFiles()!!.any { it.extension == "part" })
+        assertArrayEquals(gameBytes, gameArt.readBytes())
+        assertEquals(gameArt, artwork.find(rom.platformTag, rom.path))
+    }
+
+    @Test fun `failed folder imports preserve shared art and revision`() {
+        val saved = png().inputStream().use { store.importFolderArtwork("SNES", "Adventure", it) }
+        val original = saved.readBytes()
+        val revision = artwork.folderRevision.value
+        for (bytes in listOf(byteArrayOf(1), ByteArray(20 * 1024 * 1024 + 1))) {
+            assertThrows(ScraperException::class.java) {
+                bytes.inputStream().use { store.importFolderArtwork("GB", "Other/ADVENTURE", it) }
+            }
+        }
+        for ((tag, path) in listOf("../SNES" to "Adventure", "SNES" to "../Adventure",
+            "SNES" to "RPGs\\..\\Adventure")) {
+            assertThrows(ScraperException::class.java) {
+                png().inputStream().use { store.importFolderArtwork(tag, path, it) }
+            }
+        }
+        assertEquals(revision, artwork.folderRevision.value)
+        assertArrayEquals(original, saved.readBytes())
     }
 
     @Test fun `preserves existing art even when it appeared after lookup was cached`() {

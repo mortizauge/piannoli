@@ -46,7 +46,9 @@ class ScrapedArtworkStore @Inject constructor(
     fun importFolderArtwork(platformTag: String, relativePath: String, input: InputStream): File {
         val destination = artwork.customFolderFile(platformTag, relativePath)
             ?: throw ScraperException(ScraperError.NO_ARTWORK)
-        return installCustomImage(destination, platformTag, null, readBounded(input))
+        return installCustomImage(destination, platformTag, null, readBounded(input)).also {
+            artwork.notifyFolderArtworkChanged()
+        }
     }
 
     private fun readBounded(input: InputStream): ByteArray {

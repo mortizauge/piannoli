@@ -145,6 +145,17 @@ class GameListViewModel @Inject constructor(
     private var applyRescanJob: Job? = null
 
     init {
+        scope.launch(Dispatchers.IO) {
+            romsRepository.folderArtworkRevision.collectLatest {
+                _state.update { current ->
+                    current.copy(
+                        items = romsRepository.refreshFolderArtwork(current.platformTag, current.items),
+                        allItems = romsRepository.refreshFolderArtwork(current.platformTag, current.allItems),
+                        artworkRevision = current.artworkRevision + 1,
+                    )
+                }
+            }
+        }
         scope.launch {
             scanScheduler.results.collectLatest { result ->
                 handleRescanResult(result)
@@ -542,7 +553,7 @@ class GameListViewModel @Inject constructor(
         val preserveId = stableIdOf(current.items.getOrNull(preserveIndex))
         val done: () -> Unit = {
             if (term != null) reapplySearch(term, preserveId, preserveIndex, preserveScroll, prevCount)
-            _state.update { it.copy(artworkRevision = it.artworkRevision + 1) }
+            _state.update { it.copy(artworkRevision = maxOf(it.artworkRevision, current.artworkRevision) + 1) }
             onReady()
         }
         if (current.isCollectionsList) {

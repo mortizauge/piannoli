@@ -50,6 +50,7 @@ class ConflictsApplyingStateTest {
     private val activityActions = mockk<ActivityActions>(relaxed = true)
     private val apps = mockk<dev.piannoli.scorza.db.AppsRepository>(relaxed = true)
     private val roms = mockk<dev.piannoli.scorza.db.RomsRepository>(relaxed = true)
+    private val artwork = mockk<dev.piannoli.scorza.util.ArtworkLookup>(relaxed = true)
 
     // Never advanced: the apply coroutine stays queued so the assertions see only what Start did
     // synchronously, which is the part the user perceives.
@@ -77,7 +78,7 @@ class ConflictsApplyingStateTest {
             romsRepository = roms,
             gameOverrideStore = mockk(relaxed = true),
             appsRepository = apps,
-            artworkLookup = mockk(relaxed = true),
+            artworkLookup = artwork,
             launcherActions = launcherActions,
             activityActions = activityActions,
             controllersViewModel = mockk(relaxed = true),
@@ -204,7 +205,7 @@ class ConflictsApplyingStateTest {
             dev.piannoli.scorza.model.ListItem.SubfolderItem("Adventure", "RPGs/Adventure"),
             dev.piannoli.scorza.ui.viewmodel.GameListViewModel.State(platformTag = "SNES"),
         )
-        assertEquals(choose, folderOptions.first())
+        assertEquals(context.getString(dev.piannoli.scorza.R.string.choose_folder_artwork), folderOptions.first())
         assertTrue(MENU_RENAME in folderOptions)
         val port = dev.piannoli.scorza.model.App(4, dev.piannoli.scorza.model.AppType.PORT, "Game", "dev.game")
         assertTrue(MENU_HIDE_GAME in handler.buildGameContextOptions(
@@ -336,6 +337,36 @@ class ConflictsApplyingStateTest {
         handler.onConfirm()
         verify(exactly = 1) { activityActions.chooseSystemArtwork("@favorites", type) }
         verify(exactly = 0) { scraper.openSystem(any(), any()) }
+    }
+
+    @Test fun `folder menu explains sharing and dispatches shared deletion using original platform`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val folder = dev.piannoli.scorza.model.ListItem.SubfolderItem(
+            "Adventure", "RPGs/Adventure", artworkPlatformTag = "SNES",
+        )
+        val state = dev.piannoli.scorza.ui.viewmodel.GameListViewModel.State(platformTag = "GB")
+        every { games.getSelectedItem() } returns folder
+        every { games.state } returns kotlinx.coroutines.flow.MutableStateFlow(state)
+        every { artwork.hasSharedFolderArtwork("SNES", folder.path) } returns true
+        val options = handler.buildGameContextOptions(folder, state)
+        val choose = context.getString(dev.piannoli.scorza.R.string.choose_folder_artwork)
+        val deleteShared = context.getString(dev.piannoli.scorza.R.string.delete_shared_folder_artwork)
+        assertTrue(choose in options && deleteShared in options)
+        assertFalse(MENU_DELETE_ART in options)
+        nav.push(LauncherScreen.GameList)
+        nav.dialogState.value = DialogState.ContextMenu("Adventure", options = listOf(choose))
+        handler.onConfirm()
+        verify(exactly = 1) { activityActions.chooseFolderArtwork("SNES", folder.path) }
+        nav.dialogState.value = DialogState.ContextMenu("Adventure", options = listOf(deleteShared))
+        handler.onConfirm()
+        verify(exactly = 1) { artwork.deleteFolder("SNES", folder.path) }
+        verify(exactly = 1) { games.reload(any()) }
+
+        every { artwork.hasSharedFolderArtwork("SNES", folder.path) } returns false
+        every { artwork.findFolder("SNES", folder.path) } returns java.io.File("legacy.png")
+        val individual = handler.buildGameContextOptions(folder, state)
+        assertTrue(MENU_DELETE_ART in individual)
+        assertFalse(deleteShared in individual)
     }
 
     private fun conflictsMenu() = DialogState.ConflictsMenu(

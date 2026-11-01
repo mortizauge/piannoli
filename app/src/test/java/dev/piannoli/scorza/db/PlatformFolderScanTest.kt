@@ -12,6 +12,7 @@ import io.mockk.every
 import io.mockk.mockk
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -32,6 +33,7 @@ class PlatformFolderScanTest {
     private lateinit var repository: RomsRepository
     private lateinit var config: PlatformConfig
     private lateinit var paths: PiannoliPathsProvider
+    private lateinit var artwork: ArtworkLookup
 
     @Before fun setup() {
         val context = ApplicationProvider.getApplicationContext<Context>()
@@ -41,7 +43,7 @@ class PlatformFolderScanTest {
         every { paths.romDir } returns romDir
         every { paths.showHiddenFiles } returns false
         every { paths.filteredExtensions(any()) } returns emptySet()
-        val artwork = ArtworkLookup(paths)
+        artwork = ArtworkLookup(paths)
         db = PiannoliDatabase(paths)
         scanner = RomScanner(db, RomDirectoryWalker(paths, context.assets, ArcadeTitleLookup(paths)), artwork)
         repository = RomsRepository(paths, db, artwork)
@@ -87,6 +89,50 @@ class PlatformFolderScanTest {
         assertEquals(mapOf("XBOX" to 4), repository.platformCounts())
         assertEquals(RomScanner.SyncCounts(0, 0, 0), scanner.scanPlatform("Microsoft Xbox"))
         assertEquals("Microsoft Xbox", config.resolvePlatform("original xbox", romDir, 4).displayName)
+    }
+
+    @Test fun `same named categories share artwork across platforms caches and restart but game bundles do not`() {
+        write("GB/Adventure/Game.gb")
+        write("SNES/Top/Adventure/Game.sfc")
+        write("PS/Adventure/Adventure.chd")
+        scanner.scanPlatform("GB")
+        scanner.scanPlatform("SNES")
+        scanner.scanPlatform("PS")
+        val gb = repository.gamesForPlatform("GB")
+        val snes = repository.gamesForPlatform("SNES", "Top")
+        val bundle = repository.gamesForPlatform("PS").single() as ListItem.RomItem
+        assertNull(bundle.rom.artFile)
+        val hash = java.security.MessageDigest.getInstance("SHA-256")
+            .digest("SNES/Top/Adventure".toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+        val legacy = File(temp.root, "Art/SNES/.folders/$hash.png").apply {
+            parentFile!!.mkdirs()
+            writeText("individual")
+        }
+        val bytes = java.io.ByteArrayOutputStream().use { output ->
+            javax.imageio.ImageIO.write(
+                java.awt.image.BufferedImage(2, 2, java.awt.image.BufferedImage.TYPE_INT_ARGB), "png", output,
+            )
+            output.toByteArray()
+        }
+        val store = dev.piannoli.scorza.scraper.ScrapedArtworkStore(paths, artwork)
+        val cover = store.install(bundle.rom, bytes)
+        val shared = bytes.inputStream().use { store.importFolderArtwork("GB", "Adventure", it) }
+        val cached = gb + snes
+        assertTrue(repository.refreshFolderArtwork("GB", cached)
+            .filterIsInstance<ListItem.SubfolderItem>().all { it.artFile == shared })
+        assertEquals(shared, repository.gamesForPlatform("GB")
+            .filterIsInstance<ListItem.SubfolderItem>().single().artFile)
+        val restarted = RomsRepository(paths, db, ArtworkLookup(paths))
+        assertEquals(shared, restarted.gamesForPlatform("SNES", "Top")
+            .filterIsInstance<ListItem.SubfolderItem>().single().artFile)
+        assertEquals(cover, restarted.gamesForPlatform("PS")
+            .filterIsInstance<ListItem.RomItem>().single().rom.artFile)
+        assertTrue(artwork.deleteFolder("GB", "Adventure"))
+        val restored = repository.refreshFolderArtwork("GB", cached).filterIsInstance<ListItem.SubfolderItem>()
+        assertNull(restored.first().artFile)
+        assertEquals(legacy, restored.last().artFile)
+        assertTrue(cover.isFile)
     }
 
     @Test fun `all folders combine into one platform with launchable paths stable ids and nested browsing`() {

@@ -18,6 +18,14 @@ class RomsRepository(
     private val artwork: ArtworkLookup,
 ) {
     private val romDirectory: File get() = pathsProvider.romDir
+    val folderArtworkRevision get() = artwork.folderRevision
+
+    fun refreshFolderArtwork(platformTag: String, items: List<ListItem>): List<ListItem> =
+        items.map { item ->
+            if (item is ListItem.SubfolderItem) {
+                item.copy(artFile = artwork.findFolder(item.artworkPlatformTag ?: platformTag, item.path))
+            } else item
+        }
 
     fun gamesForPlatform(platformTag: String, subfolder: String? = null): List<ListItem> {
         val tag = platformTag.uppercase()
@@ -185,7 +193,10 @@ class RomsRepository(
         }
         return seen.sortedWith(NaturalSort).map { name ->
             val path = basePrefix + name
-            ListItem.SubfolderItem(name = name, path = path, artFile = artwork.findFolder(platformTag, path))
+            ListItem.SubfolderItem(
+                name = name, path = path, artFile = artwork.findFolder(platformTag, path),
+                artworkPlatformTag = platformTag,
+            )
         }
     }
 

@@ -475,7 +475,8 @@ class SteamGridControllerTest {
             nav = nav, ioScope = scope, settings = settings, platformConfig = mockk(),
             installedCoreService = mockk(), globalOverrides = mockk(), appsRepository = mockk(),
             setupCoordinator = mockk(), inputTesterController = mockk(), updateManager = mockk(),
-            intentAuditor = mockk(), settingsViewModel = viewModel, launcherActions = mockk(relaxed = true),
+            intentAuditor = mockk(), settingsViewModel = viewModel, gameListViewModel = mockk(),
+            launcherActions = mockk(relaxed = true),
             activityActions = mockk(), emulatorMappingBuilder = mockk(), context = context,
             rommStore = mockk(), piannoliPaths = mockk(), scraper = controller, artworkStore = mockk(),
         )
