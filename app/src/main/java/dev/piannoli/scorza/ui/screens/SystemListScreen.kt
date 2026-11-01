@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.rememberLazyListState
 import dev.piannoli.scorza.ui.components.artworkClip
+import dev.piannoli.scorza.ui.components.artworkStatusBarPadding
 import dev.piannoli.scorza.ui.components.rememberSelectedArtwork
 import dev.piannoli.scorza.ui.components.SystemArtworkPanel
 import androidx.compose.ui.geometry.Size
@@ -248,7 +249,8 @@ fun SystemListScreen(
                         modifier = Modifier
                             .fillMaxHeight()
                             .fillMaxWidth()
-                            .padding(start = 16.dp, top = artTopPadding),
+                            .padding(start = 16.dp)
+                            .artworkStatusBarPadding(artTopPadding),
                         contentAlignment = Alignment.Center
                     ) {
                         val art = selectedArt

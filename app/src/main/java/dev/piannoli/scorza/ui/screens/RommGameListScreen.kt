@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.piannoli.scorza.ui.components.artworkClip
+import dev.piannoli.scorza.ui.components.artworkStatusBarPadding
 import androidx.compose.ui.geometry.Size
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -143,7 +144,8 @@ fun RommGameListScreen(
                             modifier = Modifier
                                 .fillMaxHeight()
                                 .fillMaxWidth()
-                                .padding(start = 16.dp),
+                                .padding(start = 16.dp)
+                                .artworkStatusBarPadding(),
                             contentAlignment = Alignment.Center
                         ) {
                             if (coverUrl != null) {

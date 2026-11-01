@@ -57,6 +57,8 @@ import dev.piannoli.scorza.ui.components.creditsItemCount
 import dev.piannoli.scorza.ui.components.DialogOverlay
 import dev.piannoli.ui.components.screenBackground
 import dev.piannoli.scorza.ui.components.ListDialogScreen
+import dev.piannoli.scorza.ui.components.LocalArtworkStatusBarHeight
+import dev.piannoli.scorza.ui.components.MeasuredArtworkStatusBar
 import dev.piannoli.scorza.ui.effectiveViewportPadding
 import dev.piannoli.scorza.ui.screens.ColorEntry
 import dev.piannoli.scorza.ui.screens.ControllerDetailScreen
@@ -558,6 +560,7 @@ fun AppNavGraph(
     )
 
     val statusBarLeftEdge = remember { mutableIntStateOf(Int.MAX_VALUE) }
+    val artworkStatusBarHeight = remember { mutableStateOf(0.dp) }
 
     val scaleFactor = appSettings.textSize.sp / 22f
     val piannoliTypography = buildPiannoliTypography(baseSizeSp = appSettings.textSize.sp, fontFamily = LocalPiannoliFont.current)
@@ -575,6 +578,7 @@ fun AppNavGraph(
             appSettings.backgroundImagePath, appSettings.backgroundTint
         ),
         LocalStatusBarLeftEdge provides statusBarLeftEdge,
+        LocalArtworkStatusBarHeight provides artworkStatusBarHeight,
         LocalScaleFactor provides scaleFactor,
         LocalPiannoliTypography provides piannoliTypography,
         LocalViewportInsets provides viewportInsets,
@@ -2014,7 +2018,8 @@ fun AppNavGraph(
                 || appSettings.batteryDisplay != dev.piannoli.scorza.settings.BatteryDisplay.HIDE
                 || (updateAvailable && appSettings.showUpdate)
         if (!hideForDialog && !hideForScreen && hasContent) {
-        Box(
+        MeasuredArtworkStatusBar(
+            height = artworkStatusBarHeight,
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(screenInsets())
