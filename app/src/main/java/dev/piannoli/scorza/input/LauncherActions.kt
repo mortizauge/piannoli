@@ -29,6 +29,8 @@ import dev.piannoli.scorza.ui.viewmodel.SettingsViewModel
 import dev.piannoli.scorza.ui.viewmodel.SystemListViewModel
 import dev.piannoli.scorza.util.ArcadeTitleLookup
 import dev.piannoli.scorza.util.ArtworkLookup
+import dev.piannoli.scorza.util.MultiDisc
+import dev.piannoli.scorza.util.RomDirectoryWalker
 import dev.piannoli.ui.components.COLOR_GRID_COLS
 import dev.piannoli.ui.theme.COLOR_PRESETS
 import dev.piannoli.ui.theme.colorToArgbLong
@@ -38,6 +40,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
+import java.io.File
+import java.io.IOException
 
 @ActivityScoped
 class LauncherActions @Inject constructor(
@@ -59,6 +63,7 @@ class LauncherActions @Inject constructor(
     private val settingsViewModel: SettingsViewModel,
     private val saveSyncService: SaveSyncService,
     private val pathsProvider: PiannoliPathsProvider,
+    private val romDirectoryWalker: RomDirectoryWalker,
 ) {
 
     private var pendingLaunch: (() -> DialogState?)? = null
@@ -72,8 +77,10 @@ class LauncherActions @Inject constructor(
         pendingLaunch = null
         pendingRecentPath = null
         pendingRecentReorder = false
-        p?.invoke()?.let { nav.dialogState.value = it }
-        if (recentPath != null) {
+        val error = p?.invoke()
+        if (error != null) {
+            nav.dialogState.value = error
+        } else if (p != null && recentPath != null) {
             recordRecentlyPlayedByPath(recentPath)
             if (reorder) nav.pendingRecentlyPlayedReorder = true
         }
@@ -220,15 +227,91 @@ class LauncherActions @Inject constructor(
     }
 
     private fun launchSelectedRom(rom: Rom, resume: Boolean): DialogState? {
+        return if (MultiDisc.isPlaylist(rom.path) || MultiDisc.name(rom.path) != null) {
+            prepareDiscLaunch(rom, resume)
+        } else launchResolvedRom(rom, resume)
+    }
+
+    private fun prepareDiscLaunch(rom: Rom, resume: Boolean, slot: Int? = null): DialogState {
+        val loading = DialogState.DiscLoading()
+        nav.dialogState.value = loading
+        ioScope.launch {
+            try {
+                val discs = romDirectoryWalker.discFiles(rom.path)
+                val playlist = MultiDisc.isPlaylist(rom.path)
+                if (playlist && discs.isEmpty()) throw IOException(context.getString(dev.piannoli.scorza.R.string.multidisc_empty))
+                val files = if (playlist) listOf(rom.path) + discs else discs.ifEmpty { listOf(rom.path) }
+                val previous = settings.lastDisc(rom.path.absolutePath)
+                val selected = files.indexOfFirst { it.absolutePath == previous }.coerceAtLeast(0)
+                if (resume && previous != null && discs.isNotEmpty() && files.none { it.absolutePath == previous }) {
+                    throw IOException(context.getString(dev.piannoli.scorza.R.string.multidisc_changed))
+                }
+                withContext(Dispatchers.Main) {
+                    if (nav.dialogState.value !== loading) return@withContext
+                    if (!resume && files.size > 1) {
+                        nav.dialogState.value = DialogState.DiscPicker(rom, files, selected)
+                    } else {
+                        finishDiscLaunch(rom, files[selected], discs, resume, slot)
+                    }
+                }
+            } catch (e: IOException) {
+                withContext(Dispatchers.Main) {
+                    if (nav.dialogState.value === loading) {
+                        nav.dialogState.value = DialogState.LaunchError(
+                            context.getString(dev.piannoli.scorza.R.string.multidisc_error, e.message),
+                        )
+                    }
+                }
+            }
+        }
+        return loading
+    }
+
+    fun confirmDiscSelection(state: DialogState.DiscPicker) {
+        val file = state.files.getOrNull(state.selectedIndex) ?: return
+        finishDiscLaunch(state.rom, file, state.files.filterNot(MultiDisc::isPlaylist))
+    }
+
+    private fun finishDiscLaunch(rom: Rom, file: File, discs: List<File>, resume: Boolean = false, slot: Int? = null) {
+        nav.dialogState.value = DialogState.None
+        val error = launchResolvedRom(rom, resume, file, discs, slot)
+        if (error != null) {
+            nav.dialogState.value = error
+        } else {
+            val reorder = gameListViewModel.state.value.platformTag == "recently_played"
+            if (nav.dialogState.value == DialogState.SaveSyncChecking) {
+                recordPendingRecent(rom.path.absolutePath, reorder)
+            } else {
+                recordRecentlyPlayedByPath(rom.path.absolutePath)
+                if (reorder) nav.pendingRecentlyPlayedReorder = true
+            }
+        }
+    }
+
+    private fun launchResolvedRom(
+        rom: Rom, resume: Boolean, disc: File? = null, discs: List<File> = emptyList(), slot: Int? = null,
+    ): DialogState? {
+        val performLaunch = {
+            val error = when {
+                slot != null -> launchManager.resumeRom(rom, slot, disc, discs)
+                resume -> launchManager.resumeRom(rom, selectedDisc = disc, discSet = discs)
+                else -> launchManager.launchRom(rom, disc, discs)
+            }
+            if (error == null) {
+                if (disc != null) settings.rememberDisc(rom.path.absolutePath, disc.absolutePath)
+                if (slot != null) nav.pop()
+            }
+            error
+        }
         val gameKey = RomKeys.relativeKey(rom.path, pathsProvider.romDir)
         val romId = saveSyncService.isSyncableGame(gameKey)
         if (romId == null) {
-            return if (resume) launchManager.resumeRom(rom) else launchManager.launchRom(rom)
+            return performLaunch()
         }
         val tag = rom.platformTag
         val base = java.text.Normalizer.normalize(rom.path.nameWithoutExtension, java.text.Normalizer.Form.NFC)
         val emulator = RomKeys.coreDisplayNameFor(rom, platformConfig, gameOverrideStore.get(rom.id))
-        pendingLaunch = { if (resume) launchManager.resumeRom(rom) else launchManager.launchRom(rom) }
+        pendingLaunch = performLaunch
         nav.dialogState.value = DialogState.SaveSyncChecking
         ioScope.launch {
             val outcome = saveSyncService.syncBeforeLaunch(tag, base, gameKey, emulator)
@@ -247,7 +330,8 @@ class LauncherActions @Inject constructor(
     }
 
     fun launchRomFromSlot(rom: Rom, slot: Int): DialogState? =
-        launchManager.resumeRom(rom, slot)
+        if (MultiDisc.isPlaylist(rom.path) || MultiDisc.name(rom.path) != null) prepareDiscLaunch(rom, true, slot)
+        else launchManager.resumeRom(rom, slot)
 
     fun buildSaveStatePicker(rom: Rom, awaitConfirmRelease: Boolean): LauncherScreen.SaveStatePicker =
         LauncherScreen.SaveStatePicker(

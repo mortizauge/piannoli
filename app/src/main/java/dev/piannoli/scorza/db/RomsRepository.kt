@@ -180,7 +180,8 @@ class RomsRepository(
         val file = remaining.substring(sepIndex + 1)
         val dot = file.lastIndexOf('.')
         if (dot <= 0) return false
-        return file.substring(0, dot) == folder
+        return file.substring(0, dot) == folder ||
+            dev.piannoli.scorza.util.MultiDisc.name(File(file))?.base == folder
     }
 
     private fun subfolderItemsFrom(roms: List<Rom>, subfolder: String?, platformTag: String): List<ListItem.SubfolderItem> {

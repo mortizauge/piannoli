@@ -31,7 +31,7 @@ class SystemListInputHandlerTest {
             context, nav, CoroutineScope(Dispatchers.Unconfined), mockk(relaxed = true),
             mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
             mockk(relaxed = true), games, mockk(relaxed = true), mockk(relaxed = true),
-            mockk(relaxed = true),
+            mockk(relaxed = true), mockk(relaxed = true),
         )
         handler.onR1()
         verify(exactly = 1) { games.beginSearch(fromGameList = false) }
@@ -47,7 +47,7 @@ class SystemListInputHandlerTest {
             context, nav, CoroutineScope(Dispatchers.Unconfined), mockk(relaxed = true),
             mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
             systems, mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
-            mockk(relaxed = true),
+            mockk(relaxed = true), mockk(relaxed = true),
         )
         val items = listOf(
             ListItem.RecentlyPlayedItem, ListItem.FavoritesItem, ListItem.CollectionsFolder,

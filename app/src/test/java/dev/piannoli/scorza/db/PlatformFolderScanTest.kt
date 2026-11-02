@@ -43,6 +43,7 @@ class PlatformFolderScanTest {
         every { paths.romDir } returns romDir
         every { paths.showHiddenFiles } returns false
         every { paths.filteredExtensions(any()) } returns emptySet()
+        every { paths.discGroupingDisabled(any()) } returns false
         artwork = ArtworkLookup(paths)
         db = PiannoliDatabase(paths)
         scanner = RomScanner(db, RomDirectoryWalker(paths, context.assets, ArcadeTitleLookup(paths)), artwork)
@@ -55,6 +56,60 @@ class PlatformFolderScanTest {
     private fun write(path: String): File = File(romDir, path).apply {
         parentFile!!.mkdirs()
         writeText("ROM")
+    }
+
+    @Test fun `legacy playlist identity and loose virtual bundles survive rescans and restart`() {
+        val playlist = write("PS/Legacy/Legacy.m3u").apply { writeText("Legacy (Disc 1).chd\nLegacy (Disc 2).chd\n") }
+        write("PS/Legacy/Legacy (Disc 1).chd")
+        write("PS/Legacy/Legacy (Disc 2).chd")
+        write("PS/Loose/Loose (Disc 1).chd")
+        write("PS/Loose/Loose (Disc 2).chd")
+        val first = write("PS/Flat (Disc 1).chd")
+        scanner.scanPlatform("PS")
+        val legacy = repository.gameByPath(playlist.absolutePath)!!
+        val flat = repository.gameByPath(first.absolutePath)!!
+        val shelf = CollectionsRepository(db).create("Shelf")
+        CollectionsRepository(db).addMember(shelf, LibraryRef.Rom(legacy.id))
+        repository.setRaGameId(legacy.id, 123)
+        RecentlyPlayedRepository(db).record(LibraryRef.Rom(flat.id), 42)
+        write("PS/Flat (Disc 2).chd")
+        scanner.scanPlatform("PS")
+        assertEquals(flat.id, repository.gameByPath(first.absolutePath)!!.id)
+        assertEquals(42L, repository.gameByPath(first.absolutePath)!!.lastPlayedAt)
+        assertEquals(listOf("Flat", "Legacy", "Loose"),
+            repository.gamesForPlatform("PS").filterIsInstance<ListItem.RomItem>().map { it.rom.displayName })
+        assertTrue(repository.gamesForPlatform("PS").none { it is ListItem.SubfolderItem })
+        assertEquals(3, repository.allRomsForPlatform("PS").size)
+        db.close()
+        db = PiannoliDatabase(paths)
+        repository = RomsRepository(paths, db, artwork)
+        scanner = RomScanner(db, RomDirectoryWalker(
+            paths, ApplicationProvider.getApplicationContext<Context>().assets, ArcadeTitleLookup(paths),
+        ), artwork)
+        assertEquals(RomScanner.SyncCounts(0, 0, 0), scanner.scanPlatform("PS"))
+        assertEquals(legacy.id, repository.gameByPath(playlist.absolutePath)!!.id)
+        assertEquals(123, repository.gameById(legacy.id)!!.raGameId)
+        assertEquals(listOf(legacy.id), CollectionsRepository(db).romIdsIn(shelf))
+        assertTrue(playlist.isFile)
+        assertTrue(first.isFile)
+        assertTrue(!File(romDir, "PS/Flat").exists())
+    }
+
+    @Test fun `an earlier arriving disc retains existing group identity artwork and membership`() {
+        val second = write("PS/Game (Disc 2).chd")
+        write("PS/Game (Disc 3).chd")
+        val art = File(temp.root, "Art/PS/Game (Disc 2).png").apply { parentFile!!.mkdirs(); writeText("art") }
+        scanner.scanPlatform("PS")
+        val original = repository.gameByPath(second.absolutePath)!!
+        val shelf = CollectionsRepository(db).create("Shelf")
+        CollectionsRepository(db).addMember(shelf, LibraryRef.Rom(original.id))
+        write("PS/Game (Disc 1).chd")
+        assertEquals(RomScanner.SyncCounts(0, 0, 0), scanner.scanPlatform("PS"))
+        val grouped = repository.allRomsForPlatform("PS").single()
+        assertEquals(original.id, grouped.id)
+        assertEquals(second, grouped.path)
+        assertEquals(art, grouped.artFile)
+        assertEquals(listOf(original.id), CollectionsRepository(db).romIdsIn(shelf))
     }
 
     @Test fun `rescan inserts games between indexed names and repairs cached sort keys without resetting metadata`() {

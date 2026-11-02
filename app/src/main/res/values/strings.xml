@@ -1,5 +1,16 @@
 <resources>
     <string name="app_name" translatable="false">Piannoli</string>
+    <string name="multidisc_loading">Reading discs...</string>
+    <string name="multidisc_choose">Choose disc</string>
+    <string name="multidisc_playlist">Launch playlist (emulator support required)</string>
+    <string name="multidisc_error">Cannot read disc set: %1$s</string>
+    <string name="multidisc_missing">Disc file is missing or unreadable: %1$s</string>
+    <string name="multidisc_empty">The playlist contains no discs.</string>
+    <string name="multidisc_changed">The previously launched disc is no longer in this set. Use Play to choose a disc.</string>
+    <string name="multidisc_ungroup">Ungroup Discs</string>
+    <string name="multidisc_group">Group Discs</string>
+    <string name="multidisc_delete_playlist">Delete %1$s? Playlist disc files will be kept.</string>
+    <string name="multidisc_delete_error">Cannot delete game: %1$s</string>
     <string name="setting_keyboard">Keyboard</string>
     <string name="keyboard_system">System</string>
     <string name="keyboard_piannoli" translatable="false">Piannoli</string>

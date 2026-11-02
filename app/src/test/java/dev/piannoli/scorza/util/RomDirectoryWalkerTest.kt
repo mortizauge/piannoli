@@ -26,6 +26,7 @@ class RomDirectoryWalkerTest {
     private lateinit var walker: RomDirectoryWalker
     private val filters = mutableMapOf<String, Set<String>>()
     private var showHiddenFiles = false
+    private val ungrouped = mutableSetOf<String>()
 
     @Before
     fun setUp() {
@@ -40,6 +41,11 @@ class RomDirectoryWalkerTest {
         every { paths.romDir } returns romsDir
         every { paths.filteredExtensions(any()) } answers { filters[firstArg()] ?: emptySet() }
         every { paths.showHiddenFiles } answers { showHiddenFiles }
+        every { paths.discGroupingDisabled(any()) } answers { firstArg<String>() in ungrouped }
+        every { paths.setDiscGroupingDisabled(any(), any()) } answers {
+            if (secondArg<Boolean>()) ungrouped.add(firstArg()) else ungrouped.remove(firstArg())
+            Unit
+        }
 
         val arcade = mockk<ArcadeTitleLookup>()
         every { arcade.mapFor(any(), any()) } returns emptyMap()
@@ -55,6 +61,131 @@ class RomDirectoryWalkerTest {
     }
 
     private fun m3uName(base: String) = "PS${File.separator}$base${File.separator}$base.m3u"
+
+    @Test fun `playlist references hidden support discs independently of hidden files setting`() {
+        write("PS/Game.m3u", "#EXTM3U\n.multi/second.chd\n.multi/first.cue\n")
+        write("PS/.multi/second.chd")
+        write("PS/.multi/first.cue", """FILE "track.bin" BINARY""")
+        write("PS/.multi/track.bin")
+        val before = romsDir.walkTopDown().filter { it.isFile }.associate { it.relativeTo(romsDir).path to it.readText() }
+        for (hidden in listOf(false, true)) {
+            showHiddenFiles = hidden
+            val result = walker.walk("PS", false)!!
+            assertEquals(listOf("Game"), result.roms.map { it.displayName })
+            assertEquals(listOf("second.chd", "first.cue"), walker.discFiles(File(romsDir, result.roms.single().relativePath)).map { it.name })
+        }
+        assertEquals(before, romsDir.walkTopDown().filter { it.isFile }.associate { it.relativeTo(romsDir).path to it.readText() })
+    }
+
+    @Test fun `playlist suppresses only referenced files across visible category folders`() {
+        write("PS/Lists/Set.m3u", "../Discs/A.chd\n../Discs/B.chd\n")
+        write("PS/Discs/A.chd")
+        write("PS/Discs/B.chd")
+        write("PS/Discs/Unrelated.chd")
+        assertEquals(setOf("Set", "Unrelated"), walker.walk("PS", false)!!.roms.map { it.displayName }.toSet())
+    }
+
+    @Test fun `nested playlists do not become duplicate library entries and cycles remain visible errors`() {
+        write("PS/Game.m3u", "Lists/Part.m3u\n")
+        write("PS/Lists/Part.m3u", "../Disc.chd\n")
+        write("PS/Disc.chd")
+        assertEquals(listOf("Game"), walker.walk("PS", false)!!.roms.map { it.displayName })
+        write("PS/Lists/Part.m3u", "../Game.m3u\n")
+        assertEquals(setOf("Game", "Part", "Disc"), walker.walk("PS", false)!!.roms.map { it.displayName }.toSet())
+    }
+
+    @Test fun `a cue or matching playlist does not swallow other games in the same folder`() {
+        write("PS/RPGs/A.cue", """FILE "A.bin" BINARY""")
+        write("PS/RPGs/A.bin")
+        write("PS/RPGs/RPGs.m3u", "B.chd\n")
+        write("PS/RPGs/B.chd")
+        write("PS/RPGs/C.chd")
+        assertEquals(setOf("A", "RPGs", "C"), walker.walk("PS", false)!!.roms.map { it.displayName }.toSet())
+        assertEquals(null, walker.gameDirectory(File(romsDir, "PS/RPGs/RPGs.m3u")))
+    }
+
+    @Test fun `grouping is numeric preserves editions and can be disabled and restored`() {
+        write("PS/Game (USA) (Disc 10).chd")
+        write("PS/Game (USA) (Disc 2).chd")
+        write("PS/Game (USA) (Disc 1).chd")
+        write("PS/Game (Europe) (Disc 1).chd")
+        write("PS/Game (Europe) (Disc 2).chd")
+        val first = File(romsDir, "PS/Game (USA) (Disc 1).chd")
+        assertEquals(2, walker.walk("PS", false)!!.roms.size)
+        assertEquals(listOf(1, 2, 10).map { "Game (USA) (Disc $it).chd" }, walker.discFiles(first).map { it.name })
+        walker.toggleDiscGrouping(first)
+        assertEquals(4, walker.walk("PS", false)!!.roms.size)
+        assertTrue(walker.discFiles(first).isEmpty())
+        walker.toggleDiscGrouping(first)
+        assertEquals(2, walker.walk("PS", false)!!.roms.size)
+    }
+
+    @Test fun `cue tracks are not discs and duplicate disc number dumps are not guessed`() {
+        write("PS/Game (Disc 1).cue", """FILE "Game (Disc 1).bin" BINARY""")
+        write("PS/Game (Disc 1).bin")
+        write("PS/Game (Disc 2).cue", """FILE "Game (Disc 2).bin" BINARY""")
+        write("PS/Game (Disc 2).bin")
+        assertEquals(1, walker.walk("PS", false)!!.roms.size)
+        assertEquals(listOf("cue", "cue"), walker.discFiles(File(romsDir, "PS/Game (Disc 1).cue")).map { it.extension })
+        write("PS/Game (Disc 1).chd")
+        assertEquals(3, walker.walk("PS", false)!!.roms.size)
+    }
+
+    @Test fun `common disc markers are recognized without conflating game sequels`() {
+        listOf("(Disk 1)" to "(Disk 2)", "[Disc 1 of 2]" to "[Disc 2 of 2]", "(CD1)" to "(CD2)",
+            "- Disc 1" to "- Disc 2").forEachIndexed { index, (one, two) ->
+            write("PS/Game $index $one.chd")
+            write("PS/Game $index $two.chd")
+        }
+        write("PS/Another Game 1.chd")
+        write("PS/Another Game 2.chd")
+        assertEquals(6, walker.walk("PS", false)!!.roms.size)
+    }
+
+    @Test fun `a partial playlist cannot pull its referenced discs into another virtual set`() {
+        write("PS/Game.m3u", "Game (Disc 1).chd\n")
+        (1..3).forEach { write("PS/Game (Disc $it).chd") }
+        val result = walker.walk("PS", false)!!
+        assertEquals(2, result.roms.size)
+        val group = result.roms.single { File(it.relativePath).extension != "m3u" }
+        assertEquals(listOf(2, 3).map { "Game (Disc $it).chd" },
+            walker.discFiles(File(romsDir, group.relativePath)).map { it.name })
+    }
+
+    @Test fun `deleting a playlist preserves shared hidden discs and other playlists`() {
+        write("PS/Game/Game.m3u", ".multi/Disc.chd\n")
+        write("PS/Another.m3u", "Game/.multi/Disc.chd\n")
+        write("PS/Game/.multi/Disc.chd", "shared")
+        walker.walk("PS", false)
+        walker.deleteGameFiles(File(romsDir, "PS/Game/Game.m3u"))
+        assertFalse(File(romsDir, "PS/Game/Game.m3u").exists())
+        assertTrue(File(romsDir, "PS/Another.m3u").isFile)
+        assertEquals("shared", File(romsDir, "PS/Game/.multi/Disc.chd").readText())
+    }
+
+    @Test fun `explicit deletion covers virtual set tracks but ungrouped deletion affects only selected disc`() {
+        for (number in 1..2) {
+            write("PS/Game (Disc $number).cue", """FILE "Track $number.bin" BINARY""")
+            write("PS/Track $number.bin")
+        }
+        write("PS/Other.chd")
+        val first = File(romsDir, "PS/Game (Disc 1).cue")
+        walker.toggleDiscGrouping(first)
+        walker.deleteGameFiles(first)
+        assertFalse(first.exists())
+        assertFalse(File(romsDir, "PS/Track 1.bin").exists())
+        assertTrue(File(romsDir, "PS/Game (Disc 2).cue").exists())
+        assertTrue(File(romsDir, "PS/Track 2.bin").exists())
+        assertTrue(File(romsDir, "PS/Other.chd").exists())
+
+        write("PS/Game (Disc 1).cue", """FILE "Track 1.bin" BINARY""")
+        write("PS/Track 1.bin")
+        walker.toggleDiscGrouping(first)
+        walker.deleteGameFiles(first)
+        assertFalse(File(romsDir, "PS/Game (Disc 2).cue").exists())
+        assertFalse(File(romsDir, "PS/Track 2.bin").exists())
+        assertTrue(File(romsDir, "PS/Other.chd").exists())
+    }
 
     @Test fun `all PlayStation aliases are scanned even when canonical folder exists preserving real paths`() {
         write("PS/Canonical.chd")
@@ -207,7 +338,7 @@ class RomDirectoryWalkerTest {
         val result = walker.walk("SEGACD", false)!!
         assertEquals(1, result.roms.size)
         assertEquals("Game.cue", File(result.roms.single().relativePath).name)
-        assertEquals("disc data", File(romsDir, "SEGACD/Game/Track 01.bin").readText())
+        assertEquals("disc data", File(romsDir, "SEGACD/Track 01.bin").readText())
     }
 
     @Test fun `PICO8 accepts embedded cartridges but excludes ordinary images`() {
@@ -219,7 +350,7 @@ class RomDirectoryWalkerTest {
     }
 
     @Test
-    fun `bundles three loose discs into one game`() {
+    fun `groups three loose discs without changing the filesystem`() {
         write("PS/Cool Game (Disc 1).chd")
         write("PS/Cool Game (Disc 2).chd")
         write("PS/Cool Game (Disc 3).chd")
@@ -227,12 +358,17 @@ class RomDirectoryWalkerTest {
         val result = walker.walk("PS", isArcade = false)!!
 
         assertEquals(1, result.roms.size)
-        assertEquals(m3uName("Cool Game"), result.roms.single().relativePath)
-        assertTrue(File(romsDir, "PS/Cool Game/Cool Game (Disc 3).chd").exists())
+        assertEquals("PS${File.separator}Cool Game (Disc 1).chd", result.roms.single().relativePath)
+        assertEquals("Cool Game", result.roms.single().displayName)
+        assertTrue(File(romsDir, "PS/Cool Game (Disc 3).chd").exists())
+        assertFalse(File(romsDir, "PS/Cool Game").exists())
+        assertTrue(result.rekeys.isEmpty())
+        assertEquals(listOf(1, 2, 3).map { "Cool Game (Disc $it).chd" },
+            walker.discFiles(File(romsDir, result.roms.single().relativePath)).map { it.name })
     }
 
     @Test
-    fun `merges a late loose disc into an already-organized bundle`() {
+    fun `leaves a late loose disc outside an existing explicit playlist`() {
         // State after a mid-upload scan already bundled discs 1 and 2.
         write("PS/Cool Game/Cool Game (Disc 1).chd")
         write("PS/Cool Game/Cool Game (Disc 2).chd")
@@ -242,24 +378,23 @@ class RomDirectoryWalkerTest {
 
         val result = walker.walk("PS", isArcade = false)!!
 
-        assertEquals(1, result.roms.size)
-        assertEquals(m3uName("Cool Game"), result.roms.single().relativePath)
-        assertTrue(File(romsDir, "PS/Cool Game/Cool Game (Disc 3).chd").exists())
-        assertFalse(File(romsDir, "PS/Cool Game (Disc 3).chd").exists())
+        assertEquals(2, result.roms.size)
+        assertTrue(result.roms.any { it.relativePath == m3uName("Cool Game") })
+        assertFalse(File(romsDir, "PS/Cool Game/Cool Game (Disc 3).chd").exists())
+        assertTrue(File(romsDir, "PS/Cool Game (Disc 3).chd").exists())
 
         val discs = File(romsDir, "PS/Cool Game/Cool Game.m3u").readLines().filter { it.isNotBlank() }
         assertEquals(
             listOf(
                 "Cool Game (Disc 1).chd",
                 "Cool Game (Disc 2).chd",
-                "Cool Game (Disc 3).chd",
             ),
             discs,
         )
     }
 
     @Test
-    fun `relocates a loose m3u set into its own folder`() {
+    fun `keeps a loose m3u and its discs in their original locations`() {
         write("PS/Cool Game.m3u", "Cool Game (Disc 1).chd\nCool Game (Disc 2).chd\n")
         write("PS/Cool Game (Disc 1).chd")
         write("PS/Cool Game (Disc 2).chd")
@@ -267,30 +402,24 @@ class RomDirectoryWalkerTest {
         val result = walker.walk("PS", isArcade = false)!!
 
         assertEquals(1, result.roms.size)
-        assertEquals(m3uName("Cool Game"), result.roms.single().relativePath)
-        assertTrue(File(romsDir, "PS/Cool Game/Cool Game.m3u").exists())
-        assertTrue(File(romsDir, "PS/Cool Game/Cool Game (Disc 1).chd").exists())
-        assertTrue(File(romsDir, "PS/Cool Game/Cool Game (Disc 2).chd").exists())
-        assertFalse(File(romsDir, "PS/Cool Game.m3u").exists())
-        assertFalse(File(romsDir, "PS/Cool Game (Disc 1).chd").exists())
-        assertFalse(File(romsDir, "PS/Cool Game (Disc 2).chd").exists())
+        assertEquals("PS${File.separator}Cool Game.m3u", result.roms.single().relativePath)
+        assertTrue(File(romsDir, "PS/Cool Game.m3u").exists())
+        assertTrue(File(romsDir, "PS/Cool Game (Disc 1).chd").exists())
+        assertTrue(File(romsDir, "PS/Cool Game (Disc 2).chd").exists())
+        assertFalse(File(romsDir, "PS/Cool Game").exists())
     }
 
     @Test
-    fun `writes an in-place m3u for discs in a game-named folder`() {
+    fun `recognizes a game-named folder without creating an m3u`() {
         write("PS/Cool Game/Cool Game (Disc 1).chd")
         write("PS/Cool Game/Cool Game (Disc 2).chd")
 
         val result = walker.walk("PS", isArcade = false)!!
 
         assertEquals(1, result.roms.size)
-        assertEquals(m3uName("Cool Game"), result.roms.single().relativePath)
+        assertEquals("PS${File.separator}Cool Game${File.separator}Cool Game (Disc 1).chd", result.roms.single().relativePath)
         val m3u = File(romsDir, "PS/Cool Game/Cool Game.m3u")
-        assertTrue(m3u.exists())
-        assertEquals(
-            listOf("Cool Game (Disc 1).chd", "Cool Game (Disc 2).chd"),
-            m3u.readLines().filter { it.isNotBlank() },
-        )
+        assertFalse(m3u.exists())
     }
 
     @Test
@@ -366,32 +495,16 @@ class RomDirectoryWalkerTest {
     }
 
     @Test
-    fun `renaming a multi-disc folder game cascades to all files`() {
-        write("PS/Cool Game (Disc 1).chd")
-        write("PS/Cool Game (Disc 2).chd")
-        write("PS/Cool Game (Disc 3).chd")
-        walker.walk("PS", isArcade = false)
-
+    fun `renaming a playlist refuses to break user references`() {
+        write("PS/Cool Game/Cool Game (Disc 1).chd")
+        write("PS/Cool Game/Cool Game (Disc 2).chd")
+        val content = "Cool Game (Disc 1).chd\nCool Game (Disc 2).chd\n"
+        write("PS/Cool Game/Cool Game.m3u", content)
         val m3u = File(romsDir, "PS/Cool Game/Cool Game.m3u")
         val result = walker.renameGame(m3u, "Rad Game")
-
-        assertEquals(RomDirectoryWalker.RenameOutcome.RENAMED, result.outcome)
-        assertFalse(File(romsDir, "PS/Cool Game").exists())
-        val newDir = File(romsDir, "PS/Rad Game")
-        assertTrue(newDir.exists())
-        assertTrue(File(newDir, "Rad Game.m3u").exists())
-        assertTrue(File(newDir, "Rad Game (Disc 1).chd").exists())
-        assertTrue(File(newDir, "Rad Game (Disc 2).chd").exists())
-        assertTrue(File(newDir, "Rad Game (Disc 3).chd").exists())
-        assertEquals(
-            listOf(
-                "Rad Game (Disc 1).chd",
-                "Rad Game (Disc 2).chd",
-                "Rad Game (Disc 3).chd",
-            ),
-            File(newDir, "Rad Game.m3u").readLines().filter { it.isNotBlank() },
-        )
-        assertEquals(File(newDir, "Rad Game.m3u"), result.newPrimary)
+        assertEquals(RomDirectoryWalker.RenameOutcome.FAILED, result.outcome)
+        assertEquals(content, m3u.readText())
+        assertFalse(File(romsDir, "PS/Rad Game").exists())
     }
 
     @Test
@@ -437,21 +550,17 @@ class RomDirectoryWalkerTest {
     }
 
     @Test
-    fun `merges a loose disc into a folder that holds discs but no m3u`() {
+    fun `does not infer groups across folder boundaries`() {
         write("PS/Cool Game/Cool Game (Disc 1).chd")
         write("PS/Cool Game (Disc 2).chd")
 
         val result = walker.walk("PS", isArcade = false)!!
 
-        assertEquals(1, result.roms.size)
-        assertEquals(m3uName("Cool Game"), result.roms.single().relativePath)
+        assertEquals(2, result.roms.size)
         assertTrue(File(romsDir, "PS/Cool Game/Cool Game (Disc 1).chd").exists())
-        assertTrue(File(romsDir, "PS/Cool Game/Cool Game (Disc 2).chd").exists())
-        assertFalse(File(romsDir, "PS/Cool Game (Disc 2).chd").exists())
-        assertEquals(
-            listOf("Cool Game (Disc 1).chd", "Cool Game (Disc 2).chd"),
-            File(romsDir, "PS/Cool Game/Cool Game.m3u").readLines().filter { it.isNotBlank() },
-        )
+        assertFalse(File(romsDir, "PS/Cool Game/Cool Game (Disc 2).chd").exists())
+        assertTrue(File(romsDir, "PS/Cool Game (Disc 2).chd").exists())
+        assertFalse(File(romsDir, "PS/Cool Game/Cool Game.m3u").exists())
     }
 
     @Test

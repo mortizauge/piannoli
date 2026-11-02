@@ -63,7 +63,8 @@ internal object PlatformFileTypes {
 
     fun supports(platformTag: String, extension: String): Boolean =
         // Custom platform folders retain their existing behavior until formats are defined.
-        extensions[platformTag.uppercase(Locale.ROOT)]?.contains(extension.lowercase(Locale.ROOT)) ?: true
+        extensions[platformTag.uppercase(Locale.ROOT)]
+            ?.contains(if (extension.equals("m3u8", true)) "m3u" else extension.lowercase(Locale.ROOT)) ?: true
 
     fun accepts(platformTag: String, file: File): Boolean {
         val extension = if (file.name.endsWith(".p8.png", ignoreCase = true)) "p8.png" else file.extension

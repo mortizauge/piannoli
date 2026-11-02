@@ -101,6 +101,36 @@ fun DialogOverlay(
 ) {
     val itemHeight = pillItemHeight(listLineHeight, listVerticalPadding)
     when (dialogState) {
+        is DialogState.DiscPicker -> ListDialogScreen(
+            backgroundImagePath = backgroundImagePath,
+            backgroundTint = backgroundTint,
+            title = dialogState.rom.displayName,
+            subtitle = stringResource(R.string.multidisc_choose),
+            rightBottomItems = emptyList(),
+            listFontSize = listFontSize,
+            listLineHeight = listLineHeight,
+            buttonStyle = buttonStyle,
+        ) {
+            List(items = dialogState.files, selectedIndex = dialogState.selectedIndex, itemHeight = itemHeight) { _, file, selected ->
+                PillRowText(
+                    label = if (dev.piannoli.scorza.util.MultiDisc.isPlaylist(file)) stringResource(R.string.multidisc_playlist)
+                    else file.name,
+                    isSelected = selected,
+                    fontSize = listFontSize,
+                    lineHeight = listLineHeight,
+                    verticalPadding = listVerticalPadding,
+                )
+            }
+        }
+        is DialogState.DiscLoading -> ListDialogScreen(
+            backgroundImagePath = backgroundImagePath,
+            backgroundTint = backgroundTint,
+            title = stringResource(R.string.multidisc_loading),
+            rightBottomItems = emptyList(),
+            listFontSize = listFontSize,
+            listLineHeight = listLineHeight,
+            buttonStyle = buttonStyle,
+        ) {}
         is DialogState.ExtensionFilters -> ListDialogScreen(
             backgroundImagePath = backgroundImagePath,
             backgroundTint = backgroundTint,
@@ -1055,7 +1085,9 @@ fun DialogOverlay(
         is DialogState.LaunchError -> LaunchErrorDialog(dialogState.message, buttonStyle = buttonStyle)
 
         is DialogState.DeleteConfirm -> ConfirmOverlay(
-            message = stringResource(R.string.dialog_delete_confirm, dialogState.gameName),
+            message = if (dialogState.keepPlaylistDiscs)
+                stringResource(R.string.multidisc_delete_playlist, dialogState.gameName)
+                else stringResource(R.string.dialog_delete_confirm, dialogState.gameName),
             buttonStyle = buttonStyle,
             confirmLabel = stringResource(R.string.label_delete),
         )
