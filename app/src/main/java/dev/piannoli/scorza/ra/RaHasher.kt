@@ -2,6 +2,7 @@ package dev.piannoli.scorza.ra
 
 import org.apache.commons.compress.archivers.sevenz.SevenZFile
 import dev.piannoli.scorza.util.ErrorLog
+import dev.piannoli.scorza.util.MultiDisc
 import java.io.File
 import java.io.InputStream
 import java.security.MessageDigest
@@ -30,15 +31,7 @@ object RaHasher {
             consoleId == 12 -> RaPlayStationHasher.hash(file)
             consoleId !in cartridgeConsoles -> null
             consoleId == 27 -> hashArcade(file)
-            file.extension.equals("m3u", ignoreCase = true) -> {
-                val entry = file.useLines { lines ->
-                    lines.map { it.trim() }.firstOrNull { it.isNotEmpty() && !it.startsWith("#") }
-                }
-                val target = entry?.let { File(it).let { child -> if (child.isAbsolute) child else File(file.parentFile, it) } }
-                // Do not follow nested playlists or cycles.
-                if (target == null || target.extension.equals("m3u", ignoreCase = true)) null
-                else hashRom(target.absolutePath, consoleId)
-            }
+            MultiDisc.isPlaylist(file) -> hashRom(MultiDisc.firstDisc(file).absolutePath, consoleId)
             file.extension.equals("zip", ignoreCase = true) -> ZipFile(file).use { zip ->
                 val entry = zip.entries().asSequence().filter { !it.isDirectory }.maxByOrNull { it.size }
                 entry?.let { zip.getInputStream(it).use { input -> hashInput(input, it.size, consoleId) } }

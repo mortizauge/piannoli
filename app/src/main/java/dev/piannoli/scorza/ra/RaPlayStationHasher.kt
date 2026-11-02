@@ -1,5 +1,6 @@
 package dev.piannoli.scorza.ra
 
+import dev.piannoli.scorza.util.MultiDisc
 import java.io.Closeable
 import java.io.File
 import java.io.IOException
@@ -22,14 +23,14 @@ internal object RaPlayStationHasher {
     private val bootLine = Regex("""^BOOT\s*=\s*(?:cdrom:)?\\*([^\s;]+)""", RegexOption.MULTILINE)
 
     fun supports(file: File): Boolean = try {
-        val disc = firstDisc(file)
+        val disc = MultiDisc.firstDisc(file)
         disc.extension.lowercase(Locale.ROOT) in imageExtensions + "cue"
     } catch (_: IOException) {
         false
     }
 
     fun hash(file: File): String {
-        val disc = firstDisc(file)
+        val disc = MultiDisc.firstDisc(file)
         val extension = disc.extension.lowercase(Locale.ROOT)
         val cue = if (extension in setOf("bin", "img"))
             File(disc.parentFile, "${disc.nameWithoutExtension}.cue").takeIf { it.isFile }
@@ -40,17 +41,6 @@ internal object RaPlayStationHasher {
             else -> throw IOException("Unsupported PlayStation .$extension container; a known RA game ID is required")
         }
         return track.use { hashExecutable(it) }
-    }
-
-    private fun firstDisc(file: File): File {
-        if (!file.extension.equals("m3u", true)) return file
-        val entry = file.useLines { lines ->
-            lines.map { it.trim().removePrefix("\uFEFF") }
-                .firstOrNull { it.isNotEmpty() && !it.startsWith("#") }
-        } ?: throw IOException("Empty PlayStation playlist")
-        val disc = relativeFile(file, entry)
-        if (disc.extension.equals("m3u", true)) throw IOException("Nested PlayStation playlists are unsupported")
-        return disc
     }
 
     private fun relativeFile(parent: File, path: String): File =

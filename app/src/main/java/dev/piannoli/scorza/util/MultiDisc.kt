@@ -23,6 +23,10 @@ internal object MultiDisc {
 
     fun isPlaylist(file: File): Boolean = file.extension.lowercase(Locale.ROOT) in setOf("m3u", "m3u8")
 
+    fun firstDisc(file: File): File =
+        if (isPlaylist(file)) playlistDiscs(file).firstOrNull() ?: throw IOException("Empty playlist: ${file.name}")
+        else file
+
     fun name(file: File): DiscName? {
         if (file.extension.lowercase(Locale.ROOT) !in formats) return null
         val stem = file.nameWithoutExtension
