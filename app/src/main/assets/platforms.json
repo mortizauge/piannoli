@@ -80,6 +80,7 @@
       { "package": "me.magnum.melonds.nightly", "action": "me.magnum.melonds.nightly.LAUNCH_ROM", "extras": [{ "key": "uri", "kind": "uri_parcelable" }] },
       { "package": "com.hydra.noods", "extras": [{ "key": "LaunchPath", "kind": "path" }] },
       { "package": "com.dsemu.drastic", "activity": "com.dsemu.drastic.DraSticActivity", "action": "android.intent.action.VIEW", "data": { "kind": "absolute_path" } },
+      { "package": "com.seedlessds.app", "activity": "com.seedlessds.app.emu.EmulatorActivity", "action": "android.intent.action.VIEW", "data": { "kind": "file_provider" } },
       { "package": "com.sky.SkyEmu", "action": "android.intent.action.VIEW", "data": { "kind": "file_provider" } }
     ]
   },
