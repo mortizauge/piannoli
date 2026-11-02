@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import dev.piannoli.scorza.ui.components.artworkClip
-import dev.piannoli.scorza.ui.components.artworkStatusBarPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -139,8 +138,7 @@ fun RommCollectionGameListScreen(
                                 modifier = Modifier
                                     .fillMaxHeight()
                                     .fillMaxWidth()
-                                    .padding(start = 16.dp)
-                                    .artworkStatusBarPadding(),
+                                    .padding(start = 16.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (coverUrl != null) {

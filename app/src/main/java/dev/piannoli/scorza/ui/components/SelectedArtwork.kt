@@ -15,7 +15,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import dev.piannoli.scorza.settings.ArtScale
@@ -311,14 +310,12 @@ private val libraryArtworkCache = ListArtworkCache(
 internal fun artworkPanelSize(
     rowSize: IntSize,
     widthPercent: Int,
-    topPadding: Dp = 0.dp,
     heightFraction: Float = 1f,
 ): IntSize? {
     if (widthPercent <= 0 || rowSize.width <= 0 || rowSize.height <= 0) return null
-    val verticalPadding = maxOf(topPadding, LocalArtworkStatusBarHeight.current.value)
-    val (startPx, verticalPx) = with(LocalDensity.current) { 16.dp.roundToPx() to verticalPadding.roundToPx() }
+    val startPx = with(LocalDensity.current) { 16.dp.roundToPx() }
     val width = (rowSize.width * widthPercent / 100f).roundToInt() - startPx
-    val height = ((rowSize.height - 2 * verticalPx) * heightFraction).roundToInt()
+    val height = (rowSize.height * heightFraction).roundToInt()
     return if (width > 0 && height > 0) IntSize(width, height) else null
 }
 

@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.rememberLazyListState
 import dev.piannoli.scorza.ui.components.artworkClip
-import dev.piannoli.scorza.ui.components.artworkStatusBarPadding
 import dev.piannoli.scorza.ui.components.ArtworkRequest
 import dev.piannoli.scorza.ui.components.ArtworkWindow
 import dev.piannoli.scorza.ui.components.artworkPanelSize
@@ -255,8 +254,7 @@ fun GameListScreen(
                                 modifier = Modifier
                                     .fillMaxHeight()
                                     .fillMaxWidth()
-                                    .padding(start = 16.dp)
-                                    .artworkStatusBarPadding(),
+                                    .padding(start = 16.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 val art = selectedArt ?: return@Box

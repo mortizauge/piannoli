@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.rememberLazyListState
 import dev.piannoli.scorza.ui.components.artworkClip
-import dev.piannoli.scorza.ui.components.artworkStatusBarPadding
 import dev.piannoli.scorza.ui.components.ArtworkRequest
 import dev.piannoli.scorza.ui.components.artworkPanelSize
 import dev.piannoli.scorza.ui.components.artworkWindow
@@ -126,10 +125,9 @@ fun SystemListScreen(
     // An assigned image keeps priority even while decoding or if corrupt; only absent files use defaults.
     val categoryArtwork = defaultCategoryArtwork.takeIf { artPath == null }
     var artRowSize by remember { mutableStateOf(IntSize.Zero) }
-    val artworkTopPadding = if (fiveGameHandheld && title.isEmpty()) pillItemHeight(listLineHeight, 4.dp) + 8.dp else 0.dp
-    val gameArtPanel = artworkPanelSize(artRowSize, artWidth, artworkTopPadding)
+    val gameArtPanel = artworkPanelSize(artRowSize, artWidth)
     // SystemArtworkPanel draws within 40% of the panel height.
-    val systemArtPanel = artworkPanelSize(artRowSize, systemArtWidth, artworkTopPadding, heightFraction = 0.4f)
+    val systemArtPanel = artworkPanelSize(artRowSize, systemArtWidth, heightFraction = 0.4f)
     val artworkWindow = remember(
         state.items, state.selectedIndex, artPath, artworkRevision, systemArtworkType, gameArtPanel, systemArtPanel,
         artScale, systemArtScale,
@@ -265,13 +263,11 @@ fun SystemListScreen(
                 }
                 }
                 if (showArt) {
-                    val artTopPadding = artworkTopPadding
                     Box(
                         modifier = Modifier
                             .fillMaxHeight()
                             .fillMaxWidth()
-                            .padding(start = 16.dp)
-                            .artworkStatusBarPadding(artTopPadding),
+                            .padding(start = 16.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         val art = selectedArt
