@@ -12,7 +12,6 @@ class AtomicRename(private val piannoliRoot: File, private val walker: RomDirect
     private val backupDir get() = paths.backupDir
     private val savesDir get() = paths.savesDir
     private val statesDir get() = paths.saveStatesDir
-    private val artDir get() = paths.artDir
 
     enum class RenameError { CANNOT_RESOLVE_DIR, ALREADY_EXISTS, BACKUP_FAILED, RENAME_FAILED, RELOCATE_FAILED }
 
@@ -55,7 +54,8 @@ class AtomicRename(private val piannoliRoot: File, private val walker: RomDirect
             }
             newPrimary = moved.newPrimary ?: throw RenameFailure(RenameError.RENAME_FAILED)
             romMoved = true
-            findArtFile(platformTag, oldBaseName)?.let { artFile ->
+            artwork.invalidate(platformTag)
+            artwork.findByName(platformTag, oldBaseName)?.let { artFile ->
                 val newArtFile = File(artFile.parentFile, "$newBaseName.${artFile.extension}")
                 if (artFile.renameTo(newArtFile)) artMoved = artFile to newArtFile
             }
@@ -214,17 +214,6 @@ class AtomicRename(private val piannoliRoot: File, private val walker: RomDirect
             if (!oldArt.exists()) newArt.renameTo(oldArt)
         }
         restoreSaveData(backupTagDir, tag)
-    }
-
-    private fun findArtFile(tag: String, baseName: String): File? {
-        val artTagDir = File(artDir, tag)
-        if (!artTagDir.exists()) return null
-        val extensions = listOf("png", "jpg", "jpeg", "PNG", "JPG", "JPEG")
-        for (ext in extensions) {
-            val candidate = File(artTagDir, "$baseName.$ext")
-            if (candidate.exists()) return candidate
-        }
-        return null
     }
 
     private fun findMatchingFiles(dir: File, baseName: String): List<File> {

@@ -210,9 +210,9 @@ object RommModule {
     @Provides @Singleton
     fun provideRommArtDownloader(
         http: RommHttp,
-        paths: PiannoliPathsProvider,
+        artwork: dev.piannoli.scorza.scraper.ScrapedArtworkStore,
     ): dev.piannoli.scorza.romm.art.RommArtDownloader =
-        dev.piannoli.scorza.romm.art.RommArtDownloader(http, paths)
+        dev.piannoli.scorza.romm.art.RommArtDownloader(http, artwork)
 
     @Provides @Singleton
     fun provideRommArtFetcher(

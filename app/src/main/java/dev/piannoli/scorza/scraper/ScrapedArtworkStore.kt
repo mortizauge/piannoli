@@ -132,6 +132,9 @@ class ScrapedArtworkStore @Inject constructor(
         return install("PORTS", dev.piannoli.scorza.romm.download.sanitizeFsName(app.displayName), false, bytes, overwrite)
     }
 
+    fun installGame(tag: String, basename: String, bytes: ByteArray, overwrite: Boolean = false): File =
+        install(tag, basename, false, bytes, overwrite)
+
     fun installAppIcon(app: App, icon: android.graphics.drawable.Drawable): File {
         val tag = app.type.artTag
         val basename = dev.piannoli.scorza.romm.download.sanitizeFsName(app.displayName)
@@ -154,6 +157,8 @@ class ScrapedArtworkStore @Inject constructor(
     }
 
     private fun install(tag: String, basename: String, embedded: Boolean, bytes: ByteArray, overwrite: Boolean): File {
+        val directory = artwork.customGameFile(tag, basename)?.parentFile
+            ?: throw ScraperException(ScraperError.STORAGE)
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         bytes.inputStream().use { BitmapFactory.decodeStream(it, null, options) }
         val extension = when (options.outMimeType) {
@@ -164,7 +169,6 @@ class ScrapedArtworkStore @Inject constructor(
         }
         if (options.outWidth !in 1..4096 || options.outHeight !in 1..4096
         ) throw ScraperException(ScraperError.INVALID_RESPONSE)
-        val directory = File(File(paths.root, "Art"), tag)
         try {
             artwork.invalidate(tag)
             if (embedded ||

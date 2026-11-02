@@ -143,6 +143,20 @@ class AtomicRenameTest {
         assertFalse(File(artDir("GB"), "Cart.jpg").exists())
     }
 
+    @Test fun `rename uses shared lookup for WebP even after a cached miss`() {
+        val rom = File(romsDir("GB"), "Cart.gb").writeWith("rom")
+        assertNull(artwork.findByName("GB", "Cart"))
+        val original = File(artDir("GB"), "Cart.webp").writeWith("webp-art")
+
+        assertTrue(renamer.rename(rom, "Renamed", "GB").success)
+
+        val renamed = File(artDir("GB"), "Renamed.webp")
+        assertEquals("webp-art", renamed.readText())
+        assertFalse(original.exists())
+        assertEquals(renamed, artwork.findByName("GB", "Renamed"))
+        assertNull(artwork.findByName("GB", "Cart"))
+    }
+
     @Test fun `rename succeeds even with no save or state files present`() {
         val rom = File(romsDir("NES"), "Lone.nes").writeWith("rom")
         // no art, saves, or states
