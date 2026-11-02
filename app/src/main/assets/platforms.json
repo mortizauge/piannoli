@@ -147,7 +147,7 @@
     "name": "PlayStation",
     "core": "pcsx_rearmed_libretro",
     "app": [
-      { "package": "com.github.stenzek.duckstation", "activity": "com.github.stenzek.duckstation.EmulationActivity", "action": "android.intent.action.MAIN", "extras": [{ "key": "bootPath", "kind": "uri_string" }] },
+      { "package": "com.github.stenzek.duckstation", "activity": "com.github.stenzek.duckstation.EmulationActivity", "action": "android.intent.action.MAIN", "extras": [{ "key": "bootPath", "kind": "path" }] },
       { "package": "com.emulator.fpse64", "action": "android.intent.action.VIEW", "data": { "kind": "file_provider" } },
       { "package": "com.emulator.fpse", "action": "android.intent.action.VIEW", "data": { "kind": "file_provider" } }
     ]

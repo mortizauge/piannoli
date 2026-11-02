@@ -64,6 +64,20 @@ class EmulatorIntentBuilderTest {
         assertTrue(intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
     }
 
+    @Test fun `bundled DuckStation launches with an absolute file path`() {
+        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val config = PlatformConfig(tmp.root, ctx.assets).getAppConfig("PS", "com.github.stenzek.duckstation")
+        val file = rom()
+        val resolved = EmulatorIntentBuilder.resolve(ctx, config, file)
+        val intent = EmulatorIntentBuilder.toAndroidIntent(ctx, resolved, config)
+
+        assertEquals(ComponentName("com.github.stenzek.duckstation",
+            "com.github.stenzek.duckstation.EmulationActivity"), intent.component)
+        assertEquals(Intent.ACTION_MAIN, intent.action)
+        assertEquals(file.absolutePath, intent.getStringExtra("bootPath"))
+        assertNull(intent.data)
+    }
+
     @Test fun `bundled X1 BOX launches with a readable content URI string extra`() {
         val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
         val config = PlatformConfig(tmp.root, ctx.assets).getAppConfig("XBOX", "com.izzy2lost.x1box")
