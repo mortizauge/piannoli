@@ -77,6 +77,48 @@ class ScrapedArtworkStoreTest {
         assertFalse(saved.parentFile!!.listFiles()!!.any { it.extension == "part" })
     }
 
+    @Test fun `RomM uses validated image format and replaces old formats through shared storage`() {
+        okhttp3.mockwebserver.MockWebServer().use { server ->
+            server.start()
+            val http = dev.piannoli.scorza.romm.RommHttp({ null }, { false })
+            val downloader = dev.piannoli.scorza.romm.art.RommArtDownloader(http, store)
+            val previous = File(root, "Art/SNES/Game (USA).jpg").apply {
+                parentFile!!.mkdirs()
+                writeText("old art")
+            }
+            assertEquals(previous, artwork.find(rom.platformTag, rom.path))
+            val bytes = png()
+            server.enqueue(okhttp3.mockwebserver.MockResponse().setBody(okio.Buffer().write(bytes)))
+
+            assertTrue(downloader.download(server.url("/").toString(), "/cover.jpg", "SNES", "Game (USA)"))
+
+            val saved = File(root, "Art/SNES/Game (USA).png")
+            assertArrayEquals(bytes, saved.readBytes())
+            assertFalse(previous.exists())
+            assertEquals(saved, artwork.find(rom.platformTag, rom.path))
+            assertFalse(saved.parentFile!!.listFiles()!!.any { it.extension == "part" })
+        }
+    }
+
+    @Test fun `invalid or failed RomM downloads preserve existing artwork and cached lookup`() {
+        okhttp3.mockwebserver.MockWebServer().use { server ->
+            server.start()
+            val http = dev.piannoli.scorza.romm.RommHttp({ null }, { false })
+            val downloader = dev.piannoli.scorza.romm.art.RommArtDownloader(http, store)
+            val saved = store.install(rom, png())
+            val original = saved.readBytes()
+            for (response in listOf(
+                okhttp3.mockwebserver.MockResponse().setBody("not an image"),
+                okhttp3.mockwebserver.MockResponse().setResponseCode(500),
+            )) {
+                server.enqueue(response)
+                assertFalse(downloader.download(server.url("/").toString(), "/cover.png", "SNES", "Game (USA)"))
+                assertArrayEquals(original, saved.readBytes())
+                assertEquals(saved, artwork.find(rom.platformTag, rom.path))
+            }
+        }
+    }
+
     @Test fun `local game art is validated indexed and protected from skip scraping`() {
         val saved = png().inputStream().use { store.importGame(rom, it) }
         assertEquals(File(root, "Art/SNES/Game (USA).png"), saved)

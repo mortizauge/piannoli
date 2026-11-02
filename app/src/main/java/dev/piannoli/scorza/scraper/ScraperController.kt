@@ -306,7 +306,10 @@ class ScraperController @Inject constructor(
                     found = steamGrid.search(key, cleaned)
                 }
                 withContext(Dispatchers.Main) {
-                    if (found.isEmpty()) message(R.string.scraper_no_matches) else {
+                    if (found.isEmpty()) {
+                        if (history.isEmpty()) home(replace = true)
+                        message(R.string.scraper_no_matches)
+                    } else {
                         menu(text(R.string.steamgrid_results), found.map { match ->
                             "${match.name}\t#${match.id}" to { covers(match) }
                         } + listOf(text(R.string.scraper_edit_search) to { home() }))

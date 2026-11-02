@@ -52,6 +52,12 @@ data class ColorEntry(val key: String, @androidx.annotation.StringRes val labelR
 sealed interface DialogState {
     data object None : DialogState
     data object ArtworkImporting : DialogState
+    class DiscLoading : DialogState
+    data class DiscPicker(
+        val rom: dev.piannoli.scorza.model.Rom,
+        val files: List<java.io.File>,
+        val selectedIndex: Int = 0,
+    ) : DialogState
     data class ExtensionFilters(
         val tag: String,
         val title: String,
@@ -94,7 +100,11 @@ sealed interface DialogState {
     data class LaunchError(val message: String) : DialogState
     data class ContextMenu(val gameName: String, val selectedOption: Int = 0, val options: List<String>) : DialogState
     data class BulkContextMenu(val gamePaths: List<String>, val selectedOption: Int = 0, val options: List<String>) : DialogState
-    data class DeleteConfirm(val gameName: String, val bulkPaths: List<String>? = null) : DialogState
+    data class DeleteConfirm(
+        val gameName: String,
+        val bulkPaths: List<String>? = null,
+        val keepPlaylistDiscs: Boolean = false,
+    ) : DialogState
     data class RenameInput(
         val gameName: String,
         val searchScope: String? = null,
@@ -247,6 +257,9 @@ interface KeyboardHost {
 }
 
 fun DialogState.withMenuDelta(delta: Int): DialogState? = when (this) {
+    is DialogState.DiscPicker -> {
+        if (files.isEmpty()) null else copy(selectedIndex = ListNavigation.move(selectedIndex, delta, files.size))
+    }
     is DialogState.ScraperMenu -> {
         if (options.isEmpty()) null else copy(selectedIndex = ListNavigation.move(selectedIndex, delta, options.size))
     }

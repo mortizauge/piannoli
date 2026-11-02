@@ -126,6 +126,18 @@ class DialogInputHandler @Inject constructor(
                 gameListViewModel.reload()
                 launcherActions.rescanSystemList()
             }
+
+        }
+    }
+
+    private fun toggleDiscGrouping(rom: dev.piannoli.scorza.model.Rom) {
+        pendingContextReturn = null
+        nav.dialogState.value = DialogState.None
+        ioScope.launch {
+            romDirectoryWalker.toggleDiscGrouping(rom.path)
+            withContext(Dispatchers.Main) {
+                launcherActions.rescanWithProgress { gameListViewModel.reload() }
+            }
         }
     }
 
@@ -287,6 +299,7 @@ class DialogInputHandler @Inject constructor(
             is DialogState.ExtensionFilters -> if (ds.extensions.isNotEmpty())
                 nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, -1, ds.extensions.size))
             is DialogState.ContextMenu,
+            is DialogState.DiscPicker,
             is DialogState.ScraperMenu,
             is DialogState.BulkContextMenu,
             is DialogState.SaveSyncConflict,
@@ -377,6 +390,7 @@ class DialogInputHandler @Inject constructor(
             is DialogState.ExtensionFilters -> if (ds.extensions.isNotEmpty())
                 nav.dialogState.value = ds.copy(selectedIndex = ListNavigation.move(ds.selectedIndex, 1, ds.extensions.size))
             is DialogState.ContextMenu,
+            is DialogState.DiscPicker,
             is DialogState.ScraperMenu,
             is DialogState.BulkContextMenu,
             is DialogState.SaveSyncConflict,
@@ -540,6 +554,7 @@ class DialogInputHandler @Inject constructor(
                 if (ds.bulk) bulkScraper.back() else scraper.back()
             }
             is DialogState.ContextMenu -> onContextMenuConfirm(ds)
+            is DialogState.DiscPicker -> launcherActions.confirmDiscSelection(ds)
             is DialogState.BulkContextMenu -> onBulkContextMenuConfirm(ds)
             is DialogState.DeleteConfirm -> onDeleteConfirm(ds)
             is KeyboardHost -> {
@@ -1204,6 +1219,7 @@ class DialogInputHandler @Inject constructor(
             is DialogState.QuickMenu -> {
                 nav.dialogState.value = DialogState.None
             }
+            is DialogState.DiscPicker, is DialogState.DiscLoading -> nav.dialogState.value = DialogState.None
             is DialogState.QuickInfo -> {
                 openQuickMenu(dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.INFO)
             }
@@ -1681,6 +1697,10 @@ class DialogInputHandler @Inject constructor(
             }
             selected == MENU_HIDE_GAME -> setGameHidden(item, hidden = true)
             selected == MENU_UNHIDE_GAME -> setGameHidden(item, hidden = false)
+            selected == context.getString(dev.piannoli.scorza.R.string.multidisc_group) ||
+                selected == context.getString(dev.piannoli.scorza.R.string.multidisc_ungroup) -> {
+                if (rom != null) toggleDiscGrouping(rom)
+            }
             selected == MENU_RENAME -> {
                 if (collection != null) {
                     nav.dialogState.value = DialogState.CollectionRenameInput(
@@ -1705,7 +1725,10 @@ class DialogInputHandler @Inject constructor(
                 if (collection != null) {
                     nav.dialogState.value = DialogState.DeleteCollectionConfirm(collectionId = collection.id, displayName = collection.displayName)
                 } else {
-                    nav.dialogState.value = DialogState.DeleteConfirm(gameName = displayName)
+                    nav.dialogState.value = DialogState.DeleteConfirm(
+                        gameName = displayName,
+                        keepPlaylistDiscs = rom?.path?.let(dev.piannoli.scorza.util.MultiDisc::isPlaylist) == true,
+                    )
                 }
             }
             selected == MENU_MANAGE_COLLECTIONS -> {
@@ -1911,7 +1934,8 @@ class DialogInputHandler @Inject constructor(
                 pendingContextReturn = null
                 nav.dialogState.value = DialogState.DeleteConfirm(
                     gameName = context.resources.getQuantityString(dev.piannoli.scorza.R.plurals.bulk_delete_count, state.gamePaths.size, state.gamePaths.size),
-                    bulkPaths = state.gamePaths
+                    bulkPaths = state.gamePaths,
+                    keepPlaylistDiscs = state.gamePaths.any { dev.piannoli.scorza.util.MultiDisc.isPlaylist(File(it)) },
                 )
             }
             MENU_DELETE_ART -> {
@@ -1993,10 +2017,7 @@ class DialogInputHandler @Inject constructor(
                 .filter { it.rom.path.absolutePath in pathSet }
                 .map { it.rom }
             ioScope.launch {
-                toDelete.forEach { deleteRom(it) }
-                gameListViewModel.reload()
-                launcherActions.rescanSystemList()
-                withContext(Dispatchers.Main) { nav.dialogState.value = DialogState.None }
+                deleteRomsAndRefresh(toDelete)
             }
         } else {
             val item = gameListViewModel.getSelectedItem()
@@ -2024,11 +2045,23 @@ class DialogInputHandler @Inject constructor(
             }
             val rom = (item as? ListItem.RomItem)?.rom ?: return
             ioScope.launch {
-                deleteRom(rom)
-                gameListViewModel.reload()
-                launcherActions.rescanSystemList()
-                withContext(Dispatchers.Main) { nav.dialogState.value = DialogState.None }
+                deleteRomsAndRefresh(listOf(rom))
             }
+        }
+    }
+
+    private suspend fun deleteRomsAndRefresh(roms: List<dev.piannoli.scorza.model.Rom>) {
+        val error = try {
+            roms.forEach(::deleteRom)
+            null
+        } catch (e: java.io.IOException) {
+            ErrorLog.write("delete game: ${e.message}")
+            context.getString(dev.piannoli.scorza.R.string.multidisc_delete_error, e.message)
+        }
+        gameListViewModel.reload()
+        launcherActions.rescanSystemList()
+        withContext(Dispatchers.Main) {
+            nav.dialogState.value = if (error == null) DialogState.None else DialogState.LaunchError(error)
         }
     }
 
@@ -2159,6 +2192,12 @@ class DialogInputHandler @Inject constructor(
                 if (rom != null) {
                     val idx = indexOf(MENU_DELETE_GAME)
                     if (idx >= 0) add(idx, MENU_HIDE_GAME) else add(MENU_HIDE_GAME)
+                    if (romDirectoryWalker.canToggleDiscGrouping(rom.path)) {
+                        add(context.getString(if (romDirectoryWalker.discGroupingDisabled(rom.path))
+                            dev.piannoli.scorza.R.string.multidisc_group else dev.piannoli.scorza.R.string.multidisc_ungroup))
+                    }
+                    if (dev.piannoli.scorza.util.MultiDisc.isPlaylist(rom.path) ||
+                        romDirectoryWalker.canToggleDiscGrouping(rom.path)) remove(MENU_RENAME)
                 }
                 if (rom != null && dev.piannoli.scorza.ra.RaPreloadEligibility.isEligible(
                         platformTag = rom.platformTag,
@@ -2583,6 +2622,10 @@ class DialogInputHandler @Inject constructor(
         val rom = (item as? ListItem.RomItem)?.rom
         when {
             selected == MENU_HIDE_GAME -> setGameHidden(item, hidden = true)
+            selected == context.getString(dev.piannoli.scorza.R.string.multidisc_group) ||
+                selected == context.getString(dev.piannoli.scorza.R.string.multidisc_ungroup) -> {
+                if (rom != null) toggleDiscGrouping(rom)
+            }
             selected == MENU_PIN_TOOL || selected == MENU_UNPIN_TOOL -> {
                 val app = (item as? ListItem.AppItem)?.app ?: return
                 if (app.type == AppType.TOOL) setToolsPinned(listOf(app.id), selected == MENU_PIN_TOOL)
@@ -2605,7 +2648,10 @@ class DialogInputHandler @Inject constructor(
                 openEmulatorPicker(rom)
             }
             selected == MENU_DELETE || selected == MENU_DELETE_GAME -> {
-                nav.dialogState.value = DialogState.DeleteConfirm(gameName = displayName)
+                nav.dialogState.value = DialogState.DeleteConfirm(
+                    gameName = displayName,
+                    keepPlaylistDiscs = rom?.path?.let(dev.piannoli.scorza.util.MultiDisc::isPlaylist) == true,
+                )
             }
         }
     }
@@ -2706,28 +2752,7 @@ class DialogInputHandler @Inject constructor(
         val romFile = rom.path
         romDirectoryWalker.arcadeSupportDir(romFile, platformResolver.isArcade(rom.platformTag))
             ?.deleteRecursively()
-        val gameDir = romDirectoryWalker.gameDirectory(romFile)
-        when {
-            // gameDir covers every organizer bundle shape (m3u, cue, disc-group, stem-matching rom folder).
-            gameDir != null -> gameDir.deleteRecursively()
-            // User-authored m3u sitting alongside discs: delete each line and the m3u itself.
-            romFile.extension.equals("m3u", ignoreCase = true) -> {
-                val parent = romFile.parentFile
-                if (parent != null) {
-                    try {
-                        romFile.useLines { lines ->
-                            for (line in lines) {
-                                val trimmed = line.trim()
-                                if (trimmed.isEmpty() || trimmed.startsWith("#")) continue
-                                File(parent, trimmed).takeIf { it.exists() && !it.isDirectory }?.delete()
-                            }
-                        }
-                    } catch (_: Throwable) { }
-                }
-                romFile.delete()
-            }
-            else -> romFile.delete()
-        }
+        romDirectoryWalker.deleteGameFiles(romFile)
     }
 
     private fun romDir(): File =

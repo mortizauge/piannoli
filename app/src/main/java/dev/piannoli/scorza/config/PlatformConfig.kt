@@ -597,6 +597,7 @@ class PlatformConfig(
         "me.magnum.melonds" to "melonDS",
         "me.magnum.melonds.nightly" to "melonDS Nightly",
         "com.dsemu.drastic" to "DraStic",
+        "com.seedlessds.app" to "SeedlessDS",
         "com.fms.mg" to "MasterGear",
         "org.devmiyax.yabasanshioro2.pro" to "YabaSanshiro2 Pro",
         "org.devmiyax.yabasanshioro2" to "YabaSanshiro2",

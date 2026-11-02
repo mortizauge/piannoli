@@ -18,6 +18,8 @@ class PiannoliPathsProvider @Inject constructor(
     val root: File get() = File(settings.sdCardRoot)
     val showHiddenFiles: Boolean get() = settings.showHiddenFiles
     fun filteredExtensions(tag: String): Set<String> = settings.filteredExtensions(tag)
+    fun discGroupingDisabled(key: String): Boolean = settings.discGroupingDisabled(key)
+    fun setDiscGroupingDisabled(key: String, disabled: Boolean) = settings.setDiscGroupingDisabled(key, disabled)
 
     val romDir: File
         get() = settings.romDirectory.takeIf { it.isNotEmpty() }?.let { File(it) } ?: File(root, "Roms")

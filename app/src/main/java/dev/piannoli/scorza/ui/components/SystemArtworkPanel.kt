@@ -31,7 +31,7 @@ internal fun SystemArtworkPanel(
     isFallback: Boolean = false,
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        // Measure after the screen's title, footer, insets and artwork padding have taken their space.
+        // Measure after the screen's title, footer and insets have taken their space.
         Box(
             modifier = Modifier.fillMaxWidth().height(maxHeight * 0.4f).clipToBounds(),
             contentAlignment = Alignment.Center,

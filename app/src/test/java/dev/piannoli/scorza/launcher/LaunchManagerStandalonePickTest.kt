@@ -15,6 +15,8 @@ import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -207,6 +209,58 @@ class LaunchManagerStandalonePickTest {
         assertEquals("com.retroarch", dialog.packageName)
         assertEquals("GC", dialog.platformTag)
         verify(exactly = 0) { retroArchLauncher.launchRetroArchIntent(any(), any(), any(), any()) }
+    }
+
+    @Test fun `chosen disc uses the original games emulator override without changing identity`() {
+        val root = tmp.newFolder()
+        val mgr = manager(root)
+        val one = File(root, "Game (Disc 1).iso").apply { writeText("one") }
+        val two = File(root, "Game (Disc 2).iso").apply { writeText("two") }
+        val game = Rom(17L, one, "GC", "Game")
+        val config = AppConfig("com.picked.emu")
+        every { gameOverrides.get(game.id) } returns EmulatorChoice(EmulatorSource.Standalone, appPackage = config.packageName)
+        every { platformConfig.getAppConfig("GC", config.packageName) } returns config
+        assertNull(mgr.launchRom(game, two, listOf(one, two)))
+        verify { apkLauncher.launchWithRom(config.packageName, two, config) }
+        verify(exactly = 0) { apkLauncher.launchWithRom(any(), one, any()) }
+        assertEquals(one, game.path)
+    }
+
+    @Test fun `delfino receives chosen disc plus the ordered set for virtual and playlist games`() {
+        for (playlist in listOf(false, true)) {
+            val root = tmp.newFolder()
+            val mgr = manager(root)
+            val one = File(root, "Game (Disc 1).iso").apply { writeText("one") }
+            val two = File(root, "Game (Disc 2).iso").apply { writeText("two") }
+            val path = if (playlist) File(root, "Game.m3u").apply { writeText("${one.name}\n${two.name}\n") } else one
+            val game = Rom(17L, path, "GC", "Game")
+            every { gameOverrides.get(game.id) } returns EmulatorChoice(EmulatorSource.Standalone, appPackage = DELFINO)
+            every { platformConfig.getAppConfig("GC", DELFINO) } returns delfinoConfig()
+            assertNull(mgr.launchRom(game, two, listOf(one, two)))
+            verify {
+                delfinoLauncher.launch(match {
+                    it.romPath == two.absolutePath && it.discPaths == listOf(one.absolutePath, two.absolutePath)
+                }, DELFINO)
+            }
+        }
+    }
+
+    @Test fun `missing discs and cue tracks block launch and leave launcher usable`() {
+        val root = tmp.newFolder()
+        val mgr = manager(root)
+        val game = gcRom(root)
+        val missing = File(root, "missing.iso")
+        val playlist = File(root, "Game.m3u").apply { writeText("${missing.name}\n") }
+        val cue = File(root, "Game.cue").apply { writeText("""FILE "missing.bin" BINARY""") }
+        for (file in listOf(missing, playlist, cue)) {
+            assertTrue(mgr.launchRom(game, file) is dev.piannoli.scorza.ui.screens.DialogState.LaunchError)
+        }
+        verify(exactly = 0) { apkLauncher.launchWithRom(any(), any(), any()) }
+        verify(exactly = 0) { delfinoLauncher.launch(any(), any()) }
+        every { platformConfig.getUserAppMapping("GC") } returns null
+        every { platformConfig.getFirstInstalledApp("GC", any()) } returns AppConfig(DOLPHIN)
+        assertNull(mgr.launchRom(game, game.path))
+        verify { apkLauncher.launchWithRom(DOLPHIN, game.path, any()) }
     }
 
     companion object {

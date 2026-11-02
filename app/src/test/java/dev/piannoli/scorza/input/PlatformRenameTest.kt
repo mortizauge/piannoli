@@ -43,6 +43,7 @@ class PlatformRenameTest {
             mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), config,
             mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), nav, systems,
             mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
+            mockk(relaxed = true),
         )
         val input = DialogState.RenameInput("Game Boy", keyboard = KeyboardState(text = "Handheld"))
         nav.dialogState.value = input

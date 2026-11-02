@@ -96,8 +96,12 @@ class RomScanner(
                         for (rom in scannedByPath.values) {
                             val caseKey = rom.relativePath.lowercase(java.util.Locale.ROOT)
                             val oldPath = if (rom.relativePath in existing) rom.relativePath
+                            else if (rom.memberPaths.any { it in existing }) rom.memberPaths.first { it in existing }
                             else if (scannedByCase[caseKey]?.size == 1) existingByCase[caseKey]?.singleOrNull()?.key
                             else null
+                            // Keep an existing member as the identity when an earlier disc arrives.
+                            // Its artwork, favorites, history and overrides must not be rekeyed.
+                            val identityPath = oldPath?.takeIf { it in rom.memberPaths } ?: rom.relativePath
                             val current = existing[oldPath]
                             if (oldPath != null) retainedPaths.add(oldPath)
                             if (current == null) {
@@ -110,13 +114,13 @@ class RomScanner(
                                 insertStmt.bindText(6, TextNormalizer.normalize(rom.displayName))
                                 insertStmt.step()
                                 inserted++
-                            } else if (current.displayName != rom.displayName || current.tags != rom.tags || oldPath != rom.relativePath) {
+                            } else if (current.displayName != rom.displayName || current.tags != rom.tags || oldPath != identityPath) {
                                 updateStmt.reset()
                                 updateStmt.bindText(1, rom.displayName)
                                 updateStmt.bindText(2, NaturalSort.toSortKey(rom.displayName))
                                 if (rom.tags != null) updateStmt.bindText(3, rom.tags) else updateStmt.bindNull(3)
                                 updateStmt.bindText(4, TextNormalizer.normalize(rom.displayName))
-                                updateStmt.bindText(5, rom.relativePath)
+                                updateStmt.bindText(5, identityPath)
                                 updateStmt.bindLong(6, current.id)
                                 updateStmt.step()
                                 updated++

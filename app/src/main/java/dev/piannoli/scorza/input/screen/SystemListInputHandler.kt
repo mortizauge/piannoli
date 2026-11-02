@@ -42,6 +42,7 @@ class SystemListInputHandler @Inject constructor(
     private val settingsViewModel: SettingsViewModel,
     private val launcherActions: LauncherActions,
     private val rommConnectionStore: dev.piannoli.scorza.romm.RommConnectionStore,
+    private val romDirectoryWalker: dev.piannoli.scorza.util.RomDirectoryWalker,
 ) : ScreenInputHandler {
     override val navigationContext: Any get() = systemListViewModel.state.value
 
@@ -250,6 +251,11 @@ class SystemListInputHandler @Inject constructor(
                 ) add(context.getString(dev.piannoli.scorza.R.string.steamgrid_action))
                 add(MENU_MANAGE_COLLECTIONS)
                 add(MENU_EMULATOR_OVERRIDE)
+                val rom = (item.item as? ListItem.RomItem)?.rom
+                if (rom != null && romDirectoryWalker.canToggleDiscGrouping(rom.path)) {
+                    add(context.getString(if (romDirectoryWalker.discGroupingDisabled(rom.path))
+                        dev.piannoli.scorza.R.string.multidisc_group else dev.piannoli.scorza.R.string.multidisc_ungroup))
+                }
                 if (item.item is dev.piannoli.scorza.model.ListItem.RomItem ||
                     (item.item as? dev.piannoli.scorza.model.ListItem.AppItem)?.app?.type == dev.piannoli.scorza.model.AppType.PORT
                 ) add(dev.piannoli.scorza.input.MENU_HIDE_GAME)

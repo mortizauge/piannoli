@@ -80,6 +80,7 @@
       { "package": "me.magnum.melonds.nightly", "action": "me.magnum.melonds.nightly.LAUNCH_ROM", "extras": [{ "key": "uri", "kind": "uri_parcelable" }] },
       { "package": "com.hydra.noods", "extras": [{ "key": "LaunchPath", "kind": "path" }] },
       { "package": "com.dsemu.drastic", "activity": "com.dsemu.drastic.DraSticActivity", "action": "android.intent.action.VIEW", "data": { "kind": "absolute_path" } },
+      { "package": "com.seedlessds.app", "activity": "com.seedlessds.app.emu.EmulatorActivity", "action": "android.intent.action.VIEW", "data": { "kind": "file_provider" } },
       { "package": "com.sky.SkyEmu", "action": "android.intent.action.VIEW", "data": { "kind": "file_provider" } }
     ]
   },
@@ -146,7 +147,7 @@
     "name": "PlayStation",
     "core": "pcsx_rearmed_libretro",
     "app": [
-      { "package": "com.github.stenzek.duckstation", "activity": "com.github.stenzek.duckstation.EmulationActivity", "action": "android.intent.action.MAIN", "extras": [{ "key": "bootPath", "kind": "uri_string" }] },
+      { "package": "com.github.stenzek.duckstation", "activity": "com.github.stenzek.duckstation.EmulationActivity", "action": "android.intent.action.MAIN", "extras": [{ "key": "bootPath", "kind": "path" }] },
       { "package": "com.emulator.fpse64", "action": "android.intent.action.VIEW", "data": { "kind": "file_provider" } },
       { "package": "com.emulator.fpse", "action": "android.intent.action.VIEW", "data": { "kind": "file_provider" } }
     ]

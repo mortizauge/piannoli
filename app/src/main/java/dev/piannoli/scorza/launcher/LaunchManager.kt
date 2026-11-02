@@ -19,6 +19,7 @@ import dev.piannoli.scorza.model.Rom
 import dev.piannoli.scorza.settings.SettingsRepository
 import dev.piannoli.scorza.ui.screens.DialogState
 import dev.piannoli.scorza.util.ArchiveExtractor
+import dev.piannoli.scorza.util.MultiDisc
 import dev.piannoli.scorza.util.parseM3uDiscPaths
 import java.io.File
 import java.io.IOException
@@ -257,19 +258,20 @@ class LaunchManager(
         return result
     }
 
-    fun launchRom(rom: Rom): DialogState? {
+    fun launchRom(rom: Rom, selectedDisc: File? = null, discSet: List<File> = emptyList()): DialogState? {
         debugLog("launchRom entered: ${rom.platformTag} / ${rom.path.name} target=${rom.launchTarget::class.simpleName}")
         if (launchState.launching) return null
+        validateDiscLaunch(rom, selectedDisc)?.let { return it }
         launchState.launching = true
         launchState.lastLaunched = rom
-        val launchFile = resolveLaunchFile(rom, extractArchives = false)
+        val launchFile = selectedDisc ?: resolveLaunchFile(rom, extractArchives = false)
             ?: return errorAndReset(DialogState.LaunchError(context.getString(dev.piannoli.scorza.R.string.launch_error_resolve_file)))
 
         val gameOverride = overrideFor(rom)
         if (gameOverride?.source == EmulatorSource.Standalone && gameOverride.appPackage != null) {
             val cfg = platformConfig.getAppConfig(rom.platformTag, gameOverride.appPackage)
             return launchResultDialog(
-                launchStandalone(rom, launchFile, cfg), rom.platformTag, rom.id
+                launchStandalone(rom, launchFile, cfg, discSet), rom.platformTag, rom.id
             )
         }
         val overrideRomId = if (gameOverride != null) rom.id else null
@@ -291,7 +293,7 @@ class LaunchManager(
                         ?: platformConfig.getFirstInstalledApp(rom.platformTag, context.packageManager)
                         ?: platformConfig.getAppPackage(rom.platformTag)?.let { platformConfig.getAppConfig(rom.platformTag, it) }
                     if (cfg != null) {
-                        launchStandalone(rom, launchFile, cfg)
+                        launchStandalone(rom, launchFile, cfg, discSet)
                     } else {
                         LaunchResult.CoreNotInstalled("unknown")
                     }
@@ -365,14 +367,16 @@ class LaunchManager(
         return launchResultDialog(apkLauncher.launch(app.packageName))
     }
 
-    fun resumeRom(rom: Rom): DialogState? = resumeRom(rom, findMostRecentSlot(rom) ?: 0)
+    fun resumeRom(rom: Rom, selectedDisc: File? = null, discSet: List<File> = emptyList()): DialogState? =
+        resumeRom(rom, findMostRecentSlot(rom) ?: 0, selectedDisc, discSet)
 
-    fun resumeRom(rom: Rom, resumeSlot: Int): DialogState? {
+    fun resumeRom(rom: Rom, resumeSlot: Int, selectedDisc: File? = null, discSet: List<File> = emptyList()): DialogState? {
         debugLog("resumeRom entered: ${rom.platformTag} / ${rom.path.name} slot=$resumeSlot")
         if (launchState.launching) return null
+        validateDiscLaunch(rom, selectedDisc)?.let { return it }
         launchState.launching = true
         launchState.lastLaunched = rom
-        val launchFile = resolveLaunchFile(rom, extractArchives = false)
+        val launchFile = selectedDisc ?: resolveLaunchFile(rom, extractArchives = false)
             ?: return errorAndReset(DialogState.LaunchError(context.getString(dev.piannoli.scorza.R.string.launch_error_resolve_file)))
         val gameOverride = overrideFor(rom)
         // Resume had no standalone branch, so a platform mapped to an uninstalled standalone app
@@ -384,7 +388,7 @@ class LaunchManager(
                     ?.let { platformConfig.getAppConfig(rom.platformTag, it) }
                 ?: platformConfig.getFirstInstalledApp(rom.platformTag, context.packageManager)
             return launchResultDialog(
-                if (cfg != null) launchStandalone(rom, launchFile, cfg)
+                if (cfg != null) launchStandalone(rom, launchFile, cfg, discSet)
                 else LaunchResult.CoreNotInstalled("unknown"),
                 rom.platformTag, rom.id,
             )
@@ -427,6 +431,29 @@ class LaunchManager(
         launchState.launching = false
         launchState.lastLaunched = null
         return dialog
+    }
+
+    private fun validateDiscLaunch(rom: Rom, selectedDisc: File?): DialogState? {
+        val file = selectedDisc ?: rom.path
+        if (selectedDisc == null && !MultiDisc.isPlaylist(file) && MultiDisc.name(file) == null) return null
+        return try {
+            val discs = if (MultiDisc.isPlaylist(file)) MultiDisc.playlistDiscs(file) else listOf(file)
+            val missing = (listOf(file) + discs + discs.flatMap(MultiDisc::companions))
+                .firstOrNull { !it.isFile || !it.canRead() }
+            when {
+                missing != null -> errorAndReset(DialogState.LaunchError(
+                    context.getString(dev.piannoli.scorza.R.string.multidisc_missing, missing.absolutePath),
+                ))
+                discs.isEmpty() -> errorAndReset(DialogState.LaunchError(
+                    context.getString(dev.piannoli.scorza.R.string.multidisc_empty),
+                ))
+                else -> null
+            }
+        } catch (e: IOException) {
+            errorAndReset(DialogState.LaunchError(
+                context.getString(dev.piannoli.scorza.R.string.multidisc_error, e.message),
+            ))
+        }
     }
 
     private fun launchResultDialog(result: LaunchResult, platformTag: String? = null, romId: Long? = null): DialogState? {
@@ -472,18 +499,22 @@ class LaunchManager(
     private fun normalizedRomName(rom: Rom): String =
         Normalizer.normalize(rom.path.nameWithoutExtension, Normalizer.Form.NFC)
 
-    private fun launchStandalone(rom: Rom, launchFile: File, cfg: AppConfig): LaunchResult =
+    private fun launchStandalone(rom: Rom, launchFile: File, cfg: AppConfig, discSet: List<File>): LaunchResult =
         if (cfg.launchMethod == LaunchMethod.DELFINO) {
-            delfinoLauncher.launch(buildDelfinoParams(rom), cfg.packageName)
+            try {
+                delfinoLauncher.launch(buildDelfinoParams(rom, launchFile, discSet), cfg.packageName)
+            } catch (e: IOException) {
+                LaunchResult.Error(context.getString(dev.piannoli.scorza.R.string.multidisc_error, e.message))
+            }
         } else {
             apkLauncher.launchWithRom(cfg.packageName, launchFile, cfg)
         }
 
-    private fun buildDelfinoParams(rom: Rom): dev.piannoli.igm.DelfinoLaunchParams {
+    private fun buildDelfinoParams(rom: Rom, launchFile: File, discSet: List<File>): dev.piannoli.igm.DelfinoLaunchParams {
         val igm = buildRicottaIgm(rom)
         val paths = PiannoliPaths(settings.sdCardRoot)
         return dev.piannoli.igm.DelfinoLaunchParams(
-            romPath = rom.path.absolutePath,
+            romPath = launchFile.absolutePath,
             piannoliRoot = paths.root.absolutePath,
             savesDir = null,
             saveStatesDir = null,
@@ -495,8 +526,8 @@ class LaunchManager(
             colors = igm.colors,
             displaySettings = igm.displaySettings,
             inputMapping = igm.inputMapping,
-            discPaths = rom.path.takeIf { it.extension.equals("m3u", ignoreCase = true) }
-                ?.let(::parseM3uDiscPaths) ?: emptyList(),
+            discPaths = if (discSet.isNotEmpty()) discSet.map { it.absolutePath }
+                else if (MultiDisc.isPlaylist(rom.path)) parseM3uDiscPaths(rom.path) else emptyList(),
         )
     }
 

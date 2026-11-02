@@ -25,6 +25,21 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
     private val credPrefs: SharedPreferences =
         context.getSharedPreferences("piannoli_credentials", Context.MODE_PRIVATE)
 
+    fun discGroupingDisabled(key: String): Boolean =
+        key in prefs.getStringSet("ungrouped_disc_sets", emptySet()).orEmpty()
+
+    fun setDiscGroupingDisabled(key: String, disabled: Boolean) {
+        val keys = prefs.getStringSet("ungrouped_disc_sets", emptySet()).orEmpty().toMutableSet()
+        if (disabled) keys.add(key) else keys.remove(key)
+        prefs.edit().putStringSet("ungrouped_disc_sets", keys).apply()
+    }
+
+    fun lastDisc(groupPath: String): String? = prefs.getString("last_disc:$groupPath", null)
+
+    fun rememberDisc(groupPath: String, discPath: String) {
+        prefs.edit().putString("last_disc:$groupPath", discPath).apply()
+    }
+
     private var json = JSONObject()
     private val jsonLock = Any()
     private var settingsFile: File? = null

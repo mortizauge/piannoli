@@ -81,6 +81,29 @@ class SteamGridControllerTest {
         controller.confirm(menu.copy(selectedIndex = index))
     }
 
+    @Test fun `back from empty automatic search opens scraping menu and allows editing the query`() = scope.runTest {
+        settings.steamGridApiKey = "personal-key"
+        every { steam.search("personal-key", "Game") } returns emptyList()
+        val origin = DialogState.ContextMenu(gameName = "Game", options = listOf("Scrape Game"))
+        for (existingArt in listOf<File?>(null, File("Existing.png"))) {
+            nav.dialogState.value = origin
+            controller.open(rom.copy(artFile = existingArt))
+            if (existingArt != null) controller.confirmOverwrite()
+            runCurrent()
+            assertEquals(context.getString(R.string.scraper_no_matches),
+                (nav.dialogState.value as DialogState.ScraperStatus).message)
+            controller.back()
+            val menu = nav.dialogState.value as DialogState.ScraperMenu
+            assertEquals(context.getString(R.string.scraper_title, rom.displayName), menu.title)
+            click(R.string.scraper_query)
+            val input = nav.dialogState.value as DialogState.ScraperInput
+            assertEquals("Game", input.currentName)
+            controller.back()
+            controller.back()
+            assertEquals(origin, nav.dialogState.value)
+        }
+    }
+
     @Test fun `individual port uses same search cover and overwrite flow as games`() = scope.runTest {
         val port = dev.piannoli.scorza.model.App(1, dev.piannoli.scorza.model.AppType.PORT,
             "Game", "dev.game", artFile = File("Existing.png"))

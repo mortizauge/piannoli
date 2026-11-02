@@ -51,6 +51,28 @@ class RaHasherTest {
         assertNull(RaHasher.hashRom(playlist.absolutePath, 1))
     }
 
+    @Test fun `cartridge and PlayStation identification share nested quoted M3U8 resolution`() {
+        val cartridge = File(files.root, "game cart.bin").apply { writeBytes(ByteArray(8192) { it.toByte() }) }
+        val disc = File(files.root, "game disc.iso").apply { writeBytes(PlayStationHashFixture.iso()) }
+        val nested = File(files.root, ".multi").apply { mkdir() }
+        for ((file, console) in listOf(cartridge to 1, disc to 12)) {
+            val inner = File(nested, "inner.m3u8").apply { writeText("\"${file.toURI()}\"\nmissing-second.bin") }
+            val playlist = File(files.root, "outer.m3u8").apply {
+                writeText("\uFEFF#EXTM3U\n\".multi\\${inner.name}\"")
+            }
+            assertEquals(RaHasher.hashRom(file.absolutePath, console), RaHasher.hashRom(playlist.absolutePath, console))
+            if (console == 12) assertTrue(RaHasher.supports("PS", playlist))
+        }
+    }
+
+    @Test fun `empty and cyclic M3U8 playlists never receive an identity`() {
+        val playlist = File(files.root, "empty.m3u8").apply { writeText("\uFEFF#EXTM3U\n\n") }
+        for (console in listOf(1, 12)) assertNull(RaHasher.hashRom(playlist.absolutePath, console))
+        playlist.writeText("empty.m3u8")
+        for (console in listOf(1, 12)) assertNull(RaHasher.hashRom(playlist.absolutePath, console))
+        assertFalse(RaHasher.supports("PS", playlist))
+    }
+
     @Test fun `arcade identities use romset names and retain FBNeo subsystem prefixes`() {
         val archive = File(files.root, "game.zip").apply { writeText("romset") }
         assertEquals(hash("plain.bin", "game".toByteArray(), 1), RaHasher.hashRom(archive.absolutePath, 27))
