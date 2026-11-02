@@ -73,6 +73,7 @@ import dev.piannoli.ui.components.UpdateDownloadOverlay
 import dev.piannoli.ui.components.footerReservation
 import dev.piannoli.ui.components.listTitleSpacing
 import dev.piannoli.ui.components.pillItemHeight
+import dev.piannoli.ui.components.pillInternalPadding
 import dev.piannoli.ui.components.screenPadding
 import dev.piannoli.ui.theme.Spacing
 
@@ -1469,6 +1470,7 @@ internal fun ListDialogScreen(
                 if (subtitle != null) {
                     Text(
                         text = subtitle,
+                        modifier = Modifier.padding(start = pillInternalPadding()),
                         color = LocalPiannoliColors.current.text.copy(alpha = 0.8f),
                         fontSize = listFontSize * 0.75f,
                         lineHeight = listLineHeight * 0.75f,
