@@ -371,10 +371,8 @@ class GameListViewModel @Inject constructor(
         val combined = childItems + romItems + appItems
         val isFavorites = row.type == CollectionType.FAVORITES
         val items = if (isFavorites) combined else sortFavoritesFirst(combined)
-        val parent = row.parentId?.let { collectionsRepository.byId(it) }
-        val breadcrumb = if (parent != null) "/${row.displayName}" else row.displayName
         _state.value = State(
-            breadcrumb = breadcrumb,
+            breadcrumb = row.displayName,
             items = items,
             allItems = items,
             favoriteRomIds = collectionsRepository.favoriteRomIds(),
@@ -907,7 +905,7 @@ class GameListViewModel @Inject constructor(
                 val items = loadPlatformItems(tag, tags, subfolder)
                 val displayName = platformConfig.getDisplayName(tag)
                 val breadcrumb = if (breadcrumbStack.isEmpty()) displayName
-                else "/${breadcrumbStack.last()}"
+                else breadcrumbStack.last()
                 val (idx, scroll) = reloadPosition(items, preserveId, preserveIndex, preserveScroll, prevCount)
                 _state.value = State(
                     platformTag = tag,

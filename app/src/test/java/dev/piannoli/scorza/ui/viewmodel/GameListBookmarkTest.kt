@@ -231,6 +231,7 @@ class GameListBookmarkTest {
             collectionParents = listOf(CollectionBrowseParent(10, 1, 1)),
         )
         restore(origin)
+        assertEquals("Handhelds", model.state.value.breadcrumb)
         val before = model.bookmark()
         model.beginSearch()
         repeat(2) {
@@ -321,11 +322,13 @@ class GameListBookmarkTest {
         )
         restore(bookmark)
         assertEquals(path, model.state.value.subfolderPath)
+        assertEquals("English", model.state.value.breadcrumb)
         assertEquals("Metroid", (model.getSelectedItem() as ListItem.RomItem).rom.displayName)
         assertEquals(1, model.firstVisibleIndex)
         assertEquals(bookmark.folders, model.bookmark().folders)
         assertTrue(model.exitSubfolder())
         withTimeout(5_000) { model.state.first { it.subfolderPath == "RPGs" } }
+        assertEquals("RPGs", model.state.value.breadcrumb)
         assertEquals(1, model.state.value.selectedIndex)
         assertTrue(model.exitSubfolder())
         withTimeout(5_000) { model.state.first { it.subfolderPath == null } }
