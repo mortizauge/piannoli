@@ -144,13 +144,15 @@ fun GameListScreen(
     val favoriteRomIds = state.favoriteRomIds
     val favoriteAppIds = state.favoriteAppIds
     val showPlatformInSuffix = state.isCollection || state.platformTag == "recently_played"
-    val romTagSuffixById = remember(state.items, showPlatformInSuffix) {
+    val mixedPlatformCollection = state.isCollection && state.allItems.filterIsInstance<ListItem.RomItem>()
+        .map { it.rom.platformTag.uppercase() }.distinct().size > 1
+    val romTagSuffixById = remember(state.items, showPlatformInSuffix, mixedPlatformCollection) {
         val result = HashMap<Long, String>()
         val byName = state.items
             .filterIsInstance<ListItem.RomItem>()
             .groupBy { it.rom.displayName }
         for ((_, group) in byName) {
-            if (group.size < 2) continue
+            if (group.size < 2 && !mixedPlatformCollection) continue
             if (showPlatformInSuffix) {
                 val byPlatform = group.groupBy { it.rom.platformTag }
                 for ((platform, pgroup) in byPlatform) {
@@ -290,7 +292,7 @@ fun GameListScreen(
                 stringResource(R.string.label_play)
             }
             val resumeLabel = stringResource(R.string.label_resume)
-            val showNewButton = state.isCollectionsList || (state.isCollection && !state.isFavorites)
+            val showNewButton = state.isCollectionsList
             val leftItems = buildList {
                 add(buttonStyle.back to stringResource(R.string.label_back))
                 if (showNewButton) add(buttonStyle.west to stringResource(R.string.label_new))
