@@ -9,6 +9,7 @@ import dev.piannoli.scorza.db.RomsRepository
 import dev.piannoli.scorza.di.IoScope
 import dev.piannoli.scorza.db.AppsRepository
 import dev.piannoli.scorza.model.AppType
+import dev.piannoli.scorza.model.ListItem
 import dev.piannoli.scorza.model.Platform
 import dev.piannoli.scorza.navigation.NavigationController
 import dev.piannoli.scorza.settings.SettingsRepository
@@ -47,6 +48,8 @@ class BulkScraperController @Inject constructor(
     private var allPlatforms = false
     private var platform: String? = null
     private var systemPlatforms: List<Platform>? = null
+    private var listGames: List<ScrapeGame>? = null
+    private var listTitle: String? = null
     private var queue: List<ScrapeGame> = emptyList()
     private var index = 0
     private var saved = 0
@@ -70,7 +73,19 @@ class BulkScraperController @Inject constructor(
         open(null, availablePlatforms.toList(), onClose)
     }
 
-    private fun open(platformTag: String?, availableSystems: List<Platform>?, onClose: () -> Unit) {
+    fun openList(title: String, items: List<ListItem>, onClose: () -> Unit) {
+        open(null, null, onClose, title, items.mapNotNull {
+            when (it) {
+                is ListItem.RomItem -> ScrapeGame.RomGame(it.rom)
+                is ListItem.AppItem ->
+                    it.app.takeIf { app -> app.type == AppType.PORT }?.let { app -> ScrapeGame.PortGame(app) }
+                else -> null
+            }
+        })
+    }
+
+    private fun open(platformTag: String?, availableSystems: List<Platform>?, onClose: () -> Unit,
+        title: String? = null, members: List<ScrapeGame>? = null) {
         job?.cancel()
         dismissJob?.cancel()
         returnToQuickMenu = onClose
@@ -79,6 +94,8 @@ class BulkScraperController @Inject constructor(
         overwriteArtwork = false
         platform = platformTag
         systemPlatforms = availableSystems
+        listTitle = title
+        listGames = members
         allPlatforms = platformTag == null
         configure()
     }
@@ -124,7 +141,8 @@ class BulkScraperController @Inject constructor(
     private fun configure() {
         page = Page.CONFIG
         history.clear()
-        val title = if (systemPlatforms != null) context.getString(R.string.bulk_systems)
+        val title = if (listTitle != null) context.getString(R.string.bulk_list_games, listTitle)
+        else if (systemPlatforms != null) context.getString(R.string.bulk_systems)
         else if (allPlatforms) context.getString(R.string.bulk_all)
         else context.getString(R.string.bulk_platform_games,
             if (platform.equals("PORTS", ignoreCase = true)) context.getString(dev.piannoli.ui.R.string.origin_ports)
@@ -168,6 +186,7 @@ class BulkScraperController @Inject constructor(
         request {
             val selectedPlatform = platform
             queue = withContext(ioContext) {
+                listGames?.let { return@withContext it }
                 val systems = systemPlatforms
                 if (systems != null) {
                     val type = settings.systemArtworkType

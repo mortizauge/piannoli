@@ -43,6 +43,33 @@ class GameListFooterTest {
         compose.onAllNodesWithText("CHANGE").assertCountEquals(0)
     }
 
+    @Test fun `quick menu scrape label reflects list title or whole library`() {
+        val dialog = mutableStateOf(DialogState.QuickMenu(
+            rows = listOf(QuickMenuRow.SCRAPING, QuickMenuRow.SCRAPE_SYSTEMS),
+        ))
+        compose.setContent { DialogOverlay(dialog.value, null, 0, 22.sp, 32.sp, 8.dp) }
+        compose.onNodeWithText("Scrape All Games").assertIsDisplayed()
+        compose.onNodeWithText("Scrape All Systems").assertIsDisplayed()
+        compose.runOnIdle {
+            dialog.value = dialog.value.copy(rows = listOf(QuickMenuRow.SCRAPING), scrapeListTitle = "Game Boy")
+        }
+        compose.onNodeWithText("Scrape All Game Boy Games").assertIsDisplayed()
+        compose.onAllNodesWithText("Scrape All Systems").assertCountEquals(0)
+    }
+
+    @Test fun `quick menu displays list subtitle and omits it on the main menu`() {
+        val dialog = mutableStateOf(DialogState.QuickMenu(rows = listOf(QuickMenuRow.INFO)))
+        compose.setContent { DialogOverlay(dialog.value, null, 0, 22.sp, 32.sp, 8.dp) }
+        compose.onAllNodesWithText("Game Boy").assertCountEquals(0)
+        compose.runOnIdle { dialog.value = dialog.value.copy(listTitle = "Game Boy") }
+        compose.onNodeWithText("Game Boy").assertIsDisplayed()
+        compose.runOnIdle { dialog.value = dialog.value.copy(listTitle = "Collections") }
+        compose.onNodeWithText("Collections").assertIsDisplayed()
+        compose.onAllNodesWithText("Game Boy").assertCountEquals(0)
+        compose.runOnIdle { dialog.value = dialog.value.copy(listTitle = null) }
+        compose.onAllNodesWithText("Collections").assertCountEquals(0)
+    }
+
     @Test fun `mixed platform collections label unique names and retain platform tags when filtered`() {
         val mario = ListItem.RomItem(Rom(1, File("Mario.nes"), "NES", "Mario"))
         val sonic = ListItem.RomItem(Rom(2, File("Sonic.md"), "MD", "Sonic"))

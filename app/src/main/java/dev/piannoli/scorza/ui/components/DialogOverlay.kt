@@ -435,6 +435,7 @@ fun DialogOverlay(
                 backgroundImagePath = backgroundImagePath,
                 backgroundTint = backgroundTint,
                 title = stringResource(R.string.quick_menu_title),
+                subtitle = dialogState.listTitle,
                 listFontSize = listFontSize,
                 listLineHeight = listLineHeight,
                 leftBottomItems = if (dialogState.rows.getOrNull(dialogState.selectedIndex) ==
@@ -449,6 +450,8 @@ fun DialogOverlay(
                     itemHeight = itemHeight
                 ) { _, row, isSelected ->
                     val label = when {
+                        row == dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.SCRAPING && dialogState.scrapeListTitle != null ->
+                            stringResource(R.string.bulk_list_games, dialogState.scrapeListTitle)
                         row == dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.CONFLICTS && conflictCount > 0 ->
                             pluralStringResource(dev.piannoli.ui.R.plurals.quick_menu_conflicts, conflictCount, conflictCount)
                         row == dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.ERRORS && dialogState.syncErrorCount > 0 ->

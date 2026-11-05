@@ -182,9 +182,24 @@ class DialogInputHandler @Inject constructor(
         }
     }
 
+    private fun scrapeList(): Pair<String, List<ListItem>>? = when (nav.currentScreen) {
+        LauncherScreen.GameList -> gameListViewModel.state.value.takeUnless { it.isCollectionsList }
+            ?.let { it.breadcrumb to it.items }
+        LauncherScreen.SystemList -> if (settings.contentMode ==
+            dev.piannoli.scorza.settings.ContentMode.FIVE_GAME_HANDHELD) {
+            systemListViewModel.state.value.let { state ->
+                val title = settings.fghCollectionId?.let { collectionManager.byId(it)?.displayName }
+                    ?: context.getString(dev.piannoli.scorza.R.string.origin_collection)
+                title to state.items.filterIsInstance<SystemListViewModel.ListItem.GameItem>().map { it.item }
+            }
+        } else null
+        else -> null
+    }
+
     private suspend fun quickMenuState(selected: dev.piannoli.scorza.ui.quickmenu.QuickMenuRow? = null): DialogState.QuickMenu {
         val conflicts = saveSyncService.pendingConflictCount()
         val errors = saveSyncStatusHolder.errors.value.size
+        val list = scrapeList()
         val contentList = when (nav.currentScreen) {
             LauncherScreen.GameList -> gameListViewModel.canOrderContent()
             LauncherScreen.SystemList -> systemListViewModel.canOrderContent()
@@ -197,12 +212,16 @@ class DialogInputHandler @Inject constructor(
             syncErrors = errors,
             downloadCount = rommDownloader.queue.state.value.size,
             contentList = contentList,
+            gameList = list != null,
         )
         return DialogState.QuickMenu(
             rows = rows,
             selectedIndex = selected?.let { rows.indexOf(it).coerceAtLeast(0) } ?: 0,
             conflictCount = conflicts,
             syncErrorCount = errors,
+            scrapeListTitle = list?.first,
+            listTitle = if (nav.currentScreen == LauncherScreen.GameList)
+                gameListViewModel.state.value.breadcrumb else list?.first,
             order = when {
                 !contentList -> dev.piannoli.scorza.settings.LibraryOrder.DEFAULT
                 nav.currentScreen == LauncherScreen.SystemList -> systemListViewModel.selectedOrder()
@@ -704,8 +723,11 @@ class DialogInputHandler @Inject constructor(
                     dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.SYNC_HISTORY -> openSyncHistory()
                     dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.CONFLICTS -> openConflictsMenu(fromSaveSyncMenu = false)
                     dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.ERRORS -> openSyncErrors(fromSaveSyncMenu = false)
-                    dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.SCRAPING -> bulkScraper.open {
-                        openQuickMenu(dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.SCRAPING)
+                    dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.SCRAPING -> {
+                        val onClose = { openQuickMenu(dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.SCRAPING) }
+                        val list = scrapeList()
+                        if (list != null) bulkScraper.openList(list.first, list.second, onClose)
+                        else bulkScraper.open(onClose = onClose)
                     }
                     dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.SCRAPE_SYSTEMS ->
                         bulkScraper.openSystems(systemListViewModel.state.value.platforms) {

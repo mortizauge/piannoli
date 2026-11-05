@@ -70,8 +70,9 @@
     <string name="system_artwork_grid">Grid</string>
     <string name="system_artwork_logo">Logo</string>
     <string name="bulk_platform">Scrape platform</string>
-    <string name="bulk_all">Scrape All</string>
-    <string name="bulk_systems">Scrape Systems</string>
+    <string name="bulk_all">Scrape All Games</string>
+    <string name="bulk_systems">Scrape All Systems</string>
+    <string name="bulk_list_games">Scrape All %1$s Games</string>
     <string name="bulk_system">System %1$d/%2$d: %3$s</string>
     <string name="bulk_skip_system">Skip this system</string>
     <string name="bulk_platform_games">Scrape %1$s Games</string>
