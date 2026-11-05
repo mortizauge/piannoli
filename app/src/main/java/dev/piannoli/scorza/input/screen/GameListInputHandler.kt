@@ -272,7 +272,7 @@ class GameListInputHandler @Inject constructor(
             } else {
                 gameListViewModel.enterReorderMode()
             }
-        } else if (glState.subfolderPath == null) {
+        } else {
             if (gameListViewModel.isMultiSelectMode()) {
                 gameListViewModel.confirmMultiSelect()
             } else {

@@ -106,6 +106,30 @@ class GameListSelectReleaseTest {
         verify(exactly = 1) { glvm.enterReorderMode() }
     }
 
+    @Test fun subfolder_select_enters_and_confirms_multiselection_without_reordering() {
+        every { glvm.state } returns MutableStateFlow(GameListViewModel.State(
+            platformTag = "GB", subfolderPath = "RPG"))
+        handler.onSelect()
+        handler.onSelectUp()
+        verify(exactly = 1) { glvm.enterMultiSelect() }
+        verify(exactly = 0) { glvm.enterReorderMode() }
+        every { glvm.isMultiSelectMode() } returns true
+        handler.onSelect()
+        handler.onSelectUp()
+        verify(exactly = 1) { glvm.confirmMultiSelect() }
+    }
+
+    @Test fun manual_subfolder_hold_enters_multiselection_without_reordering_on_release() {
+        every { glvm.state } returns MutableStateFlow(GameListViewModel.State(
+            platformTag = "GB", subfolderPath = "RPG"))
+        every { glvm.isManualContentOrder() } returns true
+        handler.onSelect()
+        handler.collectionSelectHoldRunnable.run()
+        handler.onSelectUp()
+        verify(exactly = 1) { glvm.enterMultiSelect() }
+        verify(exactly = 0) { glvm.enterReorderMode() }
+    }
+
     @Test fun release_still_clears_press_state_so_the_next_tap_works() {
         handler.onSelect()
         handler.onSelectUp()
