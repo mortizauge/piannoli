@@ -255,6 +255,7 @@ class SettingsViewModel @Inject constructor(
         val hapticFeedback: Boolean,
         val controllerNotifications: Boolean,
         val showHiddenFiles: Boolean,
+        val defaultLibraryOrder: dev.piannoli.scorza.settings.LibraryOrder,
         val textSize: TextSize,
         val font: String,
         val title: String,
@@ -581,6 +582,8 @@ class SettingsViewModel @Inject constructor(
             "show_favorites" -> settings.showFavorites = !settings.showFavorites
             "scan_library" -> settings.scanLibraryAutomatically = !settings.scanLibraryAutomatically
             "hidden_files" -> settings.showHiddenFiles = !settings.showHiddenFiles
+            "default_library_order" -> settings.defaultLibraryOrder =
+                settings.defaultLibraryOrder.cycle(direction, allowDefault = false)
             "show_wifi" -> settings.showWifi = !settings.showWifi
             "show_bluetooth" -> settings.showBluetooth = !settings.showBluetooth
             "show_vpn" -> settings.showVpn = !settings.showVpn
@@ -775,6 +778,7 @@ class SettingsViewModel @Inject constructor(
         hapticFeedback = settings.hapticFeedback,
         controllerNotifications = settings.controllerNotifications,
         showHiddenFiles = settings.showHiddenFiles,
+        defaultLibraryOrder = settings.defaultLibraryOrder,
         textSize = settings.textSize,
         font = settings.font,
         title = settings.title,
@@ -828,6 +832,7 @@ class SettingsViewModel @Inject constructor(
         settings.hapticFeedback = snap.hapticFeedback
         settings.controllerNotifications = snap.controllerNotifications
         settings.showHiddenFiles = snap.showHiddenFiles
+        settings.defaultLibraryOrder = snap.defaultLibraryOrder
         settings.textSize = snap.textSize
         settings.font = snap.font
         settings.title = snap.title
@@ -918,6 +923,8 @@ class SettingsViewModel @Inject constructor(
             ))
         }
         "library" -> buildList {
+            add(SettingsItem("default_library_order", R.string.setting_default_order,
+                valueRes = settings.defaultLibraryOrder.labelRes))
             add(SettingsItem("hidden_files", R.string.setting_hidden_files,
                 valueRes = if (settings.showHiddenFiles) R.string.value_show else R.string.value_hide))
             val contentModeRes = when (settings.contentMode) {

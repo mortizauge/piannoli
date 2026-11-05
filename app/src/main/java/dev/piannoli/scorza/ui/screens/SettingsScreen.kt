@@ -11,6 +11,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -34,9 +39,6 @@ import dev.piannoli.ui.components.footerReservation
 import dev.piannoli.ui.components.listTitleSpacing
 import dev.piannoli.ui.components.pillItemHeight
 import dev.piannoli.ui.components.screenInsets
-import dev.piannoli.ui.components.screenBackground
-import androidx.compose.material3.Text
-import dev.piannoli.ui.theme.LocalPiannoliColors
 
 @Composable
 fun SettingsScreen(
@@ -187,24 +189,19 @@ fun SettingsScreen(
                 leftItems = listOf(buttonStyle.back to stringResource(R.string.label_back)),
                 rightItems = listOf(buttonStyle.confirm to stringResource(R.string.label_select))
             )
-            if (state.remappingAction != null) {
-                val colors = LocalPiannoliColors.current
-                Box(Modifier.fillMaxSize().screenBackground(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        val selected = state.items.getOrNull(state.selectedIndex)
-                        Text(
-                            text = selected?.let { stringResource(it.labelRes) }.orEmpty(),
-                            fontSize = listFontSize,
-                            color = colors.text,
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        Text(stringResource(R.string.remap_press_button), color = colors.text)
-                        Spacer(Modifier.height(16.dp))
-                        Text(stringResource(R.string.remap_cancel_hint), color = colors.text.copy(alpha = 0.6f))
-                    }
-                }
-            }
         }
+            if (state.remappingAction != null) {
+                var elapsed by remember(state.remappingAction) { mutableIntStateOf(0) }
+                LaunchedEffect(state.remappingAction) {
+                    val start = withFrameNanos { it }
+                    while (elapsed < 5000) {
+                        elapsed = withFrameNanos { ((it - start) / 1_000_000).toInt() }
+                    }
+                    viewModel.cancelRemapping()
+                }
+                val selected = state.items.getOrNull(state.selectedIndex)
+                ButtonRemappingPrompt(selected?.let { stringResource(it.labelRes) }.orEmpty(), elapsed)
+            }
         }
     }
 }

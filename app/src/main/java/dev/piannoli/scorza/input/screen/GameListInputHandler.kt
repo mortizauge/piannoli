@@ -48,7 +48,8 @@ class GameListInputHandler @Inject constructor(
         collectionSelectHeld = true
         val glState = gameListViewModel.state.value
         val isApkList = glState.platformTag == "tools" || glState.platformTag == "ports"
-        if ((glState.isCollection && !glState.isCollectionsList && glState.subfolderPath == null) || isApkList) {
+        if ((glState.isCollection && !glState.isCollectionsList && glState.subfolderPath == null) || isApkList ||
+            gameListViewModel.isManualContentOrder()) {
             if (!gameListViewModel.isReorderMode() && !gameListViewModel.isMultiSelectMode()) {
                 gameListViewModel.enterMultiSelect()
             }
@@ -255,7 +256,7 @@ class GameListInputHandler @Inject constructor(
             } else {
                 postSelectHoldTimer()
             }
-        } else if (isApkList) {
+        } else if (isApkList || gameListViewModel.isManualContentOrder()) {
             if (gameListViewModel.isReorderMode()) {
                 gameListViewModel.confirmReorder()
                 selectHandled = true
@@ -271,7 +272,7 @@ class GameListInputHandler @Inject constructor(
             } else {
                 gameListViewModel.enterReorderMode()
             }
-        } else if (glState.subfolderPath == null) {
+        } else {
             if (gameListViewModel.isMultiSelectMode()) {
                 gameListViewModel.confirmMultiSelect()
             } else {
@@ -287,7 +288,8 @@ class GameListInputHandler @Inject constructor(
         if (gameSelectDown && !nav.selectHeld && !collectionSelectHeld && !selectHandled) {
             val glState = gameListViewModel.state.value
             val isApkList = glState.platformTag == "tools" || glState.platformTag == "ports"
-            if (((glState.isCollection && !glState.isCollectionsList && glState.subfolderPath == null) || isApkList)
+            if (((glState.isCollection && !glState.isCollectionsList && glState.subfolderPath == null) || isApkList ||
+                    gameListViewModel.isManualContentOrder())
                 && !gameListViewModel.isReorderMode() && !gameListViewModel.isMultiSelectMode()) {
                 gameListViewModel.enterReorderMode()
             }

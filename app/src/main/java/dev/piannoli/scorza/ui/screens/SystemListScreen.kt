@@ -112,6 +112,7 @@ fun SystemListScreen(
     val defaultCategoryArtwork = if (selectedArtWidth <= 0) null else when (selectedItem) {
         ListItem.FavoritesItem -> R.drawable.category_favorites
         ListItem.RecentlyPlayedItem -> R.drawable.category_recently_played
+        ListItem.CollectionsFolder -> R.drawable.category_collections
         is ListItem.ToolsFolder -> R.drawable.category_apps
         else -> null
     }
@@ -155,6 +156,11 @@ fun SystemListScreen(
             .eachCount()
             .filterValues { it > 1 }
             .keys
+    }
+    val mixedPlatforms = remember(state.items) {
+        state.items.filterIsInstance<ListItem.GameItem>()
+            .mapNotNull { (it.item as? dev.piannoli.scorza.model.ListItem.RomItem)?.rom?.platformTag?.uppercase() }
+            .distinct().size > 1
     }
 
     ScreenBackground(backgroundImagePath = backgroundImagePath, backgroundTint = backgroundTint) {
@@ -243,7 +249,7 @@ fun SystemListScreen(
                     }
                     val showReorder = state.reorderMode && isSelected && (item is ListItem.PlatformItem || item is ListItem.ToolsFolder || item is ListItem.PortsFolder || item is ListItem.CollectionItem || item is ListItem.GameItem)
                     val tagSuffix = (item as? ListItem.GameItem)
-                        ?.takeIf { it.displayName in duplicateGameNames }
+                        ?.takeIf { mixedPlatforms || it.displayName in duplicateGameNames }
                         ?.let { gi ->
                             val platformTag = (gi.item as? dev.piannoli.scorza.model.ListItem.RomItem)?.rom?.platformTag
                             val platformPart = platformTag?.let { "(${it.uppercase()})" }
@@ -280,6 +286,7 @@ fun SystemListScreen(
                                 when (selectedItem) {
                                     ListItem.FavoritesItem -> favoritesLabel
                                     ListItem.RecentlyPlayedItem -> recentlyPlayedLabel
+                                    ListItem.CollectionsFolder -> collectionsLabel
                                     is ListItem.ToolsFolder -> selectedItem.name
                                     else -> null
                                 }

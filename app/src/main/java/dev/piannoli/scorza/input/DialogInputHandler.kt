@@ -182,21 +182,51 @@ class DialogInputHandler @Inject constructor(
         }
     }
 
+    private fun scrapeList(): Pair<String, List<ListItem>>? = when (nav.currentScreen) {
+        LauncherScreen.GameList -> gameListViewModel.state.value.takeUnless { it.isCollectionsList }
+            ?.let { it.breadcrumb to it.items }
+        LauncherScreen.SystemList -> if (settings.contentMode ==
+            dev.piannoli.scorza.settings.ContentMode.FIVE_GAME_HANDHELD) {
+            systemListViewModel.state.value.let { state ->
+                val title = settings.fghCollectionId?.let { collectionManager.byId(it)?.displayName }
+                    ?: context.getString(dev.piannoli.scorza.R.string.origin_collection)
+                title to state.items.filterIsInstance<SystemListViewModel.ListItem.GameItem>().map { it.item }
+            }
+        } else null
+        else -> null
+    }
+
     private suspend fun quickMenuState(selected: dev.piannoli.scorza.ui.quickmenu.QuickMenuRow? = null): DialogState.QuickMenu {
         val conflicts = saveSyncService.pendingConflictCount()
         val errors = saveSyncStatusHolder.errors.value.size
+        val list = scrapeList()
+        val contentList = when (nav.currentScreen) {
+            LauncherScreen.GameList -> gameListViewModel.canOrderContent()
+            LauncherScreen.SystemList -> systemListViewModel.canOrderContent()
+            else -> false
+        }
         val rows = dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.visibleRows(
             rommPaired = rommStore.isConfigured,
             saveSyncEnabled = settings.rommSaveSyncEnabled,
             pendingConflicts = conflicts,
             syncErrors = errors,
             downloadCount = rommDownloader.queue.state.value.size,
+            contentList = contentList,
+            gameList = list != null,
         )
         return DialogState.QuickMenu(
             rows = rows,
             selectedIndex = selected?.let { rows.indexOf(it).coerceAtLeast(0) } ?: 0,
             conflictCount = conflicts,
             syncErrorCount = errors,
+            scrapeListTitle = list?.first,
+            listTitle = if (nav.currentScreen == LauncherScreen.GameList)
+                gameListViewModel.state.value.breadcrumb else list?.first,
+            order = when {
+                !contentList -> dev.piannoli.scorza.settings.LibraryOrder.DEFAULT
+                nav.currentScreen == LauncherScreen.SystemList -> systemListViewModel.selectedOrder()
+                else -> gameListViewModel.selectedOrder()
+            },
         )
     }
 
@@ -482,6 +512,7 @@ class DialogInputHandler @Inject constructor(
         val ds = nav.dialogState.value
         if (ds == DialogState.None) return false
         when (ds) {
+            is DialogState.QuickMenu -> cycleQuickOrder(ds, -1)
             is DialogState.ScraperMenu -> if (ds.bulk) bulkScraper.cycle(ds)
             is DialogState.QuickInfo -> {
                 if (ds.addresses.size > 1) {
@@ -513,6 +544,7 @@ class DialogInputHandler @Inject constructor(
         val ds = nav.dialogState.value
         if (ds == DialogState.None) return false
         when (ds) {
+            is DialogState.QuickMenu -> cycleQuickOrder(ds, 1)
             is DialogState.ScraperMenu -> if (ds.bulk) bulkScraper.cycle(ds)
             is DialogState.QuickInfo -> {
                 if (ds.addresses.size > 1) {
@@ -538,6 +570,16 @@ class DialogInputHandler @Inject constructor(
             else -> {}
         }
         return true
+    }
+
+    private fun cycleQuickOrder(ds: DialogState.QuickMenu, direction: Int) {
+        if (ds.rows.getOrNull(ds.selectedIndex) != dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.ORDER_BY) return
+        val order = when (nav.currentScreen) {
+            LauncherScreen.GameList -> gameListViewModel.cycleOrder(direction)
+            LauncherScreen.SystemList -> systemListViewModel.cycleOrder(direction)
+            else -> return
+        }
+        nav.dialogState.value = ds.copy(order = order)
     }
 
     override fun onConfirm(): Boolean {
@@ -672,6 +714,7 @@ class DialogInputHandler @Inject constructor(
             is DialogState.PlatformResetConfirm -> onPlatformReset(ds)
             is DialogState.QuickMenu -> {
                 when (ds.rows.getOrNull(ds.selectedIndex)) {
+                    dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.ORDER_BY -> Unit
                     dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.ROMM -> {
                         nav.dialogState.value = DialogState.None
                         nav.push(dev.piannoli.scorza.navigation.LauncherScreen.RommPlatformList(returnDialog = ds))
@@ -680,8 +723,11 @@ class DialogInputHandler @Inject constructor(
                     dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.SYNC_HISTORY -> openSyncHistory()
                     dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.CONFLICTS -> openConflictsMenu(fromSaveSyncMenu = false)
                     dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.ERRORS -> openSyncErrors(fromSaveSyncMenu = false)
-                    dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.SCRAPING -> bulkScraper.open {
-                        openQuickMenu(dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.SCRAPING)
+                    dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.SCRAPING -> {
+                        val onClose = { openQuickMenu(dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.SCRAPING) }
+                        val list = scrapeList()
+                        if (list != null) bulkScraper.openList(list.first, list.second, onClose)
+                        else bulkScraper.open(onClose = onClose)
                     }
                     dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.SCRAPE_SYSTEMS ->
                         bulkScraper.openSystems(systemListViewModel.state.value.platforms) {
@@ -1678,6 +1724,10 @@ class DialogInputHandler @Inject constructor(
                     }
                     is ListItem.SubfolderItem ->
                         activityActions.chooseFolderArtwork(item.artworkPlatformTag ?: glState.platformTag, item.path)
+                    is ListItem.CollectionItem ->
+                        activityActions.chooseSystemArtwork("@collection-${item.collection.id}", settings.systemArtworkType)
+                    is ListItem.ChildCollectionItem ->
+                        activityActions.chooseSystemArtwork("@collection-${item.collection.id}", settings.systemArtworkType)
                     else -> {}
                 }
             }
@@ -1741,6 +1791,26 @@ class DialogInputHandler @Inject constructor(
             selected == MENU_DELETE_ART ||
                 selected == context.getString(dev.piannoli.scorza.R.string.delete_shared_folder_artwork) -> {
                 pendingContextReturn = null
+                if (collection != null) {
+                    val tag = "@collection-${collection.id}"
+                    val type = settings.systemArtworkType
+                    ioScope.launch {
+                        try {
+                            systemListViewModel.deleteSystemArtwork(tag, type)
+                            withContext(Dispatchers.Main) {
+                                gameListViewModel.reload()
+                                launcherActions.rescanSystemList(scanDisk = false)
+                                nav.dialogState.value = DialogState.None
+                            }
+                        } catch (e: java.io.IOException) {
+                            withContext(Dispatchers.Main) {
+                                nav.dialogState.value = DialogState.LaunchError(
+                                    context.getString(dev.piannoli.scorza.R.string.system_artwork_delete_failed))
+                            }
+                        }
+                    }
+                    return
+                }
                 if (rom != null) {
                     rom.artFile?.delete()
                     artworkLookup.invalidate(rom.platformTag)
@@ -2123,7 +2193,10 @@ class DialogInputHandler @Inject constructor(
 
     fun buildGameContextOptions(item: ListItem, glState: GameListViewModel.State): List<String> {
         if (glState.isHiddenGames) return listOf(MENU_UNHIDE_GAME)
-        if (glState.isCollectionsList || item is ListItem.ChildCollectionItem) return listOf(MENU_RENAME, MENU_CHILD_COLLECTIONS, MENU_DELETE)
+        if (item is ListItem.CollectionItem || item is ListItem.ChildCollectionItem) return listOf(
+            context.getString(dev.piannoli.scorza.R.string.choose_artwork), MENU_DELETE_ART,
+            MENU_RENAME, MENU_CHILD_COLLECTIONS, MENU_DELETE,
+        )
         if (item is ListItem.SubfolderItem) return buildList {
             val tag = item.artworkPlatformTag ?: glState.platformTag
             add(context.getString(dev.piannoli.scorza.R.string.choose_folder_artwork))

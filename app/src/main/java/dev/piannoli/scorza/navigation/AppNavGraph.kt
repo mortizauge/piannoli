@@ -616,6 +616,7 @@ fun AppNavGraph(
                 inputRouter?.let { dev.piannoli.scorza.input.screen.compose.ScreenInput(it.gameListHandler) }
                 GameListScreen(
                     viewModel = gameListViewModel,
+                    systemArtworkType = appSettings.systemArtworkType,
                     backgroundImagePath = appSettings.backgroundImagePath,
                     backgroundTint = appSettings.backgroundTint,
                     listFontSize = listFontSize,

@@ -4,6 +4,19 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class QuickMenuRowsTest {
+    @Test fun `game lists hide system scraping independently of order controls`() {
+        for (canOrder in listOf(false, true)) {
+            val rows = QuickMenuRow.visibleRows(rommPaired = false, contentList = canOrder, gameList = true)
+            assertEquals(true, QuickMenuRow.SCRAPING in rows)
+            assertEquals(false, QuickMenuRow.SCRAPE_SYSTEMS in rows)
+        }
+    }
+
+    @Test fun `order setting is first only for local content lists`() {
+        assertEquals(QuickMenuRow.ORDER_BY, QuickMenuRow.visibleRows(rommPaired = true,
+            contentList = true, downloadCount = 2).first())
+        assertEquals(false, QuickMenuRow.ORDER_BY in QuickMenuRow.visibleRows(rommPaired = true))
+    }
 
     @Test fun `romm row only present when paired`() {
         val withRomm = QuickMenuRow.visibleRows(rommPaired = true)

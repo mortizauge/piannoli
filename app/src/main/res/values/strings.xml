@@ -1,4 +1,11 @@
 <resources>
+    <string name="order_platform">Platform</string>
+    <string name="order_by">Order by</string>
+    <string name="setting_default_order">Default order</string>
+    <string name="order_alphabetical">A-Z</string>
+    <string name="order_last_played">Last played</string>
+    <string name="order_manual">Manual</string>
+    <string name="order_default">Default</string>
     <string name="app_name" translatable="false">Piannoli</string>
     <string name="multidisc_loading">Reading discs...</string>
     <string name="multidisc_choose">Choose disc</string>
@@ -63,8 +70,9 @@
     <string name="system_artwork_grid">Grid</string>
     <string name="system_artwork_logo">Logo</string>
     <string name="bulk_platform">Scrape platform</string>
-    <string name="bulk_all">Scrape All</string>
-    <string name="bulk_systems">Scrape Systems</string>
+    <string name="bulk_all">Scrape All Games</string>
+    <string name="bulk_systems">Scrape All Systems</string>
+    <string name="bulk_list_games">Scrape All %1$s Games</string>
     <string name="bulk_system">System %1$d/%2$d: %3$s</string>
     <string name="bulk_skip_system">Skip this system</string>
     <string name="bulk_platform_games">Scrape %1$s Games</string>

@@ -83,6 +83,7 @@ class SystemListScanTargetsTest {
             piannoliPaths = paths,
             romDirectoryWatcher = mockk<RomDirectoryWatcher>(relaxed = true),
             scanScheduler = scheduler,
+            ordering = mockk(relaxed = true),
         ).also { created.add(it) }
     }
 

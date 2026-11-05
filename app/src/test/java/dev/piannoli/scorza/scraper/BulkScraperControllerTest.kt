@@ -95,6 +95,45 @@ class BulkScraperControllerTest {
 
     private fun selectFirst() = controller.confirm(nav.dialogState.value as DialogState.ScraperMenu)
 
+    @Test fun `list scraping uses only supplied ROMs and ports without expanding folders or the library`() = scope.runTest {
+        val port = dev.piannoli.scorza.model.App(2, dev.piannoli.scorza.model.AppType.PORT, "Game", "dev.port")
+        val tool = port.copy(id = 3, type = dev.piannoli.scorza.model.AppType.TOOL)
+        every { artwork.installPort(port, bytes) } returns File("port.png")
+        controller.openList("Favorites", listOf(
+            dev.piannoli.scorza.model.ListItem.RomItem(game),
+            dev.piannoli.scorza.model.ListItem.RomItem(game),
+            dev.piannoli.scorza.model.ListItem.AppItem(port),
+            dev.piannoli.scorza.model.ListItem.AppItem(tool),
+            dev.piannoli.scorza.model.ListItem.SubfolderItem("Other", "Other"),
+        )) {}
+        val config = nav.dialogState.value as DialogState.ScraperMenu
+        assertEquals("Scrape All Favorites Games", config.title)
+        assertFalse(config.options.any { it.startsWith(context.getString(R.string.bulk_subfolders)) })
+        click(R.string.bulk_start)
+        advanceUntilIdle()
+        verify(exactly = 1) {
+            artwork.install(game, bytes)
+            artwork.installPort(port, bytes)
+        }
+        verify(exactly = 0) {
+            roms.visiblePlatformCounts()
+            roms.romsForScraping(any(), any())
+            apps.all(any())
+        }
+    }
+
+    @Test fun `empty list never falls back to library and opening library clears list scope`() = scope.runTest {
+        controller.openList("Empty", emptyList()) {}
+        click(R.string.bulk_start)
+        runCurrent()
+        verify(exactly = 0) { roms.visiblePlatformCounts(); steam.search(any(), any()) }
+        controller.open {}
+        assertEquals("Scrape All Games", (nav.dialogState.value as DialogState.ScraperMenu).title)
+        click(R.string.bulk_start)
+        advanceUntilIdle()
+        verify(exactly = 1) { roms.visiblePlatformCounts(); artwork.install(game, bytes) }
+    }
+
     @Test fun `system bulk scrapes available platform display names and ports using selected resource type`() = scope.runTest {
         val type = SystemArtworkType.ICON
         every { settings.systemArtworkType } returns type

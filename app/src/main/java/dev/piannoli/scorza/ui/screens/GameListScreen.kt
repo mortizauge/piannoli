@@ -103,8 +103,16 @@ fun GameListScreen(
     artRadius: Int = 25,
     artScale: ArtScale = ArtScale.FIT,
     buttonStyle: ButtonStyle = ButtonStyle(),
+    systemArtworkType: dev.piannoli.scorza.settings.SystemArtworkType =
+        dev.piannoli.scorza.settings.SystemArtworkType.LOGO,
 ) {
     val state by viewModel.state.collectAsStateWhileActive()
+    val collectionArtworkRevision by dev.piannoli.scorza.scraper.SystemArtwork.revision.collectAsStateWhileActive()
+    fun artworkPath(item: ListItem): String? = when (item) {
+        is ListItem.CollectionItem -> viewModel.collectionArtworkFile(item.collection.id, systemArtworkType)?.absolutePath
+        is ListItem.ChildCollectionItem -> viewModel.collectionArtworkFile(item.collection.id, systemArtworkType)?.absolutePath
+        else -> item.artPath
+    }
     val itemHeight = pillItemHeight(listLineHeight, listVerticalPadding)
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = state.scrollTarget.coerceAtLeast(0))
 
@@ -120,14 +128,15 @@ fun GameListScreen(
     val resumeKey = selected?.resumeKey
     val hasResumeState = resumeKey != null && resumableGames.contains(resumeKey)
 
-    val artPath = if (artWidth > 0) selected?.artPath else null
+    val artPath = if (artWidth > 0) selected?.let(::artworkPath) else null
     var artRowSize by remember { mutableStateOf(IntSize.Zero) }
     val artPanel = artworkPanelSize(artRowSize, artWidth)
-    val artworkWindow = remember(state.items, state.selectedIndex, state.artworkRevision, artPanel, artScale) {
+    val artworkWindow = remember(state.items, state.selectedIndex, state.artworkRevision, collectionArtworkRevision,
+        systemArtworkType, artPanel, artScale) {
         if (artPanel == null) return@remember ArtworkWindow.EMPTY
         artworkWindow(state.items.size, state.selectedIndex) { index ->
-            state.items[index].artPath?.let {
-                ArtworkRequest(it, state.artworkRevision, artPanel.width, artPanel.height, artScale)
+            artworkPath(state.items[index])?.let {
+                ArtworkRequest(it, state.artworkRevision + collectionArtworkRevision, artPanel.width, artPanel.height, artScale)
             }
         }
     }
@@ -144,13 +153,15 @@ fun GameListScreen(
     val favoriteRomIds = state.favoriteRomIds
     val favoriteAppIds = state.favoriteAppIds
     val showPlatformInSuffix = state.isCollection || state.platformTag == "recently_played"
-    val romTagSuffixById = remember(state.items, showPlatformInSuffix) {
+    val mixedPlatformCollection = state.isCollection && state.allItems.filterIsInstance<ListItem.RomItem>()
+        .map { it.rom.platformTag.uppercase() }.distinct().size > 1
+    val romTagSuffixById = remember(state.items, showPlatformInSuffix, mixedPlatformCollection) {
         val result = HashMap<Long, String>()
         val byName = state.items
             .filterIsInstance<ListItem.RomItem>()
             .groupBy { it.rom.displayName }
         for ((_, group) in byName) {
-            if (group.size < 2) continue
+            if (group.size < 2 && !mixedPlatformCollection) continue
             if (showPlatformInSuffix) {
                 val byPlatform = group.groupBy { it.rom.platformTag }
                 for ((platform, pgroup) in byPlatform) {
@@ -290,7 +301,7 @@ fun GameListScreen(
                 stringResource(R.string.label_play)
             }
             val resumeLabel = stringResource(R.string.label_resume)
-            val showNewButton = state.isCollectionsList || (state.isCollection && !state.isFavorites)
+            val showNewButton = state.isCollectionsList
             val leftItems = buildList {
                 add(buttonStyle.back to stringResource(R.string.label_back))
                 if (showNewButton) add(buttonStyle.west to stringResource(R.string.label_new))

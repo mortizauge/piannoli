@@ -365,6 +365,33 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         get() = jsonRead { optBoolean("show_hidden_files", false) }
         set(value) = jsonWrite { put("show_hidden_files", value) }
 
+    var defaultLibraryOrder: LibraryOrder
+        get() = LibraryOrder.fromStored(jsonRead { optString("default_library_order") }, LibraryOrder.ALPHABETICAL)
+            .takeUnless { it == LibraryOrder.DEFAULT } ?: LibraryOrder.ALPHABETICAL
+        set(value) {
+            require(value != LibraryOrder.DEFAULT)
+            jsonWrite { put("default_library_order", value.name) }
+        }
+
+    fun listOrder(key: String): LibraryOrder = LibraryOrder.fromStored(
+        jsonRead { optJSONObject("list_orders")?.optString(key).orEmpty() }, LibraryOrder.DEFAULT,
+    )
+
+    fun setListOrder(key: String, value: LibraryOrder) = jsonWrite {
+        val orders = optJSONObject("list_orders") ?: JSONObject().also { put("list_orders", it) }
+        if (value == LibraryOrder.DEFAULT) orders.remove(key) else orders.put(key, value.name)
+    }
+
+    fun manualListOrder(key: String): List<String> = jsonRead {
+        val entries = optJSONObject("manual_list_orders")?.optJSONArray(key)
+        if (entries == null) emptyList() else (0 until entries.length()).map { entries.getString(it) }
+    }
+
+    fun setManualListOrder(key: String, ids: List<String>) = jsonWrite {
+        val orders = optJSONObject("manual_list_orders") ?: JSONObject().also { put("manual_list_orders", it) }
+        orders.put(key, org.json.JSONArray(ids))
+    }
+
     var piannoliBindings: Map<dev.piannoli.ui.MenuAction, dev.piannoli.ui.MenuAction>
         get() = jsonRead {
             val saved = optJSONObject("piannoli_bindings") ?: return@jsonRead emptyMap()

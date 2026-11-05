@@ -33,6 +33,57 @@ class SettingsRepositoryTest {
 
     @Test
     @Config(sdk = [28])
+    fun `library orders persist independently and default order supports preview cancellation`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        Shadows.shadowOf(context as android.app.Application)
+            .grantPermissions(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+        writeSettingsJson(tmp.root, "{}")
+        val settings = newRepo()
+        settings.sdCardRoot = tmp.root.absolutePath
+        settings.setupCompleted = true
+        val paths = dev.piannoli.scorza.di.PiannoliPathsProvider(settings)
+        val ordering = dev.piannoli.scorza.model.LibraryOrdering(settings, paths)
+        val key = ordering.key("platform", "GB", "RPG")
+        val other = ordering.key("platform", "GB")
+        try {
+            assertEquals(LibraryOrder.ALPHABETICAL, settings.defaultLibraryOrder)
+            val viewModel = SettingsViewModel(settings, AppFonts(context), context, mockk(relaxed = true))
+            viewModel.load()
+            viewModel.enterSubCategory("library", R.string.settings_library)
+            assertEquals("default_library_order", viewModel.state.value.items.first().key)
+            viewModel.cycleSelected(1)
+            assertEquals(LibraryOrder.LAST_PLAYED, settings.defaultLibraryOrder)
+            viewModel.cycleSelected(1)
+            assertEquals(LibraryOrder.MANUAL, settings.defaultLibraryOrder)
+            viewModel.cycleSelected(1)
+            assertEquals(LibraryOrder.ALPHABETICAL, settings.defaultLibraryOrder)
+            viewModel.cycleSelected(-1)
+            assertEquals(LibraryOrder.MANUAL, settings.defaultLibraryOrder)
+            viewModel.cancel()
+            assertEquals(LibraryOrder.ALPHABETICAL, settings.defaultLibraryOrder)
+            settings.defaultLibraryOrder = LibraryOrder.MANUAL
+            settings.setListOrder(key, LibraryOrder.LAST_PLAYED)
+            settings.setManualListOrder(key, listOf("rom:2", "app:3"))
+            assertEquals(LibraryOrder.DEFAULT, settings.listOrder(other))
+        } finally { settings.shutdown() }
+        val reopened = newRepo()
+        try {
+            reopened.sdCardRoot = tmp.root.absolutePath
+            assertEquals(LibraryOrder.MANUAL, reopened.defaultLibraryOrder)
+            assertEquals(LibraryOrder.LAST_PLAYED, reopened.listOrder(key))
+            assertEquals(listOf("rom:2", "app:3"), reopened.manualListOrder(key))
+            reopened.setListOrder(key, LibraryOrder.DEFAULT)
+            assertEquals(LibraryOrder.DEFAULT, reopened.listOrder(key))
+            assertEquals(listOf("rom:2", "app:3"), reopened.manualListOrder(key))
+            reopened.romDirectory = File(tmp.root, "OtherRoms").absolutePath
+            org.junit.Assert.assertNotEquals(key,
+                dev.piannoli.scorza.model.LibraryOrdering(reopened,
+                    dev.piannoli.scorza.di.PiannoliPathsProvider(reopened)).key("platform", "GB", "RPG"))
+        } finally { reopened.shutdown() }
+    }
+
+    @Test
+    @Config(sdk = [28])
     fun `fresh RetroArch package selection uses installed packages and persists`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         Shadows.shadowOf(context as android.app.Application).grantPermissions(android.Manifest.permission.READ_EXTERNAL_STORAGE)

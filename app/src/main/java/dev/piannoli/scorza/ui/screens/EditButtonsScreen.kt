@@ -168,55 +168,54 @@ fun EditButtonsScreen(
         }
 
         if (isListening) {
-            val listening = screen.listeningCanonical
-            val remaining = (listenTimeoutMs - screen.countdownMs).coerceAtLeast(0)
-            val progress = if (listenTimeoutMs > 0) {
-                (remaining.toFloat() / listenTimeoutMs.toFloat()).coerceIn(0f, 1f)
-            } else 0f
+            ButtonRemappingPrompt(
+                label = screen.listeningCanonical?.let {
+                    friendlyCanonicalLabel(it, mapping?.glyphStyle ?: GlyphStyle.PLUMBER)
+                }.orEmpty(),
+                elapsedMs = screen.countdownMs,
+                timeoutMs = listenTimeoutMs,
+            )
+        }
+    }
+}
 
+@Composable
+internal fun ButtonRemappingPrompt(label: String, elapsedMs: Int, timeoutMs: Int = 5000) {
+    val colors = LocalPiannoliColors.current
+    val progress = if (timeoutMs > 0) ((timeoutMs - elapsedMs).toFloat() / timeoutMs).coerceIn(0f, 1f) else 0f
+    Box(
+        modifier = Modifier.fillMaxSize().screenBackground(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth(),
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyLarge.copy(fontSize = 24.sp, color = colors.text),
+            )
+            Spacer(modifier = Modifier.height(Spacing.Sm))
+            Text(
+                text = stringResource(R.string.press_button_prompt),
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontSize = 16.sp,
+                    color = colors.text.copy(alpha = 0.6f),
+                ),
+            )
+            Spacer(modifier = Modifier.height(Spacing.Lg))
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .screenBackground(),
-                contentAlignment = Alignment.Center,
+                modifier = Modifier.widthIn(max = 280.dp).fillMaxWidth()
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(Radius.Sm))
+                    .background(colors.text.copy(alpha = 0.2f)),
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth(),
-                ) {
-                    val targetLabel2 = listening?.let { friendlyCanonicalLabel(it, mapping?.glyphStyle ?: GlyphStyle.PLUMBER) }.orEmpty()
-                    Text(
-                        text = targetLabel2,
-                        style = MaterialTheme.typography.bodyLarge.copy(
-                            fontSize = 24.sp,
-                            color = colors.text,
-                        ),
-                    )
-                    Spacer(modifier = Modifier.height(Spacing.Sm))
-                    Text(
-                        text = stringResource(R.string.press_button_prompt),
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = 16.sp,
-                            color = colors.text.copy(alpha = 0.6f),
-                        ),
-                    )
-                    Spacer(modifier = Modifier.height(Spacing.Lg))
-                    Box(
-                        modifier = Modifier
-                            .widthIn(max = 280.dp).fillMaxWidth()
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(Radius.Sm))
-                            .background(colors.text.copy(alpha = 0.2f)),
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(progress)
-                                .height(8.dp)
-                                .clip(RoundedCornerShape(Radius.Sm))
-                                .background(colors.highlight),
-                        )
-                    }
-                }
+                Box(
+                    modifier = Modifier.fillMaxWidth(progress)
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(Radius.Sm))
+                        .background(colors.highlight),
+                )
             }
         }
     }
