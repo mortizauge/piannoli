@@ -1724,6 +1724,10 @@ class DialogInputHandler @Inject constructor(
                     }
                     is ListItem.SubfolderItem ->
                         activityActions.chooseFolderArtwork(item.artworkPlatformTag ?: glState.platformTag, item.path)
+                    is ListItem.CollectionItem ->
+                        activityActions.chooseSystemArtwork("@collection-${item.collection.id}", settings.systemArtworkType)
+                    is ListItem.ChildCollectionItem ->
+                        activityActions.chooseSystemArtwork("@collection-${item.collection.id}", settings.systemArtworkType)
                     else -> {}
                 }
             }
@@ -1787,6 +1791,26 @@ class DialogInputHandler @Inject constructor(
             selected == MENU_DELETE_ART ||
                 selected == context.getString(dev.piannoli.scorza.R.string.delete_shared_folder_artwork) -> {
                 pendingContextReturn = null
+                if (collection != null) {
+                    val tag = "@collection-${collection.id}"
+                    val type = settings.systemArtworkType
+                    ioScope.launch {
+                        try {
+                            systemListViewModel.deleteSystemArtwork(tag, type)
+                            withContext(Dispatchers.Main) {
+                                gameListViewModel.reload()
+                                launcherActions.rescanSystemList(scanDisk = false)
+                                nav.dialogState.value = DialogState.None
+                            }
+                        } catch (e: java.io.IOException) {
+                            withContext(Dispatchers.Main) {
+                                nav.dialogState.value = DialogState.LaunchError(
+                                    context.getString(dev.piannoli.scorza.R.string.system_artwork_delete_failed))
+                            }
+                        }
+                    }
+                    return
+                }
                 if (rom != null) {
                     rom.artFile?.delete()
                     artworkLookup.invalidate(rom.platformTag)
@@ -2169,7 +2193,10 @@ class DialogInputHandler @Inject constructor(
 
     fun buildGameContextOptions(item: ListItem, glState: GameListViewModel.State): List<String> {
         if (glState.isHiddenGames) return listOf(MENU_UNHIDE_GAME)
-        if (glState.isCollectionsList || item is ListItem.ChildCollectionItem) return listOf(MENU_RENAME, MENU_CHILD_COLLECTIONS, MENU_DELETE)
+        if (item is ListItem.CollectionItem || item is ListItem.ChildCollectionItem) return listOf(
+            context.getString(dev.piannoli.scorza.R.string.choose_artwork), MENU_DELETE_ART,
+            MENU_RENAME, MENU_CHILD_COLLECTIONS, MENU_DELETE,
+        )
         if (item is ListItem.SubfolderItem) return buildList {
             val tag = item.artworkPlatformTag ?: glState.platformTag
             add(context.getString(dev.piannoli.scorza.R.string.choose_folder_artwork))

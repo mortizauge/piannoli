@@ -103,8 +103,16 @@ fun GameListScreen(
     artRadius: Int = 25,
     artScale: ArtScale = ArtScale.FIT,
     buttonStyle: ButtonStyle = ButtonStyle(),
+    systemArtworkType: dev.piannoli.scorza.settings.SystemArtworkType =
+        dev.piannoli.scorza.settings.SystemArtworkType.LOGO,
 ) {
     val state by viewModel.state.collectAsStateWhileActive()
+    val collectionArtworkRevision by dev.piannoli.scorza.scraper.SystemArtwork.revision.collectAsStateWhileActive()
+    fun artworkPath(item: ListItem): String? = when (item) {
+        is ListItem.CollectionItem -> viewModel.collectionArtworkFile(item.collection.id, systemArtworkType)?.absolutePath
+        is ListItem.ChildCollectionItem -> viewModel.collectionArtworkFile(item.collection.id, systemArtworkType)?.absolutePath
+        else -> item.artPath
+    }
     val itemHeight = pillItemHeight(listLineHeight, listVerticalPadding)
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = state.scrollTarget.coerceAtLeast(0))
 
@@ -120,14 +128,15 @@ fun GameListScreen(
     val resumeKey = selected?.resumeKey
     val hasResumeState = resumeKey != null && resumableGames.contains(resumeKey)
 
-    val artPath = if (artWidth > 0) selected?.artPath else null
+    val artPath = if (artWidth > 0) selected?.let(::artworkPath) else null
     var artRowSize by remember { mutableStateOf(IntSize.Zero) }
     val artPanel = artworkPanelSize(artRowSize, artWidth)
-    val artworkWindow = remember(state.items, state.selectedIndex, state.artworkRevision, artPanel, artScale) {
+    val artworkWindow = remember(state.items, state.selectedIndex, state.artworkRevision, collectionArtworkRevision,
+        systemArtworkType, artPanel, artScale) {
         if (artPanel == null) return@remember ArtworkWindow.EMPTY
         artworkWindow(state.items.size, state.selectedIndex) { index ->
-            state.items[index].artPath?.let {
-                ArtworkRequest(it, state.artworkRevision, artPanel.width, artPanel.height, artScale)
+            artworkPath(state.items[index])?.let {
+                ArtworkRequest(it, state.artworkRevision + collectionArtworkRevision, artPanel.width, artPanel.height, artScale)
             }
         }
     }

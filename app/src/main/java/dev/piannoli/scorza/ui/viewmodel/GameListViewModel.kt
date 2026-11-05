@@ -115,6 +115,10 @@ class GameListViewModel @Inject constructor(
 
     @Volatile var showFavoriteStars: Boolean = true
 
+    fun collectionArtworkFile(id: Long, type: dev.piannoli.scorza.settings.SystemArtworkType): File? =
+        dev.piannoli.scorza.scraper.SystemArtwork.file(piannoliPaths.root, "@collection-$id", type)
+            ?.takeIf { it.isFile }
+
     data class State(
         val artworkRevision: Long = 0,
         val platformTag: String = "",

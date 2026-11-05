@@ -67,6 +67,20 @@ class ScrapedArtworkStoreTest {
         assertEquals(saved, artwork.findByName("PORTS", basename))
     }
 
+    @Test fun `collection imports share category storage stay isolated and delete only the selected artwork type`() {
+        val type = dev.piannoli.scorza.settings.SystemArtworkType.ICON
+        val saved = store.importSystem("@collection-7", type, png().inputStream())
+        val other = store.importSystem("@collection-8", type, png().inputStream())
+        val logo = store.importSystem("@collection-7",
+            dev.piannoli.scorza.settings.SystemArtworkType.LOGO, png().inputStream())
+        assertEquals(saved, store.systemArtworkFile("@collection-7", type))
+        store.importSystem("@collection-7", type, png().inputStream())
+        SystemArtwork.delete(root, "@collection-7", type)
+        assertFalse(saved.exists())
+        assertTrue(other.isFile)
+        assertTrue(logo.isFile)
+    }
+
     @Test fun `cover uses ROM basename and becomes immediately discoverable`() {
         assertNull(artwork.find(rom.platformTag, rom.path))
         val bytes = png()

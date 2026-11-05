@@ -721,6 +721,43 @@ class ConflictsApplyingStateTest {
         verify(exactly = 0) { bulkScraper.open(any(), any()) }
     }
 
+    @Test fun `collection artwork actions use stable collection identity for top level and child collections`() = runTest(dispatcher) {
+        Dispatchers.setMain(dispatcher)
+        try {
+            val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+            val choose = context.getString(dev.piannoli.scorza.R.string.choose_artwork)
+            val type = dev.piannoli.scorza.settings.SystemArtworkType.ICON
+            every { settings.systemArtworkType } returns type
+            nav.push(LauncherScreen.GameList)
+            val collection = dev.piannoli.scorza.model.Collection(7, "Favorites")
+            for (item in listOf(
+                dev.piannoli.scorza.model.ListItem.CollectionItem(collection),
+                dev.piannoli.scorza.model.ListItem.ChildCollectionItem(collection),
+            )) {
+                val state = dev.piannoli.scorza.ui.viewmodel.GameListViewModel.State(
+                    isCollectionsList = item is dev.piannoli.scorza.model.ListItem.CollectionItem)
+                every { games.state } returns kotlinx.coroutines.flow.MutableStateFlow(state)
+                every { games.getSelectedItem() } returns item
+                val options = handler.buildGameContextOptions(item, state)
+                assertTrue(choose in options)
+                assertTrue(MENU_DELETE_ART in options)
+                nav.dialogState.value = DialogState.ContextMenu("Favorites", options = listOf(choose))
+                handler.onConfirm()
+                nav.dialogState.value = DialogState.ContextMenu("Favorites", options = listOf(MENU_DELETE_ART))
+                handler.onConfirm()
+                runCurrent()
+                assertEquals(DialogState.None, nav.dialogState.value)
+            }
+            verify(exactly = 2) { activityActions.chooseSystemArtwork("@collection-7", type) }
+            coVerify(exactly = 2) { systems.deleteSystemArtwork("@collection-7", type) }
+            coEvery { systems.deleteSystemArtwork("@collection-7", type) } throws java.io.IOException("denied")
+            nav.dialogState.value = DialogState.ContextMenu("Favorites", options = listOf(MENU_DELETE_ART))
+            handler.onConfirm()
+            runCurrent()
+            assertTrue(nav.dialogState.value is DialogState.LaunchError)
+        } finally { Dispatchers.resetMain() }
+    }
+
     @Test fun `platform delete art uses selected type closes menu and reports storage errors`() = runTest(dispatcher) {
         Dispatchers.setMain(dispatcher)
         try {
