@@ -112,6 +112,7 @@ fun SystemListScreen(
     val defaultCategoryArtwork = if (selectedArtWidth <= 0) null else when (selectedItem) {
         ListItem.FavoritesItem -> R.drawable.category_favorites
         ListItem.RecentlyPlayedItem -> R.drawable.category_recently_played
+        ListItem.CollectionsFolder -> R.drawable.category_collections
         is ListItem.ToolsFolder -> R.drawable.category_apps
         else -> null
     }
@@ -280,6 +281,7 @@ fun SystemListScreen(
                                 when (selectedItem) {
                                     ListItem.FavoritesItem -> favoritesLabel
                                     ListItem.RecentlyPlayedItem -> recentlyPlayedLabel
+                                    ListItem.CollectionsFolder -> collectionsLabel
                                     is ListItem.ToolsFolder -> selectedItem.name
                                     else -> null
                                 }

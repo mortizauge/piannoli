@@ -37,7 +37,8 @@ import org.robolectric.annotation.Config
 class CategoryArtworkTest {
     @get:Rule val compose = createComposeRule()
     private val state = MutableStateFlow(SystemListViewModel.State(
-        items = listOf(ListItem.FavoritesItem, ListItem.RecentlyPlayedItem, ListItem.ToolsFolder("Apps", 0)),
+        items = listOf(ListItem.FavoritesItem, ListItem.RecentlyPlayedItem, ListItem.ToolsFolder("Apps", 0),
+            ListItem.CollectionsFolder),
         isLoading = false,
     ))
     private val model = mockk<SystemListViewModel>(relaxed = true).also {
@@ -61,7 +62,7 @@ class CategoryArtworkTest {
         }
         for (layout in listOf(false, true)) {
             for (artworkType in SystemArtworkType.entries) {
-                for ((index, label) in listOf("Favorites", "Recently Played", "Apps").withIndex()) {
+                for ((index, label) in listOf("Favorites", "Recently Played", "Apps", "Collections").withIndex()) {
                     compose.runOnIdle {
                         handheld.value = layout
                         type.value = artworkType
@@ -76,13 +77,13 @@ class CategoryArtworkTest {
     @Test fun `zero system artwork width hides all category defaults`() {
         val width = mutableStateOf(0)
         compose.setContent { SystemListScreen(model, systemArtWidth = width.value) }
-        for ((index, label) in listOf("Favorites", "Recently Played", "Apps").withIndex()) {
+        for ((index, label) in listOf("Favorites", "Recently Played", "Apps", "Collections").withIndex()) {
             compose.runOnIdle { state.value = state.value.copy(selectedIndex = index) }
             compose.onAllNodesWithContentDescription(label).assertCountEquals(0)
         }
         verify(exactly = 0) { model.systemArtworkFile(any(), any()) }
         compose.runOnIdle { width.value = 40 }
-        compose.onNodeWithContentDescription("Apps").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Collections").assertIsDisplayed()
     }
 
     @Test fun `hidden system artwork suppresses every category default and restores immediately for all types`() {
@@ -92,7 +93,7 @@ class CategoryArtworkTest {
                 systemArtworkType = settings.value.systemArtworkType)
         }
         for (type in SystemArtworkType.entries) {
-            for ((index, label) in listOf("Favorites", "Recently Played", "Apps").withIndex()) {
+            for ((index, label) in listOf("Favorites", "Recently Played", "Apps", "Collections").withIndex()) {
                 compose.runOnIdle {
                     settings.value = settings.value.copy(showSystemArtwork = false, systemArtworkType = type)
                     state.value = state.value.copy(selectedIndex = index)
@@ -104,9 +105,9 @@ class CategoryArtworkTest {
         }
     }
 
-    @Test fun `ports and collections do not receive category defaults`() {
+    @Test fun `ports and individual collections do not receive category defaults`() {
         state.value = state.value.copy(items = listOf(
-            ListItem.PortsFolder("Ports", 0), ListItem.CollectionsFolder, ListItem.CollectionItem(1, "Collection", 0),
+            ListItem.PortsFolder("Ports", 0), ListItem.CollectionItem(1, "Collection", 0),
         ))
         compose.setContent { SystemListScreen(model) }
         for (index in state.value.items.indices) {
@@ -133,9 +134,20 @@ class CategoryArtworkTest {
         checkCustomImagePriority(corrupt = true, apps = true)
     }
 
-    private fun checkCustomImagePriority(corrupt: Boolean, apps: Boolean = false) {
-        val label = if (apps) "Utilities" else "Favorites"
-        val tag = if (apps) "@tools" else "@favorites"
+    @Test fun `custom collections artwork takes priority and deletion restores stacked folders`() {
+        checkCustomImagePriority(corrupt = false, collections = true)
+    }
+
+    @Test fun `corrupt collections artwork suppresses stacked folders until deletion`() {
+        checkCustomImagePriority(corrupt = true, collections = true)
+    }
+
+    private fun checkCustomImagePriority(corrupt: Boolean, apps: Boolean = false, collections: Boolean = false) {
+        val label = if (collections) "Collections" else if (apps) "Utilities" else "Favorites"
+        val tag = if (collections) "@collections" else if (apps) "@tools" else "@favorites"
+        if (collections) {
+            state.value = state.value.copy(items = listOf(ListItem.CollectionsFolder))
+        }
         if (apps) {
             state.value = state.value.copy(items = listOf(ListItem.ToolsFolder(label, 0)))
         }

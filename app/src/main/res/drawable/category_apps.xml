@@ -1,13 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com
-     Icons: CC BY 4.0 https://creativecommons.org/licenses/by/4.0/
-     Copyright 2024 Fonticons, Inc. Converted from solid/table-cells-large.svg to Android vector.
-     See licenses/libraries/font-awesome-free-CC-BY-4.0.txt. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="288dp"
     android:height="288dp"
     android:viewportWidth="512"
     android:viewportHeight="512">
     <path android:fillColor="#FFFFFFFF"
-        android:pathData="M448 96l0 128-160 0 0-128 160 0zm0 192l0 128-160 0 0-128 160 0zM224 224L64 224 64 96l160 0 0 128zM64 288l160 0 0 128L64 416l0-128zM64 32C28.7 32 0 60.7 0 96L0 416c0 35.3 28.7 64 64 64l384 0c35.3 0 64-28.7 64-64l0-320c0-35.3-28.7-64-64-64L64 32z" />
+        android:pathData="M64,32 L192,32 Q224,32 224,64 L224,192 Q224,224 192,224 L64,224 Q32,224 32,192 L32,64 Q32,32 64,32 Z M320,32 L448,32 Q480,32 480,64 L480,192 Q480,224 448,224 L320,224 Q288,224 288,192 L288,64 Q288,32 320,32 Z M64,288 L192,288 Q224,288 224,320 L224,448 Q224,480 192,480 L64,480 Q32,480 32,448 L32,320 Q32,288 64,288 Z M320,288 L448,288 Q480,288 480,320 L480,448 Q480,480 448,480 L320,480 Q288,480 288,448 L288,320 Q288,288 320,288 Z" />
 </vector>
