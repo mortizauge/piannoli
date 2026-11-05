@@ -55,17 +55,34 @@ class CollectionsRepository(private val db: PiannoliDatabase) {
         ref.id,
     ) { it.getLong(0) }.toSet()
 
-    fun addMember(collectionId: Long, ref: LibraryRef) {
-        if (isMember(collectionId, ref)) return
-        val nextOrder = nextSortOrder(collectionId)
+    fun addMember(collectionId: Long, ref: LibraryRef) = db.transaction { conn ->
+        if (isMember(collectionId, ref)) return@transaction
+        val ordered = conn.queryAll(
+            """
+            SELECT cm.id, COALESCE(r.display_name, a.display_name) FROM collection_members cm
+            LEFT JOIN roms r ON r.id = cm.rom_id
+            LEFT JOIN apps a ON a.id = cm.app_id
+            WHERE cm.collection_id = ? ORDER BY cm.sort_order, cm.id
+            """.trimIndent(),
+            collectionId,
+        ) { it.getLong(0) to it.getText(1) }.toMutableList()
+        val table = if (ref is LibraryRef.Rom) "roms" else "apps"
+        val name = conn.queryOne("SELECT display_name FROM $table WHERE id = ?", ref.id) { it.getText(0) }
+        requireNotNull(name) { "Collection member does not exist: $ref" }
         val (romId, appId) = when (ref) {
             is LibraryRef.Rom -> ref.id to null
             is LibraryRef.App -> null to ref.id
         }
-        db.execute(
+        val id = conn.executeReturningId(
             "INSERT INTO collection_members (collection_id, rom_id, app_id, sort_order) VALUES (?, ?, ?, ?)",
-            collectionId, romId, appId, nextOrder.toLong(),
+            collectionId, romId, appId, ordered.size.toLong(),
         )
+        val position = ordered.indexOfFirst { String.CASE_INSENSITIVE_ORDER.compare(it.second, name) > 0 }
+            .let { if (it < 0) ordered.size else it }
+        ordered.add(position, id to name)
+        ordered.forEachIndexed { index, member ->
+            conn.execute("UPDATE collection_members SET sort_order = ? WHERE id = ?", index.toLong(), member.first)
+        }
     }
 
     fun removeMember(collectionId: Long, ref: LibraryRef) = db.execute(
@@ -137,10 +154,16 @@ class CollectionsRepository(private val db: PiannoliDatabase) {
         return false
     }
 
-    private fun nextSortOrder(collectionId: Long): Int = db.queryOne(
-        "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM collection_members WHERE collection_id = ?",
+    fun membersIn(collectionId: Long): List<LibraryRef> = db.queryAll(
+        """
+        SELECT cm.rom_id, cm.app_id FROM collection_members cm
+        LEFT JOIN roms r ON r.id = cm.rom_id
+        LEFT JOIN apps a ON a.id = cm.app_id
+        WHERE cm.collection_id = ? AND COALESCE(r.is_hidden, a.is_hidden) = 0
+        ORDER BY cm.sort_order, cm.id
+        """.trimIndent(),
         collectionId,
-    ) { it.getInt(0) } ?: 0
+    ) { if (it.isNull(0)) LibraryRef.App(it.getLong(1)) else LibraryRef.Rom(it.getLong(0)) }
 
     private fun readMemberIds(column: String, collectionId: Long): List<Long> {
         val table = if (column == "rom_id") "roms" else "apps"

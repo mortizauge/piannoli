@@ -198,7 +198,7 @@ class GameListBookmarkTest {
         every { collections.byId(1) } returns CollectionsRepository.CollectionRow(
             1, "Favorites", null, 0, CollectionType.FAVORITES,
         )
-        every { collections.romIdsIn(1) } returns listOf(2, 3)
+        every { collections.membersIn(1) } returns listOf(dev.piannoli.scorza.db.LibraryRef.Rom(2), dev.piannoli.scorza.db.LibraryRef.Rom(3))
         every { roms.gameById(2) } returns mario.rom
         every { roms.gameById(3) } returns metroid.rom
         restore(GameListBookmark(collectionId = 1, position = BrowsePosition("rom:3", 1, 1)))
@@ -222,7 +222,7 @@ class GameListBookmarkTest {
     @Test fun `cancel global search restores nested collection and original position across query changes`() = runBlocking {
         every { collections.byId(10) } returns CollectionsRepository.CollectionRow(10, "All games", null, 0, CollectionType.STANDARD)
         every { collections.byId(20) } returns CollectionsRepository.CollectionRow(20, "Handhelds", 10, 0, CollectionType.STANDARD)
-        every { collections.romIdsIn(any()) } returns listOf(2, 3)
+        every { collections.membersIn(any()) } returns listOf(dev.piannoli.scorza.db.LibraryRef.Rom(2), dev.piannoli.scorza.db.LibraryRef.Rom(3))
         every { roms.gameById(2) } returns mario.rom
         every { roms.gameById(3) } returns metroid.rom
         every { roms.searchAllGames(any()) } returns listOf(mario.rom)
@@ -361,7 +361,7 @@ class GameListBookmarkTest {
     @Test fun `child collection restores its selected game and Back returns to its parent collection`() = runBlocking {
         every { collections.byId(10) } returns CollectionsRepository.CollectionRow(10, "All games", null, 0, CollectionType.STANDARD)
         every { collections.byId(20) } returns CollectionsRepository.CollectionRow(20, "Handhelds", 10, 0, CollectionType.STANDARD)
-        every { collections.romIdsIn(any()) } returns listOf(2, 3)
+        every { collections.membersIn(any()) } returns listOf(dev.piannoli.scorza.db.LibraryRef.Rom(2), dev.piannoli.scorza.db.LibraryRef.Rom(3))
         every { roms.gameById(2) } returns mario.rom
         every { roms.gameById(3) } returns metroid.rom
         restore(GameListBookmark(

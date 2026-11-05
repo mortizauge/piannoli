@@ -364,11 +364,7 @@ class GameListViewModel @Inject constructor(
         }
         val children = collectionsRepository.children(collectionId)
         val childItems = children.map { ListItem.ChildCollectionItem(Collection(it.id, it.displayName)) }
-        val romIds = collectionsRepository.romIdsIn(collectionId)
-        val appIds = collectionsRepository.appIdsIn(collectionId)
-        val romItems = romIds.mapNotNull { romsRepository.gameById(it) }.map { ListItem.RomItem(it) }
-        val appItems = appIds.mapNotNull { appsRepository.byId(it) }.map { ListItem.AppItem(it) }
-        val combined = childItems + romItems + appItems
+        val combined = childItems + collectionMemberItems(collectionId)
         val isFavorites = row.type == CollectionType.FAVORITES
         val items = if (isFavorites) combined else sortFavoritesFirst(combined)
         _state.value = State(
@@ -668,14 +664,10 @@ class GameListViewModel @Inject constructor(
                 return@launch
             }
             val newItems = if (current.isCollection && current.collectionId != null) {
-                val romIds = collectionsRepository.romIdsIn(current.collectionId)
-                val appIds = collectionsRepository.appIdsIn(current.collectionId)
                 val children = collectionsRepository.children(current.collectionId).map {
                     ListItem.ChildCollectionItem(Collection(it.id, it.displayName))
                 }
-                val roms = romIds.mapNotNull { romsRepository.gameById(it) }.map { ListItem.RomItem(it) }
-                val apps = appIds.mapNotNull { appsRepository.byId(it) }.map { ListItem.AppItem(it) }
-                val combined = children + roms + apps
+                val combined = children + collectionMemberItems(current.collectionId)
                 if (current.isFavorites) combined
                 else sortFavoritesFirst(combined)
             } else if (current.platformTag == "tools" || current.platformTag == "ports") {
@@ -930,6 +922,14 @@ class GameListViewModel @Inject constructor(
             .sortedNatural { displayNameOf(it) }
         return sortFavoritesFirst(items)
     }
+
+    private fun collectionMemberItems(collectionId: Long): List<ListItem> =
+        collectionsRepository.membersIn(collectionId).mapNotNull { ref ->
+            when (ref) {
+                is LibraryRef.Rom -> romsRepository.gameById(ref.id)?.let { ListItem.RomItem(it) }
+                is LibraryRef.App -> appsRepository.byId(ref.id)?.let { ListItem.AppItem(it) }
+            }
+        }
 
     private fun sortFavoritesFirst(items: List<ListItem>): List<ListItem> {
         val favRoms = collectionsRepository.favoriteRomIds()
