@@ -185,18 +185,29 @@ class DialogInputHandler @Inject constructor(
     private suspend fun quickMenuState(selected: dev.piannoli.scorza.ui.quickmenu.QuickMenuRow? = null): DialogState.QuickMenu {
         val conflicts = saveSyncService.pendingConflictCount()
         val errors = saveSyncStatusHolder.errors.value.size
+        val contentList = when (nav.currentScreen) {
+            LauncherScreen.GameList -> gameListViewModel.canOrderContent()
+            LauncherScreen.SystemList -> systemListViewModel.canOrderContent()
+            else -> false
+        }
         val rows = dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.visibleRows(
             rommPaired = rommStore.isConfigured,
             saveSyncEnabled = settings.rommSaveSyncEnabled,
             pendingConflicts = conflicts,
             syncErrors = errors,
             downloadCount = rommDownloader.queue.state.value.size,
+            contentList = contentList,
         )
         return DialogState.QuickMenu(
             rows = rows,
             selectedIndex = selected?.let { rows.indexOf(it).coerceAtLeast(0) } ?: 0,
             conflictCount = conflicts,
             syncErrorCount = errors,
+            order = when {
+                !contentList -> dev.piannoli.scorza.settings.LibraryOrder.DEFAULT
+                nav.currentScreen == LauncherScreen.SystemList -> systemListViewModel.selectedOrder()
+                else -> gameListViewModel.selectedOrder()
+            },
         )
     }
 
@@ -482,6 +493,7 @@ class DialogInputHandler @Inject constructor(
         val ds = nav.dialogState.value
         if (ds == DialogState.None) return false
         when (ds) {
+            is DialogState.QuickMenu -> cycleQuickOrder(ds, -1)
             is DialogState.ScraperMenu -> if (ds.bulk) bulkScraper.cycle(ds)
             is DialogState.QuickInfo -> {
                 if (ds.addresses.size > 1) {
@@ -513,6 +525,7 @@ class DialogInputHandler @Inject constructor(
         val ds = nav.dialogState.value
         if (ds == DialogState.None) return false
         when (ds) {
+            is DialogState.QuickMenu -> cycleQuickOrder(ds, 1)
             is DialogState.ScraperMenu -> if (ds.bulk) bulkScraper.cycle(ds)
             is DialogState.QuickInfo -> {
                 if (ds.addresses.size > 1) {
@@ -538,6 +551,16 @@ class DialogInputHandler @Inject constructor(
             else -> {}
         }
         return true
+    }
+
+    private fun cycleQuickOrder(ds: DialogState.QuickMenu, direction: Int) {
+        if (ds.rows.getOrNull(ds.selectedIndex) != dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.ORDER_BY) return
+        val order = when (nav.currentScreen) {
+            LauncherScreen.GameList -> gameListViewModel.cycleOrder(direction)
+            LauncherScreen.SystemList -> systemListViewModel.cycleOrder(direction)
+            else -> return
+        }
+        nav.dialogState.value = ds.copy(order = order)
     }
 
     override fun onConfirm(): Boolean {
@@ -672,6 +695,7 @@ class DialogInputHandler @Inject constructor(
             is DialogState.PlatformResetConfirm -> onPlatformReset(ds)
             is DialogState.QuickMenu -> {
                 when (ds.rows.getOrNull(ds.selectedIndex)) {
+                    dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.ORDER_BY -> Unit
                     dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.ROMM -> {
                         nav.dialogState.value = DialogState.None
                         nav.push(dev.piannoli.scorza.navigation.LauncherScreen.RommPlatformList(returnDialog = ds))

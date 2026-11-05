@@ -234,6 +234,7 @@ class SettingsInputHandler @Inject constructor(
         } else {
             settingsViewModel.cancel()
             nav.pop()
+            if (nav.currentScreen == LauncherScreen.GameList) gameListViewModel.reload()
         }
     }
 

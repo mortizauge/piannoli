@@ -437,6 +437,9 @@ fun DialogOverlay(
                 title = stringResource(R.string.quick_menu_title),
                 listFontSize = listFontSize,
                 listLineHeight = listLineHeight,
+                leftBottomItems = if (dialogState.rows.getOrNull(dialogState.selectedIndex) ==
+                    dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.ORDER_BY)
+                    listOf(DPAD_HORIZONTAL to stringResource(R.string.label_change)) else emptyList(),
                 rightBottomItems = listOf(buttonStyle.confirm to stringResource(R.string.label_select)),
                 buttonStyle = buttonStyle
             ) {
@@ -452,7 +455,16 @@ fun DialogOverlay(
                             pluralStringResource(dev.piannoli.ui.R.plurals.quick_menu_sync_errors, dialogState.syncErrorCount, dialogState.syncErrorCount)
                         else -> quickMenuLabel(row)
                     }
-                    PillRowText(
+                    if (row == dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.ORDER_BY) {
+                        PillRowKeyValue(
+                            label = label,
+                            value = stringResource(dialogState.order.labelRes),
+                            isSelected = isSelected,
+                            fontSize = listFontSize,
+                            lineHeight = listLineHeight,
+                            verticalPadding = listVerticalPadding,
+                        )
+                    } else PillRowText(
                         label = label,
                         isSelected = isSelected,
                         fontSize = listFontSize,
@@ -1261,6 +1273,7 @@ private fun DownloadRow(item: RommDownloadItem, isSelected: Boolean, fontSize: T
 
 @Composable
 private fun quickMenuLabel(row: dev.piannoli.scorza.ui.quickmenu.QuickMenuRow): String = when (row) {
+    dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.ORDER_BY -> stringResource(R.string.order_by)
     dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.ROMM -> stringResource(R.string.quick_menu_romm)
     dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.DOWNLOADS -> stringResource(R.string.quick_menu_download_queue)
     dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.SYNC_HISTORY -> stringResource(R.string.quick_menu_sync_history)

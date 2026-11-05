@@ -7,16 +7,19 @@ import dev.piannoli.scorza.config.PlatformConfig
 import dev.piannoli.scorza.config.PlatformFolders
 import dev.piannoli.scorza.db.AppsRepository
 import dev.piannoli.scorza.db.CollectionsRepository
+import dev.piannoli.scorza.db.LibraryRef
 import dev.piannoli.scorza.db.RecentlyPlayedRepository
 import dev.piannoli.scorza.db.RomScanner
 import dev.piannoli.scorza.db.RomsRepository
 import dev.piannoli.scorza.db.ScanScheduler
 import dev.piannoli.scorza.di.PiannoliPathsProvider
 import dev.piannoli.scorza.model.AppType
+import dev.piannoli.scorza.model.LibraryOrdering
 import dev.piannoli.scorza.model.Platform
 import dev.piannoli.scorza.navigation.BrowsePosition
 import dev.piannoli.scorza.scanner.RomDirectoryWatcher
 import dev.piannoli.scorza.settings.ContentMode
+import dev.piannoli.scorza.settings.LibraryOrder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -41,8 +44,25 @@ class SystemListViewModel @Inject constructor(
     private val piannoliPaths: PiannoliPathsProvider,
     private val romDirectoryWatcher: RomDirectoryWatcher,
     private val scanScheduler: ScanScheduler,
+    private val ordering: LibraryOrdering,
 ) {
     private val romDirectory: File get() = piannoliPaths.romDir
+    fun canOrderContent(): Boolean = currentFghCollectionId != null &&
+        _state.value.items.any { it is ListItem.GameItem }
+
+    fun selectedOrder(): LibraryOrder =
+        ordering.selection(ordering.key("collection", currentFghCollectionId.toString()))
+
+    fun cycleOrder(direction: Int): LibraryOrder {
+        val current = _state.value
+        if (!canOrderContent() || current.reorderMode || current.isLoading) return selectedOrder()
+        val order = selectedOrder().cycle(direction, allowPlatform = ordering.hasMultiplePlatforms(
+            current.items.filterIsInstance<ListItem.GameItem>().map { it.item }))
+        ordering.select(ordering.key("collection", currentFghCollectionId.toString()), order)
+        rebuildFromDb()
+        return order
+    }
+
     fun systemArtworkFile(tag: String, type: dev.piannoli.scorza.settings.SystemArtworkType): File? =
         dev.piannoli.scorza.scraper.SystemArtwork.file(piannoliPaths.root, tag, type)
 
@@ -266,12 +286,17 @@ class SystemListViewModel @Inject constructor(
                 val fghId = fghCollectionId?.takeIf { collectionsRepository.byId(it) != null }
                 currentFghCollectionId = fghId
                 if (fghId != null) {
-                    collectionsRepository.romIdsIn(fghId)
-                        .mapNotNull { romsRepository.gameById(it) }
-                        .forEach { rom -> items.add(ListItem.GameItem(dev.piannoli.scorza.model.ListItem.RomItem(rom))) }
-                    collectionsRepository.appIdsIn(fghId)
-                        .mapNotNull { appsRepository.byId(it) }
-                        .forEach { app -> items.add(ListItem.GameItem(dev.piannoli.scorza.model.ListItem.AppItem(app))) }
+                    val members = collectionsRepository.membersIn(fghId).mapNotNull { ref ->
+                        when (ref) {
+                            is LibraryRef.Rom -> romsRepository.gameById(ref.id)
+                                ?.let { dev.piannoli.scorza.model.ListItem.RomItem(it) }
+                            is LibraryRef.App -> appsRepository.byId(ref.id)
+                                ?.let { dev.piannoli.scorza.model.ListItem.AppItem(it) }
+                        }
+                    }
+                    ordering.sort(members, ordering.key("collection", fghId.toString()),
+                        collectionsRepository.favoriteRomIds(), collectionsRepository.favoriteAppIds())
+                        .forEach { items.add(ListItem.GameItem(it)) }
                 }
             } else {
                 currentFghCollectionId = null
@@ -423,6 +448,7 @@ class SystemListViewModel @Inject constructor(
             val items = current.items.toMutableList()
             val prevSelectable = (idx - 1 downTo 0).firstOrNull { items[it].isReorderable() }
                 ?: return@update current
+            if (!canReorderSwap(items[idx], items[prevSelectable])) return@update current
             items[idx] = items[prevSelectable].also { items[prevSelectable] = items[idx] }
             current.copy(items = items, selectedIndex = prevSelectable)
         }
@@ -435,6 +461,7 @@ class SystemListViewModel @Inject constructor(
             val items = current.items.toMutableList()
             val nextSelectable = (idx + 1..items.lastIndex).firstOrNull { items[it].isReorderable() }
                 ?: return@update current
+            if (!canReorderSwap(items[idx], items[nextSelectable])) return@update current
             items[idx] = items[nextSelectable].also { items[nextSelectable] = items[idx] }
             current.copy(items = items, selectedIndex = nextSelectable)
         }
@@ -448,6 +475,9 @@ class SystemListViewModel @Inject constructor(
         if (gameItems.isNotEmpty()) {
             val fghId = currentFghCollectionId
             if (fghId != null) {
+                ordering.rememberManual(ordering.key("collection", fghId.toString()), gameItems.map { it.item })
+                ordering.select(ordering.key("collection", fghId.toString()),
+                    LibraryOrder.MANUAL)
                 val refs = gameItems.mapNotNull { gameItem ->
                     when (val inner = gameItem.item) {
                         is dev.piannoli.scorza.model.ListItem.RomItem -> dev.piannoli.scorza.db.LibraryRef.Rom(inner.rom.id)
@@ -475,6 +505,14 @@ class SystemListViewModel @Inject constructor(
             }
         }
         _state.update { it.copy(reorderMode = false, reorderOriginalIndex = -1) }
+    }
+
+    private fun canReorderSwap(a: ListItem, b: ListItem): Boolean {
+        if (a !is ListItem.GameItem || b !is ListItem.GameItem) return true
+        val favoriteRoms = collectionsRepository.favoriteRomIds()
+        val favoriteApps = collectionsRepository.favoriteAppIds()
+        return ordering.reorderGroup(a.item, favoriteRoms, favoriteApps) ==
+            ordering.reorderGroup(b.item, favoriteRoms, favoriteApps)
     }
 
     private fun ensureReservedTag(tag: String) {

@@ -52,6 +52,26 @@ class SettingsInputHandlerTest {
     private val packages = mockk<PackageManager>(relaxed = true)
     private val games = mockk<GameListViewModel>(relaxed = true)
 
+    @Test fun `saving default order refreshes the existing content list when returning from settings`() {
+        val appContext = ApplicationProvider.getApplicationContext<Context>()
+        val settings = SettingsRepository(appContext)
+        try {
+            val viewModel = SettingsViewModel(settings, AppFonts(appContext), appContext, mockk(relaxed = true))
+            val input = handler(viewModel, settings)
+            viewModel.load()
+            nav.push(LauncherScreen.GameList)
+            nav.push(LauncherScreen.Settings)
+            viewModel.enterSubCategory("library", dev.piannoli.scorza.R.string.settings_library)
+            viewModel.cycleSelected(1)
+            input.onBack()
+            verify(exactly = 0) { games.reload(any()) }
+            input.onBack()
+            assertEquals(LauncherScreen.GameList, nav.currentScreen)
+            assertEquals(dev.piannoli.scorza.settings.LibraryOrder.LAST_PLAYED, settings.defaultLibraryOrder)
+            verify(exactly = 1) { games.reload(any()) }
+        } finally { settings.shutdown() }
+    }
+
     @Test fun `Manage Apps opens localized picker backed by unchanged app type`() {
         val appContext = ApplicationProvider.getApplicationContext<Context>()
         val settings = SettingsRepository(appContext)

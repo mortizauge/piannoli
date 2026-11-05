@@ -10,12 +10,17 @@ import dev.piannoli.scorza.db.RecentlyPlayedRepository
 import dev.piannoli.scorza.db.LibraryRef
 import dev.piannoli.scorza.db.RomsRepository
 import dev.piannoli.scorza.db.ScanScheduler
+import dev.piannoli.scorza.di.PiannoliPathsProvider
+import dev.piannoli.scorza.model.LibraryOrdering
 import dev.piannoli.scorza.model.ListItem
 import dev.piannoli.scorza.model.CollectionType
 import dev.piannoli.scorza.model.Rom
 import dev.piannoli.scorza.navigation.BrowsePosition
 import dev.piannoli.scorza.navigation.CollectionBrowseParent
 import dev.piannoli.scorza.navigation.GameListBookmark
+import dev.piannoli.scorza.settings.ContentMode
+import dev.piannoli.scorza.settings.LibraryOrder
+import dev.piannoli.scorza.settings.SettingsRepository
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -66,6 +71,10 @@ class GameListBookmarkTest {
         model = GameListViewModel(
             roms, apps, collections, recent, platforms, scans, mockk(), mockk(relaxed = true),
             ApplicationProvider.getApplicationContext<Context>(),
+            mockk<LibraryOrdering> {
+                every { key(any(), any(), any()) } returns "list"
+                every { sort(any(), any(), any(), any()) } answers { firstArg() }
+            },
         )
     }
 
@@ -80,6 +89,141 @@ class GameListBookmarkTest {
 
     private suspend fun cancelSearch() = suspendCancellableCoroutine { continuation ->
         model.cancelSearch { continuation.resume(Unit) }
+    }
+
+    private fun useRealOrdering(defaultOrder: LibraryOrder = LibraryOrder.ALPHABETICAL): LibraryOrdering {
+        val choices = mutableMapOf<String, LibraryOrder>()
+        val manual = mutableMapOf<String, List<String>>()
+        val settings = mockk<SettingsRepository> {
+            every { defaultLibraryOrder } returns defaultOrder
+            every { listOrder(any()) } answers { choices[firstArg()] ?: LibraryOrder.DEFAULT }
+            every { setListOrder(any(), any()) } answers { choices[firstArg()] = secondArg() }
+            every { manualListOrder(any()) } answers { manual[firstArg()].orEmpty() }
+            every { setManualListOrder(any(), any()) } answers { manual[firstArg()] = secondArg() }
+        }
+        val paths = mockk<PiannoliPathsProvider> {
+            every { romDir } returns File("Roms")
+        }
+        val ordering = LibraryOrdering(settings, paths)
+        model.close()
+        model = GameListViewModel(roms, apps, collections, recent, platforms, scans, paths,
+            mockk(relaxed = true), ApplicationProvider.getApplicationContext<Context>(), ordering)
+        return ordering
+    }
+
+    @Test fun `recently played stays newest first without order controls regardless of preferences or favorites`() = runBlocking {
+        every { recent.recent(limit = 15) } returns listOf(
+            RecentlyPlayedRepository.Entry(LibraryRef.Rom(metroid.rom.id), 200),
+            RecentlyPlayedRepository.Entry(LibraryRef.Rom(mario.rom.id), 100),
+        )
+        every { roms.gameById(mario.rom.id) } returns mario.rom
+        every { roms.gameById(metroid.rom.id) } returns metroid.rom
+        every { collections.favoriteRomIds() } returns setOf(mario.rom.id)
+        for (default in listOf(LibraryOrder.ALPHABETICAL, LibraryOrder.MANUAL, LibraryOrder.LAST_PLAYED)) {
+            val ordering = useRealOrdering(default)
+            val key = ordering.key("platform", "recently_played")
+            ordering.select(key, LibraryOrder.ALPHABETICAL)
+            ordering.rememberManual(key, listOf(mario, metroid))
+            suspendCancellableCoroutine<Unit> { done -> model.loadRecentlyPlayed { done.resume(Unit) } }
+            assertEquals(listOf(metroid, mario), model.state.value.items)
+            assertEquals(false, model.canOrderContent())
+            assertEquals(false, dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.ORDER_BY in
+                dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.visibleRows(
+                    rommPaired = false, contentList = model.canOrderContent()))
+            model.enterReorderMode()
+            assertEquals(false, model.isReorderMode())
+            model.cycleOrder(1)
+            assertEquals(LibraryOrder.ALPHABETICAL, ordering.selection(key))
+            suspendCancellableCoroutine<Unit> { done -> model.reload { done.resume(Unit) } }
+            assertEquals(listOf(metroid, mario), model.state.value.items)
+            model.setSearch("No matches")
+            assertTrue(model.state.value.items.isEmpty())
+            assertEquals(false, model.canOrderContent())
+        }
+        every { recent.recent(limit = 15) } returns emptyList()
+        suspendCancellableCoroutine<Unit> { done -> model.loadRecentlyPlayed { done.resume(Unit) } }
+        assertEquals(false, model.canOrderContent())
+    }
+
+    @Test fun `list overrides isolate folders preserve selection and manual order across reloads`() = runBlocking {
+        val ordering = useRealOrdering()
+        val played = metroid.copy(rom = metroid.rom.copy(lastPlayedAt = 100))
+        every { roms.gamesForPlatform("GB", any()) } returns listOf(mario, played)
+        restore(GameListBookmark(platformTag = "GB", platformTags = listOf("GB")))
+        model.setSelectedIndex(1)
+        assertTrue(model.canOrderContent())
+        assertEquals(LibraryOrder.ALPHABETICAL, model.cycleOrder(1))
+        assertEquals(LibraryOrder.LAST_PLAYED, model.cycleOrder(1))
+        withTimeout(5_000) { model.state.first { it.items.firstOrNull() == played } }
+        assertEquals(played, model.getSelectedItem())
+
+        model.enterSubfolder("RPG")
+        withTimeout(5_000) { model.state.first { it.subfolderPath == "RPG" } }
+        assertEquals(LibraryOrder.DEFAULT, model.selectedOrder())
+        assertEquals(listOf(mario, played), model.state.value.items)
+        ordering.select(ordering.key("platform", "GB", "RPG"), LibraryOrder.MANUAL)
+        model.enterReorderMode()
+        model.reorderMoveDown()
+        model.confirmReorder()
+        suspendCancellableCoroutine<Unit> { done -> model.reload { done.resume(Unit) } }
+        assertEquals(listOf(played, mario), model.state.value.items)
+        ordering.select(ordering.key("platform", "GB", "RPG"), LibraryOrder.ALPHABETICAL)
+        suspendCancellableCoroutine<Unit> { done -> model.reload { done.resume(Unit) } }
+        assertEquals(listOf(mario, played), model.state.value.items)
+        ordering.select(ordering.key("platform", "GB", "RPG"), LibraryOrder.MANUAL)
+        suspendCancellableCoroutine<Unit> { done -> model.reload { done.resume(Unit) } }
+        assertEquals(listOf(played, mario), model.state.value.items)
+    }
+
+    @Test fun `mixed platform lists offer platform ordering even while search shows one platform`() = runBlocking {
+        val ordering = useRealOrdering()
+        val nes = mario.copy(rom = mario.rom.copy(platformTag = "NES"))
+        every { roms.gamesForPlatform("GB", any()) } returns listOf(nes, metroid)
+        restore(GameListBookmark(platformTag = "GB", platformTags = listOf("GB")))
+        ordering.select(ordering.key("platform", "GB"), LibraryOrder.MANUAL)
+        model.setSearch("Mario")
+        assertEquals(LibraryOrder.PLATFORM, model.cycleOrder(1))
+        suspendCancellableCoroutine<Unit> { done -> model.reload { done.resume(Unit) } }
+        assertEquals(listOf(metroid, nes), model.state.value.allItems)
+        assertEquals(listOf(nes), model.state.value.items)
+        assertEquals(LibraryOrder.PLATFORM, model.selectedOrder())
+    }
+
+    @Test fun `handheld home inherits global order and shares collection overrides and manual sequence`() = runBlocking {
+        val ordering = useRealOrdering(LibraryOrder.LAST_PLAYED)
+        val played = metroid.copy(rom = metroid.rom.copy(lastPlayedAt = 100))
+        every { collections.byId(7) } returns
+            CollectionsRepository.CollectionRow(7, "Games", null, 0, CollectionType.STANDARD)
+        every { collections.membersIn(7) } returns listOf(LibraryRef.Rom(2), LibraryRef.Rom(3))
+        every { roms.gameById(2) } returns mario.rom
+        every { roms.gameById(3) } returns played.rom
+        val paths = mockk<PiannoliPathsProvider>(relaxed = true) {
+            every { romDir } returns File("Roms")
+        }
+        val home = SystemListViewModel(roms, mockk(relaxed = true), apps, collections, recent,
+            mockk(relaxed = true), paths, mockk(relaxed = true), scans, ordering)
+        suspend fun loadHome() = suspendCancellableCoroutine<Unit> { done ->
+            home.scan(contentMode = ContentMode.FIVE_GAME_HANDHELD, fghCollectionId = 7,
+                scanDisk = false, onReady = { done.resume(Unit) })
+        }
+        fun members() = home.state.value.items.filterIsInstance<SystemListViewModel.ListItem.GameItem>().map { it.item }
+        try {
+            loadHome()
+            assertTrue(home.canOrderContent())
+            assertEquals(listOf(played, mario), members())
+            ordering.select(ordering.key("collection", "7"), LibraryOrder.ALPHABETICAL)
+            loadHome()
+            assertEquals(listOf(mario, played), members())
+            home.setSelectedIndex(0)
+            home.enterReorderMode()
+            home.reorderMoveDown()
+            home.confirmReorder()
+            loadHome()
+            assertEquals(LibraryOrder.MANUAL, home.selectedOrder())
+            assertEquals(listOf(played, mario), members())
+            suspendCancellableCoroutine<Unit> { done -> model.loadCollectionById(7) { done.resume(Unit) } }
+            assertEquals(members(), model.state.value.items)
+        } finally { home.close() }
     }
 
     @Test fun `grouped platform games merge alphabetically with folders and favorites first after live scan`() = runBlocking {
@@ -281,22 +425,29 @@ class GameListBookmarkTest {
         assertEquals(false, completed)
     }
 
-    @Test fun `tools ignore Favorites ordering and cannot be reordered across pin boundary`() = runBlocking {
+    @Test fun `tools preserve pins and favorites groups without displaying favorite stars`() = runBlocking {
+        useRealOrdering()
         val pinned = ListItem.AppItem(dev.piannoli.scorza.model.App(
             1, dev.piannoli.scorza.model.AppType.TOOL, "Pinned", "dev.pinned", isPinned = true))
         val other = ListItem.AppItem(dev.piannoli.scorza.model.App(
             2, dev.piannoli.scorza.model.AppType.TOOL, "Favorite", "dev.favorite"))
-        every { apps.all(dev.piannoli.scorza.model.AppType.TOOL) } returns listOf(pinned.app, other.app)
+        val ordinary = ListItem.AppItem(dev.piannoli.scorza.model.App(
+            3, dev.piannoli.scorza.model.AppType.TOOL, "Alpha", "dev.alpha"))
+        every { apps.all(dev.piannoli.scorza.model.AppType.TOOL) } returns listOf(pinned.app, ordinary.app, other.app)
         every { collections.favoriteAppIds() } returns setOf(2)
         suspendCancellableCoroutine<Unit> { continuation ->
             model.loadApkList("tools", "Apps") { continuation.resume(Unit) }
         }
-        assertEquals(listOf(pinned, other), model.state.value.items)
+        assertEquals(listOf(pinned, other, ordinary), model.state.value.items)
         assertTrue(model.state.value.favoriteAppIds.isEmpty())
         model.enterReorderMode()
         model.reorderMoveDown()
-        assertEquals(listOf(pinned, other), model.state.value.items)
+        assertEquals(listOf(pinned, other, ordinary), model.state.value.items)
         assertEquals(0, model.state.value.selectedIndex)
+        model.setSelectedIndex(1)
+        model.reorderMoveDown()
+        assertEquals(listOf(pinned, other, ordinary), model.state.value.items)
+        assertEquals(1, model.state.value.selectedIndex)
     }
 
     @Test fun `search preserves exact submitted keyboard text caret and selection`() {

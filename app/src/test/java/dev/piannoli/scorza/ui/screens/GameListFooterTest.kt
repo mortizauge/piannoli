@@ -29,6 +29,20 @@ import java.io.File
 class GameListFooterTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun `quick menu change hint appears only on order by`() {
+        val dialog = mutableStateOf(DialogState.QuickMenu(
+            rows = listOf(QuickMenuRow.ORDER_BY, QuickMenuRow.INFO),
+        ))
+        compose.setContent {
+            DialogOverlay(dialog.value, null, 0, 22.sp, 32.sp, 8.dp)
+        }
+        compose.onNodeWithText("L/R").assertIsDisplayed()
+        compose.onNodeWithText("CHANGE").assertIsDisplayed()
+        compose.runOnIdle { dialog.value = dialog.value.copy(selectedIndex = 1) }
+        compose.onAllNodesWithText("L/R").assertCountEquals(0)
+        compose.onAllNodesWithText("CHANGE").assertCountEquals(0)
+    }
+
     @Test fun `mixed platform collections label unique names and retain platform tags when filtered`() {
         val mario = ListItem.RomItem(Rom(1, File("Mario.nes"), "NES", "Mario"))
         val sonic = ListItem.RomItem(Rom(2, File("Sonic.md"), "MD", "Sonic"))

@@ -4,6 +4,11 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class QuickMenuRowsTest {
+    @Test fun `order setting is first only for local content lists`() {
+        assertEquals(QuickMenuRow.ORDER_BY, QuickMenuRow.visibleRows(rommPaired = true,
+            contentList = true, downloadCount = 2).first())
+        assertEquals(false, QuickMenuRow.ORDER_BY in QuickMenuRow.visibleRows(rommPaired = true))
+    }
 
     @Test fun `romm row only present when paired`() {
         val withRomm = QuickMenuRow.visibleRows(rommPaired = true)

@@ -167,6 +167,7 @@ sealed interface DialogState {
         val selectedIndex: Int = 0,
         val conflictCount: Int = 0,
         val syncErrorCount: Int = 0,
+        val order: dev.piannoli.scorza.settings.LibraryOrder = dev.piannoli.scorza.settings.LibraryOrder.DEFAULT,
     ) : DialogState
     data class QuickInfo(
         val addresses: List<String>,

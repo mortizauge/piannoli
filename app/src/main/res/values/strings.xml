@@ -1,4 +1,11 @@
 <resources>
+    <string name="order_platform">Platform</string>
+    <string name="order_by">Order by</string>
+    <string name="setting_default_order">Default order</string>
+    <string name="order_alphabetical">A-Z</string>
+    <string name="order_last_played">Last played</string>
+    <string name="order_manual">Manual</string>
+    <string name="order_default">Default</string>
     <string name="app_name" translatable="false">Piannoli</string>
     <string name="multidisc_loading">Reading discs...</string>
     <string name="multidisc_choose">Choose disc</string>
