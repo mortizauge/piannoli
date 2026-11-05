@@ -29,6 +29,29 @@ import java.io.File
 class GameListFooterTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun `Piannoli remapping uses controller prompt and times out without saving`() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val settings = dev.piannoli.scorza.settings.SettingsRepository(context)
+        try {
+            val model = dev.piannoli.scorza.ui.viewmodel.SettingsViewModel(
+                settings, dev.piannoli.scorza.di.AppFonts(context), context, mockk(relaxed = true))
+            model.load()
+            model.enterSubCategory("remap_piannoli", dev.piannoli.scorza.R.string.remap_piannoli)
+            compose.setContent { SettingsScreen(model) }
+            compose.mainClock.autoAdvance = false
+            compose.runOnIdle { model.startRemapping() }
+            compose.mainClock.advanceTimeBy(32)
+            compose.onNodeWithText("Press any button...").assertIsDisplayed()
+            val bindings = settings.piannoliBindings
+            compose.mainClock.advanceTimeBy(5200)
+            compose.runOnIdle {
+                org.junit.Assert.assertNull(model.state.value.remappingAction)
+                org.junit.Assert.assertEquals(bindings, settings.piannoliBindings)
+            }
+            compose.onAllNodesWithText("Press any button...").assertCountEquals(0)
+        } finally { settings.shutdown() }
+    }
+
     @Test fun `quick menu change hint appears only on order by`() {
         val dialog = mutableStateOf(DialogState.QuickMenu(
             rows = listOf(QuickMenuRow.ORDER_BY, QuickMenuRow.INFO),

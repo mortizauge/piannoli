@@ -257,13 +257,6 @@ class SettingsInputHandler @Inject constructor(
         if (settingsViewModel.state.value.remappingAction == null) return false
         val physical = dev.piannoli.scorza.input.PiannoliRemapping.remappableButton(button, mapping)
         if (physical != null) settingsViewModel.assignRemapping(physical)
-        else if (button in listOf(
-                dev.piannoli.scorza.input.CanonicalButton.BTN_UP,
-                dev.piannoli.scorza.input.CanonicalButton.BTN_DOWN,
-                dev.piannoli.scorza.input.CanonicalButton.BTN_LEFT,
-                dev.piannoli.scorza.input.CanonicalButton.BTN_RIGHT,
-                dev.piannoli.scorza.input.CanonicalButton.BTN_MENU,
-            )) settingsViewModel.cancelRemapping()
         return true
     }
 

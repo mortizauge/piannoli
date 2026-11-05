@@ -52,6 +52,21 @@ class SettingsInputHandlerTest {
     private val packages = mockk<PackageManager>(relaxed = true)
     private val games = mockk<GameListViewModel>(relaxed = true)
 
+    @Test fun `remapping captures supported buttons but ignores directions until timeout`() {
+        val viewModel = mockk<SettingsViewModel>(relaxed = true)
+        every { viewModel.state } returns kotlinx.coroutines.flow.MutableStateFlow(
+            SettingsViewModel.State(remappingAction = dev.piannoli.ui.MenuAction.CONFIRM))
+        val mapping = mockk<dev.piannoli.scorza.input.DeviceMapping> {
+            every { menuConfirm } returns dev.piannoli.scorza.input.CanonicalButton.BTN_EAST
+            every { menuBack } returns dev.piannoli.scorza.input.CanonicalButton.BTN_SOUTH
+        }
+        val input = handler(viewModel)
+        assertTrue(input.onCaptureButton(dev.piannoli.scorza.input.CanonicalButton.BTN_UP, mapping))
+        verify(exactly = 0) { viewModel.cancelRemapping(); viewModel.assignRemapping(any()) }
+        assertTrue(input.onCaptureButton(dev.piannoli.scorza.input.CanonicalButton.BTN_WEST, mapping))
+        verify(exactly = 1) { viewModel.assignRemapping(dev.piannoli.ui.MenuAction.WEST) }
+    }
+
     @Test fun `saving default order refreshes the existing content list when returning from settings`() {
         val appContext = ApplicationProvider.getApplicationContext<Context>()
         val settings = SettingsRepository(appContext)
