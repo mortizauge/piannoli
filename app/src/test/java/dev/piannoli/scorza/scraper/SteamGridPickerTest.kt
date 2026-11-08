@@ -169,7 +169,7 @@ class SteamGridPickerTest {
                 onKeyboardChange = { state.value = state.value.copy(keyboard = it) },
             )
         }
-        compose.onNodeWithText("PASTE").performClick()
+        compose.onNodeWithText("Paste").performClick()
         compose.runOnIdle {
             assertEquals(key, state.value.currentName)
             assertEquals(key.length, state.value.cursorPos)

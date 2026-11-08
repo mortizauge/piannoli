@@ -17,6 +17,7 @@ import dev.piannoli.scorza.input.ScreenInputHandler
 import dev.piannoli.scorza.model.ListItem
 import dev.piannoli.scorza.navigation.LauncherScreen
 import dev.piannoli.scorza.navigation.NavigationController
+import dev.piannoli.scorza.scraper.scrapeListName
 import dev.piannoli.scorza.settings.ContentMode
 import dev.piannoli.scorza.settings.SettingsRepository
 import dev.piannoli.scorza.ui.screens.DialogState
@@ -279,7 +280,7 @@ class SystemListInputHandler @Inject constructor(
         }
         val options = buildList {
             if (item is SystemListViewModel.ListItem.PlatformItem || item is SystemListViewModel.ListItem.PortsFolder) {
-                add(context.getString(dev.piannoli.scorza.R.string.bulk_platform_games, name))
+                add(context.getString(dev.piannoli.scorza.R.string.bulk_platform_games, scrapeListName(name)))
                 add(context.getString(dev.piannoli.scorza.R.string.scrape_system))
             }
             add(context.getString(dev.piannoli.scorza.R.string.choose_artwork))

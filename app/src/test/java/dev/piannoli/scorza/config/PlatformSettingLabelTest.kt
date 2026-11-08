@@ -50,6 +50,6 @@ class PlatformSettingLabelTest {
         pc.setPlatformChoice("GC", EmulatorChoice(EmulatorSource.Standalone))
         val entry = pc.detailedMappingFor("GC", ctx.packageManager)
         assertEquals(EmulatorMappingStatus.NEEDS_SETUP, entry.status)
-        assertEquals("Needs setup", entry.coreDisplayName)
+        assertEquals("Needs Setup", entry.coreDisplayName)
     }
 }

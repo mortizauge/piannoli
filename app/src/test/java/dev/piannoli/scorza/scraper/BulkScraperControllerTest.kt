@@ -130,6 +130,9 @@ class BulkScraperControllerTest {
         )) {
             controller.openList(name, emptyList()) {}
             assertEquals(expected, (nav.dialogState.value as DialogState.ScraperMenu).title)
+            every { platforms.getDisplayName("SNES") } returns name
+            controller.open("SNES") {}
+            assertEquals(expected, (nav.dialogState.value as DialogState.ScraperMenu).title)
         }
     }
 
@@ -281,7 +284,7 @@ class BulkScraperControllerTest {
     }
 
     @Test fun `interactive back restores matches then configuration then originating menu`() = scope.runTest {
-        val origin = DialogState.ContextMenu("SNES", options = listOf("Rename", "Scrape SNES Games"))
+        val origin = DialogState.ContextMenu("SNES", options = listOf("Rename", "Scrape All SNES Games"))
         controller.open("SNES") { nav.dialogState.value = origin }
         click(R.string.bulk_mode)
         click(R.string.bulk_start)
@@ -297,7 +300,7 @@ class BulkScraperControllerTest {
         assertTrue((nav.dialogState.value as DialogState.ScraperMenu).previews.isNotEmpty())
         controller.back()
         controller.back()
-        assertEquals("Scrape SNES Games", (nav.dialogState.value as DialogState.ScraperMenu).title)
+        assertEquals("Scrape All SNES Games", (nav.dialogState.value as DialogState.ScraperMenu).title)
         assertTrue((nav.dialogState.value as DialogState.ScraperMenu).options.any { it.endsWith("\tInteractive") })
         controller.back()
         assertEquals(origin, nav.dialogState.value)
@@ -401,7 +404,7 @@ class BulkScraperControllerTest {
 
     @Test fun `platform entry and subfolder toggle scope the selected run`() = scope.runTest {
         controller.open("SNES") {}
-        assertEquals("Scrape SNES Games", (nav.dialogState.value as DialogState.ScraperMenu).title)
+        assertEquals("Scrape All SNES Games", (nav.dialogState.value as DialogState.ScraperMenu).title)
         click(R.string.bulk_subfolders)
         click(R.string.bulk_start)
         advanceUntilIdle()
@@ -413,7 +416,7 @@ class BulkScraperControllerTest {
         val existing = game.copy(artFile = File("Existing.jpg"))
         every { roms.romsForScraping("SNES", true) } returns listOf(existing, game.copy(id = 2, path = File("cart.p8.png")))
         every { artwork.install(existing, bytes, true) } returns File("Game.png")
-        assertTrue((nav.dialogState.value as DialogState.ScraperMenu).options.contains("Existing artwork\tSkip"))
+        assertTrue((nav.dialogState.value as DialogState.ScraperMenu).options.contains("Existing Artwork\tSkip"))
         click(R.string.bulk_existing_artwork)
         click(R.string.bulk_start)
         advanceTimeBy(1_000)
@@ -422,7 +425,7 @@ class BulkScraperControllerTest {
         assertEquals(summary(context.getString(R.string.bulk_complete), 1, 1),
             (nav.dialogState.value as DialogState.ScraperStatus).message)
         controller.open {}
-        assertTrue((nav.dialogState.value as DialogState.ScraperMenu).options.contains("Existing artwork\tSkip"))
+        assertTrue((nav.dialogState.value as DialogState.ScraperMenu).options.contains("Existing Artwork\tSkip"))
     }
 
     @Test fun `existing artwork is excluded while embedded ambiguous and unmatched games are skipped`() = scope.runTest {

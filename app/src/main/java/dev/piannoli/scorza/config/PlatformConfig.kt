@@ -21,7 +21,7 @@ class PlatformConfig(
     private val coreInfo: CoreInfoRepository? = null,
     // Resolved string passed in because this class has no Context; defaulted for tests.
     private val emptyOverrideLabel: String = "(empty override)",
-    private val needsSetupLabel: String = "Needs setup",
+    private val needsSetupLabel: String = "Needs Setup",
 ) {
 
     constructor(

@@ -150,8 +150,8 @@ class BulkScraperController @Inject constructor(
         else if (systemPlatforms != null) context.getString(R.string.bulk_systems)
         else if (allPlatforms) context.getString(R.string.bulk_all)
         else context.getString(R.string.bulk_platform_games,
-            if (platform.equals("PORTS", ignoreCase = true)) context.getString(dev.piannoli.ui.R.string.origin_ports)
-            else platforms.getDisplayName(requireNotNull(platform)))
+            scrapeListName(if (platform.equals("PORTS", ignoreCase = true)) context.getString(dev.piannoli.ui.R.string.origin_ports)
+            else platforms.getDisplayName(requireNotNull(platform))))
         menu(title, buildList {
             if (!allPlatforms) {
                 add("${context.getString(R.string.bulk_subfolders)}\t${context.getString(if (includeSubfolders) R.string.value_on else R.string.value_off)}" to {

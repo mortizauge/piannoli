@@ -712,6 +712,14 @@ class ConflictsApplyingStateTest {
         verify(exactly = 1) { scraper.openSystem("PORTS", "Ports") }
     }
 
+    @Test fun `category game scraping dispatches the same normalized All label as the quick menu`() {
+        every { systems.getSelectedPlatformTag() } returns "ANDROID"
+        nav.dialogState.value = DialogState.ContextMenu("Android Games",
+            options = listOf("Scrape All Android Games"))
+        handler.onConfirm()
+        verify(exactly = 1) { bulkScraper.open("ANDROID", any()) }
+    }
+
     @Test fun `scrape systems quick menu action passes available platforms to bulk scraping`() {
         val available = listOf(dev.piannoli.scorza.model.Platform("GB", "Game Boy", null))
         every { systems.state } returns kotlinx.coroutines.flow.MutableStateFlow(
@@ -830,8 +838,8 @@ class ConflictsApplyingStateTest {
     )
 
     @Test fun `extension filter confirm toggles exclusions and directions navigate checkbox list`() {
-        val origin = DialogState.ContextMenu("Game Boy", options = listOf("Filter extensions"))
-        nav.dialogState.value = DialogState.ExtensionFilters("GB", "Filter extensions",
+        val origin = DialogState.ContextMenu("Game Boy", options = listOf("Filter Extensions"))
+        nav.dialogState.value = DialogState.ExtensionFilters("GB", "Filter Extensions",
             listOf("gb", "zip"), emptySet(), origin)
         handler.onDown()
         handler.onConfirm()

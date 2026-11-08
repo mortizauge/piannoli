@@ -26,6 +26,7 @@ import dev.piannoli.scorza.romm.download.DownloadStatus
 import dev.piannoli.scorza.romm.download.inDisplayOrder
 import dev.piannoli.scorza.romm.download.sanitizeFsName
 import dev.piannoli.scorza.romm.sync.RomKeys
+import dev.piannoli.scorza.scraper.scrapeListName
 import dev.piannoli.scorza.settings.SettingsRepository
 import dev.piannoli.scorza.ui.screens.ColorEntry
 import dev.piannoli.scorza.ui.screens.EmulatorPickerOption
@@ -1669,7 +1670,7 @@ class DialogInputHandler @Inject constructor(
                             }
                         }
                     }
-                    context.getString(dev.piannoli.scorza.R.string.bulk_platform_games, state.gameName) -> {
+                    context.getString(dev.piannoli.scorza.R.string.bulk_platform_games, scrapeListName(state.gameName)) -> {
                         val tag = systemListViewModel.getSelectedPlatformTag()
                         if (tag != null) bulkScraper.open(tag) { nav.dialogState.value = state }
                     }

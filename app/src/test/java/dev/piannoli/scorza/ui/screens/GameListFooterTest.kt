@@ -41,14 +41,14 @@ class GameListFooterTest {
             compose.mainClock.autoAdvance = false
             compose.runOnIdle { model.startRemapping() }
             compose.mainClock.advanceTimeBy(32)
-            compose.onNodeWithText("Press any button...").assertIsDisplayed()
+            compose.onNodeWithText("Press Any Button...").assertIsDisplayed()
             val bindings = settings.piannoliBindings
             compose.mainClock.advanceTimeBy(5200)
             compose.runOnIdle {
                 org.junit.Assert.assertNull(model.state.value.remappingAction)
                 org.junit.Assert.assertEquals(bindings, settings.piannoliBindings)
             }
-            compose.onAllNodesWithText("Press any button...").assertCountEquals(0)
+            compose.onAllNodesWithText("Press Any Button...").assertCountEquals(0)
         } finally { settings.shutdown() }
     }
 
