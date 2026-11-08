@@ -93,7 +93,7 @@ fun GlyphPill(button: String) {
     val sf = LocalScaleFactor.current
     GlyphPill {
         Text(
-            text = button,
+            text = button.uppercase(),
             style = barTextStyle(GlyphTextSp, sf).copy(color = accent)
         )
     }
@@ -116,7 +116,7 @@ fun LegendPill(label: String, modifier: Modifier = Modifier, glyphs: @Composable
         glyphs()
 
         Text(
-            text = label,
+            text = label.uppercase(),
             style = barTextStyle(LegendTextSp, sf).copy(color = accent)
         )
     }

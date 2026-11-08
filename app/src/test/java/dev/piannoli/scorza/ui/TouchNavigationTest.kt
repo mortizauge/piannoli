@@ -121,11 +121,12 @@ class TouchNavigationTest {
                         leftItems = listOf("B" to "Back"),
                         rightItems = listOf("A" to "Open"),
                     )
-                    LegendPill("X", "Explicit", onClick = { actions += "explicit" })
+                    LegendPill("start", "Explicit", onClick = { actions += "explicit" })
                 }
             }
         }
-        for (label in listOf("Back", "Open", "Explicit")) {
+        compose.onNodeWithText("START").assertExists()
+        for (label in listOf("BACK", "OPEN", "EXPLICIT")) {
             val hint = compose.onNodeWithText(label)
             hint.performSemanticsAction(SemanticsActions.RequestFocus) { it() }
             hint.assertIsNotFocused()
@@ -253,8 +254,8 @@ class TouchNavigationTest {
     @Test fun `setting tap cycles and footer hints dispatch their glyphs`() {
         render()
         compose.onNodeWithText("Setting").performTouchInput { click() }
-        compose.onNodeWithText("Change").performTouchInput { click() }
-        compose.onNodeWithText("Back").performTouchInput { click() }
+        compose.onNodeWithText("CHANGE").performTouchInput { click() }
+        compose.onNodeWithText("BACK").performTouchInput { click() }
         assertEquals(listOf("cycle:2", DPAD_HORIZONTAL, "B"), actions)
     }
 
