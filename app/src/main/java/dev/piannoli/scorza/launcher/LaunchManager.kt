@@ -110,10 +110,6 @@ class LaunchManager(
             put("sort_savestates_enable", "false")
             put("sort_savestates_by_content_enable", "false")
             put("state_slot", raSlot.toString())
-            // RetroArch's auto-save is how RicottaArch saves on quit. It writes the Auto slot, so gate on
-            // the same setting. This lives here, not in the base config, because the base is
-            // hash-gated and would not pick up a toggle until CONFIG_VERSION moved.
-            put("savestate_auto_save", if (settings.alwaysSaveOnQuit) "true" else "false")
             if (resume) {
                 put("savestate_auto_load", "true")
             }

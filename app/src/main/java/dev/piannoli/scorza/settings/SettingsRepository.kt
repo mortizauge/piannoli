@@ -579,10 +579,6 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         get() = jsonRead { optBoolean(KEY_LOGGING_ROMM, false) }
         set(value) = jsonWrite { put(KEY_LOGGING_ROMM, value) }
 
-    var alwaysSaveOnQuit: Boolean
-        get() = jsonRead { optBoolean(KEY_ALWAYS_SAVE_ON_QUIT, false) }
-        set(value) = jsonWrite { put(KEY_ALWAYS_SAVE_ON_QUIT, value) }
-
     var portraitMarginPx: Int
         get() = jsonRead { optInt(KEY_PORTRAIT_MARGIN_PX, 0) }
         set(value) = jsonWrite { put(KEY_PORTRAIT_MARGIN_PX, value.coerceAtLeast(0)) }
@@ -700,7 +696,6 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         private const val KEY_LOGGING_SESSION = "logging_session"
         private const val KEY_LOGGING_STORAGE = "logging_storage"
         private const val KEY_LOGGING_ROMM = "logging_romm"
-        private const val KEY_ALWAYS_SAVE_ON_QUIT = "always_save_on_quit"
         private const val KEY_PORTRAIT_MARGIN_PX = "portrait_margin_px"
         private const val KEY_SCREEN_GEOMETRY_WIDTH = "screen_geometry_width"
         private const val KEY_SCREEN_GEOMETRY_HEIGHT = "screen_geometry_height"

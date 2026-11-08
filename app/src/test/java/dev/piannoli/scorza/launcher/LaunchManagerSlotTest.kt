@@ -115,7 +115,6 @@ class LaunchManagerSlotTest {
         val root = tmp.newFolder()
         val mgr = manager(root)
         val r = rom(root)
-        every { settings.alwaysSaveOnQuit } returns true
         every { retroArchLauncher.launchRicotta(any(), any(), any(), any(), any()) } returns LaunchResult.Success
         val cfg = slot<String>()
         val igm = slot<RicottaIgm>()
@@ -125,7 +124,7 @@ class LaunchManagerSlotTest {
         assertTrue(text.contains("savefile_directory = \"${root.absolutePath}/Saves\""))
         assertTrue(text.contains("sort_savefiles_enable = \"false\""))
         assertTrue(text.contains("savestate_directory = \"${File(mgr.saveStateBasePath(r)).parent}\""))
-        assertTrue(text.contains("savestate_auto_save = \"true\""))
+        assertFalse(text.contains("savestate_auto_save"))
         assertEquals(mgr.saveStateBasePath(r), igm.captured.stateBasePath)
         assertNull(mgr.resumeRom(r, 3))
         val resumed = File(cfg.captured).readText()
@@ -141,5 +140,25 @@ class LaunchManagerSlotTest {
         assertTrue(manager.launchRom(rom) is dev.piannoli.scorza.ui.screens.DialogState.LaunchError)
         assertTrue(manager.resumeRom(rom, 3) is dev.piannoli.scorza.ui.screens.DialogState.LaunchError)
         verify(exactly = 0) { retroArchLauncher.launchRicotta(any(), any(), any(), any(), any()) }
+    }
+
+    @Test fun `launch and resume preserve emulator auto-save preferences without a frontend override`() {
+        val root = tmp.newFolder()
+        val mgr = manager(root)
+        val r = rom(root)
+        val config = File(dev.piannoli.scorza.config.PiannoliPaths(root).configRetroArch, "retroarch.cfg")
+        config.parentFile!!.mkdirs()
+        every { retroArchLauncher.launchRicotta(any(), any(), any(), any(), any()) } returns LaunchResult.Success
+        val launchConfig = dev.piannoli.scorza.config.PiannoliPaths(root).raLaunchCfg
+        for (enabled in listOf("true", "false")) {
+            config.writeText("savestate_auto_save = \"$enabled\"\n")
+            assertNull(mgr.launchRom(r))
+            assertTrue(launchConfig.readText().contains("savestate_auto_save = \"$enabled\""))
+            assertNull(mgr.resumeRom(r, 3))
+            assertTrue(launchConfig.readText().contains("savestate_auto_save = \"$enabled\""))
+        }
+        verify(exactly = 4) {
+            retroArchLauncher.launchRicotta(r.path, "snes9x_libretro", launchConfig.absolutePath, "dev.piannoli.ricotta", any())
+        }
     }
 }

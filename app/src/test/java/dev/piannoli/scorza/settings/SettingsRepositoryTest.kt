@@ -33,6 +33,24 @@ class SettingsRepositoryTest {
 
     @Test
     @Config(sdk = [28])
+    fun `legacy quit-save preference no longer appears in emulation settings`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        Shadows.shadowOf(context as android.app.Application)
+            .grantPermissions(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+        writeSettingsJson(tmp.root, """{"always_save_on_quit":true}""")
+        val settings = newRepo()
+        try {
+            settings.sdCardRoot = tmp.root.absolutePath
+            val viewModel = SettingsViewModel(settings, AppFonts(context), context, mockk(relaxed = true))
+            viewModel.load()
+            viewModel.enterSubCategory("emulation", R.string.settings_emulation)
+            assertFalse(viewModel.state.value.items.any { it.key == "always_save_on_quit" })
+            org.junit.Assert.assertTrue(viewModel.state.value.items.any { it.key == "core_mapping" })
+        } finally { settings.shutdown() }
+    }
+
+    @Test
+    @Config(sdk = [28])
     fun `library orders persist independently and default order supports preview cancellation`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         Shadows.shadowOf(context as android.app.Application)

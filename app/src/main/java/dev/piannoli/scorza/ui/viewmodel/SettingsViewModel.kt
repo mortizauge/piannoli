@@ -605,7 +605,6 @@ class SettingsViewModel @Inject constructor(
             }
             "show_update" -> settings.showUpdate = !settings.showUpdate
             "main_menu_quit" -> settings.mainMenuQuit = !settings.mainMenuQuit
-            "always_save_on_quit" -> settings.alwaysSaveOnQuit = !settings.alwaysSaveOnQuit
             "portrait_margin" -> {
                 val step = when {
                     repeatCount == 0 -> 1
@@ -1046,7 +1045,6 @@ class SettingsViewModel @Inject constructor(
                 val pkgLabel = InstalledCoreService.getPackageLabel(settings.retroArchPackage)
                 add(SettingsItem("installed_cores", R.string.setting_installed_cores, labelText = context.getString(R.string.setting_installed_cores, pkgLabel), isEditable = true))
             }
-            add(SettingsItem("always_save_on_quit", R.string.setting_always_save_on_quit, valueRes = onOff(settings.alwaysSaveOnQuit)))
         }
         "integrations" -> buildList {
             add(SettingsItem("integrations_ra", R.string.settings_retroachievements, isEditable = true))

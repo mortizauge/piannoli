@@ -104,7 +104,6 @@
     <string name="binding_axis_neg">Axis %1$d-</string>
     <string name="setting_swap_play_resume">Swap Play and Resume</string>
     <string name="setting_main_menu_quit">Main Menu Quit</string>
-    <string name="setting_always_save_on_quit">Save State On Quit</string>
     <string name="setting_experimental_features">Experimental Features</string>
     <string name="setting_set_default_launcher">Set as Default Launcher</string>
     <string name="setting_regenerate_system_folders">Regenerate System Folders</string>

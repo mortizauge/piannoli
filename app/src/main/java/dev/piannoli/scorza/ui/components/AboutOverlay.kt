@@ -59,13 +59,6 @@ fun AboutOverlay(statusMessage: String? = null, updateAvailable: Boolean = false
                 style = typo.bodyMedium.copy(color = Color.White)
             )
 
-            Spacer(modifier = Modifier.height(Spacing.Lg))
-
-            Text(
-                text = stringResource(R.string.about_website),
-                style = typo.bodyMedium.copy(color = Color.White)
-            )
-
             if (statusMessage != null) {
                 Spacer(modifier = Modifier.height(Spacing.Md))
                 Text(

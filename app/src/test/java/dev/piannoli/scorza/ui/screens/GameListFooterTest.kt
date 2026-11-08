@@ -29,6 +29,13 @@ import java.io.File
 class GameListFooterTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun `about page omits the old website and keeps credits accessible`() {
+        compose.setContent { dev.piannoli.scorza.ui.components.AboutOverlay() }
+        compose.onNodeWithText("Piannoli").assertIsDisplayed()
+        compose.onAllNodesWithText("cannoli.dev").assertCountEquals(0)
+        compose.onNodeWithText("CREDITS").assertIsDisplayed()
+    }
+
     @Test fun `Piannoli remapping uses controller prompt and times out without saving`() {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val settings = dev.piannoli.scorza.settings.SettingsRepository(context)

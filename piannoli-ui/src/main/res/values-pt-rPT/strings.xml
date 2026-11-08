@@ -133,7 +133,6 @@
     <!-- Input setting toggle: controls whether the in-game Quit returns to the main menu. -->
     <string name="setting_main_menu_quit">Sair para o Menu Principal</string>
     <!-- Input toggle: automatically save a state when quitting a game. -->
-    <string name="setting_always_save_on_quit">Guardar Estado ao Sair</string>
     <string name="setting_experimental_features">Funcionalidades Experimentais</string>
     <string name="setting_set_default_launcher">Definir como Iniciador Predefinido</string>
     <!-- Same row as setting_set_default_launcher, shown when Piannoli is already the default launcher and the user wants to pick another one. -->

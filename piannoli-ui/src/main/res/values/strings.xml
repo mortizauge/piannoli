@@ -172,8 +172,6 @@
     <string name="setting_swap_play_resume">Swap Play and Resume</string>
     <!-- Input setting toggle: controls whether the in-game Quit returns to the main menu. -->
     <string name="setting_main_menu_quit">Main Menu Quit</string>
-    <!-- Input toggle: automatically save a state when quitting a game. -->
-    <string name="setting_always_save_on_quit">Save State On Quit</string>
     <string name="setting_experimental_features">Experimental Features</string>
     <string name="setting_set_default_launcher">Set as Default Launcher</string>
     <!-- Same row as setting_set_default_launcher, shown when Piannoli is already the default launcher and the user wants to pick another one. -->
@@ -509,8 +507,6 @@
 
     <!-- About -->
     <string name="about_title" translatable="false">Piannoli</string>
-    <!-- App tagline; playful, "filling" is a piannoli pun. Keep the light tone. -->
-    <string name="about_website" translatable="false">cannoli.dev</string>
 
     <!-- Search -->
     <string name="search_global">Global Search</string>

@@ -132,7 +132,6 @@
     <string name="setting_swap_play_resume">Permuter la lecture et la reprise</string>
     <!-- Input setting toggle: controls whether the in-game Quit returns to the main menu. -->
     <!-- Input toggle: automatically save a state when quitting a game. -->
-    <string name="setting_always_save_on_quit">Enregistrer l\'état à la fermeture</string>
     <string name="setting_experimental_features">Fonctionnalités expérimentales</string>
     <string name="setting_set_default_launcher">Définir comme Launcher par défaut</string>
     <!-- Same row as setting_set_default_launcher, shown when Piannoli is already the default launcher and the user wants to pick another one. -->
