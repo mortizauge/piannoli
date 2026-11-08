@@ -19,6 +19,7 @@ import dev.piannoli.scorza.launcher.InstalledCoreService
 import dev.piannoli.scorza.launcher.LaunchManager
 import dev.piannoli.scorza.navigation.LauncherScreen
 import dev.piannoli.scorza.navigation.NavigationController
+import dev.piannoli.scorza.navigation.ProcessSession
 import dev.piannoli.scorza.settings.ContentMode
 import dev.piannoli.scorza.settings.SettingsRepository
 import dev.piannoli.scorza.setup.SetupCoordinator
@@ -32,6 +33,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 import javax.inject.Inject
 import kotlin.coroutines.resume
@@ -60,11 +62,16 @@ class BootInitializer @Inject constructor(
     private val launcherActions: LauncherActions,
     private val setupCoordinator: SetupCoordinator,
     private val browseSession: dev.piannoli.scorza.navigation.BrowseSession,
+    private val processSession: ProcessSession,
 ) {
 
-    suspend fun run(onPhase: (BootPhase, Float, String) -> Unit): BootResult {
+    suspend fun run(onPhase: (BootPhase, Float, String) -> Unit): BootResult =
+        processSession.initializationMutex.withLock { initialize(onPhase) }
+
+    private suspend fun initialize(onPhase: (BootPhase, Float, String) -> Unit): BootResult {
         val root = piannoliPaths.root
         val romDir = piannoliPaths.romDir
+        val warmStart = processSession.isInitialized(root.absolutePath, romDir.absolutePath)
         val importPhase = if (hasLegacyData(root)) BootPhase.IMPORT else BootPhase.INITIAL_SCAN
         onPhase(BootPhase.LIBRARY_REFRESH, 0f, context.getString(R.string.boot_preparing))
 
@@ -75,16 +82,19 @@ class BootInitializer @Inject constructor(
         dev.piannoli.scorza.util.ErrorLog.init(root.absolutePath)
         setupCoordinator.logStorageDiagnostics()
         platformConfig.load()
-        val bookmark = browseSession.pending()
-        val scanDisk = settings.scanLibraryAutomatically
+        val bookmark = if (warmStart) browseSession.pending() else null
+        if (!warmStart) browseSession.clear()
+        val scanDisk = !warmStart && settings.scanLibraryAutomatically
         // Backfill only. Fills platforms that have no stored choice and never touches one the
         // user made, so it is safe to run on every boot rather than only on first run.
-        platformConfig.seedUnsetPlatforms(context.packageManager)
-        ioScope.launch {
-            launchManager.syncRetroArchAssets(root)
-            launchManager.syncRetroArchConfig(root)
+        if (!warmStart) {
+            platformConfig.seedUnsetPlatforms(context.packageManager)
+            ioScope.launch {
+                launchManager.syncRetroArchAssets(root)
+                launchManager.syncRetroArchConfig(root)
+            }
+            ioScope.launch { dev.piannoli.scorza.util.DirectoryLayout.ensure(root, romDir, context.assets, platformConfig) }
         }
-        ioScope.launch { dev.piannoli.scorza.util.DirectoryLayout.ensure(root, romDir, context.assets, platformConfig) }
 
         val importer = Importer(
             context = context,
@@ -99,26 +109,29 @@ class BootInitializer @Inject constructor(
             scanDisk = scanDisk,
         )
 
-        val result = withContext(Dispatchers.IO) { importer.run() }
+        val result = if (warmStart) ImportResult.NotNeeded else withContext(Dispatchers.IO) { importer.run() }
 
         if (result is ImportResult.Failure) {
             ScanLog.write("ERROR import returned Failure: ${result.cause.message}")
             return BootResult.Failure(result.cause.message ?: context.getString(R.string.boot_import_failed))
         }
 
-        ioScope.launch {
-            installedCoreService.queryAllPackages()
-            platformConfig.seedUnsetPlatforms(context.packageManager, installedCoreService.configuredCores())
+        if (!warmStart) {
+            ioScope.launch {
+                installedCoreService.queryAllPackages()
+                platformConfig.seedUnsetPlatforms(context.packageManager, installedCoreService.configuredCores())
+            }
         }
 
         withContext(Dispatchers.Main) {
             gameListViewModel.showFavoriteStars = settings.contentMode != ContentMode.FIVE_GAME_HANDHELD
             settingsViewModel.reinitialize(root, context.packageManager, context.packageName, collectionsRepository)
 
-            ioScope.launch { updateManager.purgeStaleDownloads() }
-
-            if (updateManager.shouldAutoCheck()) {
-                ioScope.launch { updateManager.checkForUpdate() }
+            if (!warmStart) {
+                ioScope.launch { updateManager.purgeStaleDownloads() }
+                if (updateManager.shouldAutoCheck()) {
+                    ioScope.launch { updateManager.checkForUpdate() }
+                }
             }
             // updateAvailable -> settingsViewModel.updateInfo is now pushed lifecycle-bound
             // from MainActivity.ReadyNavGraph so it cancels on Activity destroy.
@@ -133,10 +146,16 @@ class BootInitializer @Inject constructor(
                 onProgress = { tag, current, total ->
                     onPhase(BootPhase.LIBRARY_REFRESH, current.toFloat() / total.coerceAtLeast(1), tag)
                 },
-                onComplete = {
+                onComplete = complete@ {
+                    if (!cont.isActive) return@complete
+                    fun ready() {
+                        if (!cont.isActive) return
+                        processSession.initialized(root.absolutePath, romDir.absolutePath)
+                        cont.resume(BootResult.Success)
+                    }
                     if (bookmark != null) {
-                        browseSession.restore(bookmark) { if (cont.isActive) cont.resume(BootResult.Success) }
-                    } else if (cont.isActive) cont.resume(BootResult.Success)
+                        browseSession.restore(bookmark, ::ready)
+                    } else ready()
                 },
             )
         }

@@ -94,6 +94,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
     @Inject lateinit var launchManager: Provider<LaunchManager>
     @Inject lateinit var launchState: dev.piannoli.scorza.launcher.LaunchState
     @Inject lateinit var browseSession: dev.piannoli.scorza.navigation.BrowseSession
+    @Inject lateinit var processSession: dev.piannoli.scorza.navigation.ProcessSession
     @Inject lateinit var romDirectoryWatcher: Provider<dev.piannoli.scorza.scanner.RomDirectoryWatcher>
     @Inject lateinit var installedCoreService: Provider<InstalledCoreService>
     @Inject lateinit var romsRepository: Provider<RomsRepository>
@@ -129,6 +130,12 @@ class MainActivity : ComponentActivity(), ActivityActions {
     private val isTv: Boolean by lazy { dev.piannoli.scorza.util.DeviceType.isTv(this) }
 
     private val isReady: Boolean get() = bootSequencer.state.value is BootState.Ready
+    private val automaticBootScan: Boolean
+        get() = settings.scanLibraryAutomatically && !processSession.isInitialized(
+            java.io.File(settings.sdCardRoot).absolutePath,
+            (settings.romDirectory.takeIf { it.isNotEmpty() }?.let { java.io.File(it) }
+                ?: java.io.File(settings.sdCardRoot, "Roms")).absolutePath,
+        )
 
     private var coreQueryReceiver: android.content.BroadcastReceiver? = null
     private var loginJob: kotlinx.coroutines.Job? = null
@@ -292,7 +299,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
             val state = bootSequencer.state.value
             when (state) {
                 BootState.Resolving -> true
-                is BootState.Initializing -> !settings.scanLibraryAutomatically
+                is BootState.Initializing -> !automaticBootScan
                 else -> false
             }
         }
@@ -417,7 +424,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
                             ReadyNavGraph()
                         }
                         is BootState.Initializing -> {
-                            if (settings.scanLibraryAutomatically) {
+                            if (automaticBootScan) {
                                 val kind = when (s.phase) {
                                     dev.piannoli.scorza.boot.BootPhase.IMPORT ->
                                         dev.piannoli.scorza.ui.screens.HousekeepingKind.DATABASE_MIGRATION
@@ -573,7 +580,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
         coldStart = false
         hideSystemUI()
         settings.reload()
-        settingsViewModel.get().load()
+        settingsViewModel.get().refreshItemsAndSettings()
         val activeDialogState = nav.dialogState
         if (activeDialogState.value is DialogState.RAAccount && settings.raToken.isEmpty()) {
             activeDialogState.value = DialogState.None
@@ -581,7 +588,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
         if (activeDialogState.value is DialogState.RommConnected && rommStore.token.isNullOrEmpty()) {
             activeDialogState.value = DialogState.None
         }
-        launcherActions.get().refreshLauncherLists(scanDisk = false)
+        if (justExited != null) launcherActions.get().scanResumableGames()
     }
 
     override fun onPause() {
@@ -599,7 +606,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
             nav.pendingRecentlyPlayedReorder = false
             gameListViewModel.get().moveSelectedToTop()
         }
-        if (isReady && (launchState.launching || launchState.lastLaunched != null)) {
+        if (isReady) {
             browseSession.save()
         }
     }
@@ -612,7 +619,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
         super.onDestroy()
         unregisterCoreQueryReceiver()
         loginJob?.cancel()
-        settings.shutdown()
+        settings.flush()
         if (isReady) {
             systemListViewModel.get().close()
             gameListViewModel.get().close()

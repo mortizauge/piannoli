@@ -26,6 +26,7 @@ class BrowseSessionTest {
     private val games = mockk<GameListViewModel>()
     private val systems = mockk<SystemListViewModel>(relaxed = true)
     private val nav = NavigationController()
+    private val processSession = ProcessSession()
     private val position = BrowsePosition("platform:GB", 4, 2)
     private val game = GameListBookmark(
         platformTag = "GB", platformTags = listOf("GB"), search = "Mario",
@@ -45,9 +46,9 @@ class BrowseSessionTest {
 
     @Test fun `game browsing survives new controller and navigation instances without saving game lists`() {
         nav.push(LauncherScreen.GameList)
-        BrowseSession(context, paths, nav, games, systems).save()
+        BrowseSession(processSession, paths, nav, games, systems).save()
         val restoredNav = NavigationController()
-        val session = BrowseSession(context, paths, restoredNav, games, systems)
+        val session = BrowseSession(processSession, paths, restoredNav, games, systems)
         val saved = session.pending()!!
         assertEquals(game, saved.game)
         assertEquals(position, saved.system)
@@ -64,7 +65,7 @@ class BrowseSessionTest {
     }
 
     @Test fun `system list game launch preserves selection without creating a game list`() {
-        val session = BrowseSession(context, paths, nav, games, systems)
+        val session = BrowseSession(processSession, paths, nav, games, systems)
         session.save()
         val saved = session.pending()!!
         assertNull(saved.game)
@@ -75,7 +76,7 @@ class BrowseSessionTest {
     }
 
     @Test fun `position from another ROM directory is discarded`() {
-        val session = BrowseSession(context, paths, nav, games, systems)
+        val session = BrowseSession(processSession, paths, nav, games, systems)
         session.save()
         assertNotNull(session.pending())
         every { paths.romDir } returns File(context.cacheDir, "other")
@@ -84,11 +85,17 @@ class BrowseSessionTest {
         assertNull(session.pending())
     }
 
-    @Test fun `corrupt bookmark is discarded rather than blocking startup`() {
+    @Test fun `a new process ignores browsing history even when a legacy disk bookmark exists`() {
+        nav.push(LauncherScreen.GameList)
+        val previous = BrowseSession(processSession, paths, nav, games, systems)
+        previous.save()
+        assertNotNull(previous.pending())
         context.getSharedPreferences("browse_session", Context.MODE_PRIVATE)
             .edit().putString("bookmark", "{invalid").commit()
-        val session = BrowseSession(context, paths, nav, games, systems)
+        val restoredNav = NavigationController()
+        val session = BrowseSession(ProcessSession(), paths, restoredNav, games, systems)
         assertNull(session.pending())
-        assertNull(session.pending())
+        assertEquals(LauncherScreen.SystemList, restoredNav.currentScreen)
+        verify(exactly = 0) { games.restoreBookmark(any(), any()) }
     }
 }
