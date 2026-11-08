@@ -1,6 +1,7 @@
 package dev.piannoli.scorza.model
 
 import dev.piannoli.scorza.di.PiannoliPathsProvider
+import dev.piannoli.scorza.db.LibraryRef
 import dev.piannoli.scorza.settings.LibraryOrder
 import dev.piannoli.scorza.settings.SettingsRepository
 import dev.piannoli.scorza.util.sortedNatural
@@ -32,11 +33,22 @@ class LibraryOrdering @Inject constructor(
         key: String,
         favoriteRoms: Set<Long>,
         favoriteApps: Set<Long>,
+        lastAdded: List<LibraryRef> = emptyList(),
     ): List<ListItem> {
         val order = resolved(key)
-        val (folders, members) = items.partition { memberKey(it) == null }
+        val (folders, content) = items.partition { memberKey(it) == null }
+        val (pinned, members) = content.partition { (it as? ListItem.AppItem)?.app?.isPinned == true }
         val sorted = when (order) {
             LibraryOrder.ALPHABETICAL -> members.sortedNatural(::name)
+            LibraryOrder.LAST_ADDED -> {
+                val positions = lastAdded.map {
+                    when (it) {
+                        is LibraryRef.Rom -> "rom:${it.id}"
+                        is LibraryRef.App -> "app:${it.id}"
+                    }
+                }.withIndex().associate { it.value to it.index }
+                members.sortedBy { positions[memberKey(it)] ?: Int.MAX_VALUE }
+            }
             LibraryOrder.PLATFORM -> members.sortedNatural(::name).sortedNatural { platform(it).orEmpty() }
             LibraryOrder.LAST_PLAYED -> members.sortedNatural(::name).sortedByDescending {
                 when (it) {
@@ -51,7 +63,7 @@ class LibraryOrdering @Inject constructor(
             }
             LibraryOrder.DEFAULT -> error("Default library order must be explicit")
         }
-        return folders + sorted.sortedBy { reorderGroup(it, favoriteRoms, favoriteApps) }
+        return folders + pinned + sorted.sortedBy { reorderGroup(it, favoriteRoms, favoriteApps) }
     }
 
     fun reorderGroup(item: ListItem, favoriteRoms: Set<Long>, favoriteApps: Set<Long>): Int = when (item) {

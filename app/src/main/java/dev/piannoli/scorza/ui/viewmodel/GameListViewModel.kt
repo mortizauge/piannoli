@@ -171,7 +171,8 @@ class GameListViewModel @Inject constructor(
     fun cycleOrder(direction: Int): LibraryOrder {
         val current = _state.value
         if (!canOrderContent() || current.reorderMode || current.multiSelectMode) return selectedOrder()
-        val order = selectedOrder().cycle(direction, allowPlatform = ordering.hasMultiplePlatforms(current.allItems))
+        val order = selectedOrder().cycle(direction, allowPlatform = ordering.hasMultiplePlatforms(current.allItems),
+            allowLastAdded = current.collectionId != null)
         ordering.select(orderKey(current), order)
         reload()
         return order
@@ -179,7 +180,9 @@ class GameListViewModel @Inject constructor(
 
     private fun orderedItems(items: List<ListItem>, current: State): List<ListItem> =
         if (current.platformTag == "recently_played") items
-        else ordering.sort(items, orderKey(current), collectionsRepository.favoriteRomIds(), collectionsRepository.favoriteAppIds())
+        else ordering.sort(items, orderKey(current), collectionsRepository.favoriteRomIds(), collectionsRepository.favoriteAppIds(),
+            if (current.collectionId != null && ordering.resolved(orderKey(current)) == LibraryOrder.LAST_ADDED)
+                collectionsRepository.membersByLastAdded(current.collectionId) else emptyList())
 
     private fun publishContent(current: State) {
         val items = orderedItems(current.allItems, current)

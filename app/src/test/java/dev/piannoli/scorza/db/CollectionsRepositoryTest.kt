@@ -64,4 +64,22 @@ class CollectionsRepositoryTest {
         db.execute("UPDATE roms SET is_hidden = 1 WHERE id = ?", zulu.id)
         assertEquals(listOf(mango, alpha), repo.membersIn(collection))
     }
+
+    @Test fun `last added follows collection membership insertion including removal and readdition`() {
+        val alpha = rom("Alpha")
+        val zulu = app("Zulu")
+        repo.addMember(collection, zulu)
+        repo.addMember(collection, alpha)
+        repo.addMember(collection, zulu)
+        repo.setMemberOrder(collection, listOf(zulu, alpha))
+        assertEquals(listOf(alpha, zulu), repo.membersByLastAdded(collection))
+        repo.removeMember(collection, zulu)
+        repo.addMember(collection, zulu)
+        assertEquals(listOf(zulu, alpha), repo.membersByLastAdded(collection))
+        val other = repo.create("Other")
+        repo.addMember(other, alpha)
+        assertEquals(listOf(alpha), repo.membersByLastAdded(other))
+        db.execute("UPDATE apps SET is_hidden = 1 WHERE id = ?", zulu.id)
+        assertEquals(listOf(alpha), repo.membersByLastAdded(collection))
+    }
 }

@@ -154,13 +154,17 @@ class CollectionsRepository(private val db: PiannoliDatabase) {
         return false
     }
 
-    fun membersIn(collectionId: Long): List<LibraryRef> = db.queryAll(
+    fun membersIn(collectionId: Long): List<LibraryRef> = readMembers(collectionId, "cm.sort_order, cm.id")
+
+    fun membersByLastAdded(collectionId: Long): List<LibraryRef> = readMembers(collectionId, "cm.id DESC")
+
+    private fun readMembers(collectionId: Long, order: String): List<LibraryRef> = db.queryAll(
         """
         SELECT cm.rom_id, cm.app_id FROM collection_members cm
         LEFT JOIN roms r ON r.id = cm.rom_id
         LEFT JOIN apps a ON a.id = cm.app_id
         WHERE cm.collection_id = ? AND COALESCE(r.is_hidden, a.is_hidden) = 0
-        ORDER BY cm.sort_order, cm.id
+        ORDER BY $order
         """.trimIndent(),
         collectionId,
     ) { if (it.isNull(0)) LibraryRef.App(it.getLong(1)) else LibraryRef.Rom(it.getLong(0)) }

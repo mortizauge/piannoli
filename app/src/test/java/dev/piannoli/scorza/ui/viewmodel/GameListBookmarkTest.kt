@@ -73,7 +73,8 @@ class GameListBookmarkTest {
             ApplicationProvider.getApplicationContext<Context>(),
             mockk<LibraryOrdering> {
                 every { key(any(), any(), any()) } returns "list"
-                every { sort(any(), any(), any(), any()) } answers { firstArg() }
+                every { resolved(any()) } returns LibraryOrder.ALPHABETICAL
+                every { sort(any(), any(), any(), any(), any()) } answers { firstArg() }
             },
         )
     }
@@ -109,6 +110,26 @@ class GameListBookmarkTest {
         model = GameListViewModel(roms, apps, collections, recent, platforms, scans, paths,
             mockk(relaxed = true), ApplicationProvider.getApplicationContext<Context>(), ordering)
         return ordering
+    }
+
+    @Test fun `favorites and standard collections offer last added and retain it on reload`() = runBlocking {
+        useRealOrdering()
+        every { roms.gameById(2) } returns mario.rom
+        every { roms.gameById(3) } returns metroid.rom
+        for (type in listOf(CollectionType.FAVORITES, CollectionType.STANDARD)) {
+            every { collections.byId(7) } returns CollectionsRepository.CollectionRow(7, "Games", null, 0, type)
+            every { collections.membersIn(7) } returns listOf(LibraryRef.Rom(2), LibraryRef.Rom(3))
+            every { collections.membersByLastAdded(7) } returns listOf(LibraryRef.Rom(3), LibraryRef.Rom(2))
+            suspendCancellableCoroutine<Unit> { done -> model.loadCollectionById(7) { done.resume(Unit) } }
+            if (model.selectedOrder() == LibraryOrder.DEFAULT) {
+                model.cycleOrder(1)
+                model.cycleOrder(1)
+                assertEquals(LibraryOrder.LAST_ADDED, model.cycleOrder(1))
+            }
+            suspendCancellableCoroutine<Unit> { done -> model.reload { done.resume(Unit) } }
+            assertEquals(LibraryOrder.LAST_ADDED, model.selectedOrder())
+            assertEquals(listOf(metroid, mario), model.state.value.items)
+        }
     }
 
     @Test fun `recently played stays newest first without order controls regardless of preferences or favorites`() = runBlocking {

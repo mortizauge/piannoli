@@ -57,7 +57,7 @@ class SystemListViewModel @Inject constructor(
         val current = _state.value
         if (!canOrderContent() || current.reorderMode || current.isLoading) return selectedOrder()
         val order = selectedOrder().cycle(direction, allowPlatform = ordering.hasMultiplePlatforms(
-            current.items.filterIsInstance<ListItem.GameItem>().map { it.item }))
+            current.items.filterIsInstance<ListItem.GameItem>().map { it.item }), allowLastAdded = true)
         ordering.select(ordering.key("collection", currentFghCollectionId.toString()), order)
         rebuildFromDb()
         return order
@@ -295,7 +295,9 @@ class SystemListViewModel @Inject constructor(
                         }
                     }
                     ordering.sort(members, ordering.key("collection", fghId.toString()),
-                        collectionsRepository.favoriteRomIds(), collectionsRepository.favoriteAppIds())
+                        collectionsRepository.favoriteRomIds(), collectionsRepository.favoriteAppIds(),
+                        if (ordering.resolved(ordering.key("collection", fghId.toString())) == LibraryOrder.LAST_ADDED)
+                            collectionsRepository.membersByLastAdded(fghId) else emptyList())
                         .forEach { items.add(ListItem.GameItem(it)) }
                 }
             } else {

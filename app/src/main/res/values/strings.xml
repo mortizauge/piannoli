@@ -1,4 +1,5 @@
 <resources>
+    <string name="order_last_added">Last Added</string>
     <string name="order_platform">Platform</string>
     <string name="order_by">Order by</string>
     <string name="setting_default_order">Default order</string>
