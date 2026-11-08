@@ -34,7 +34,7 @@ class StickAutoRepeat @Inject constructor(
         }
     }
 
-    fun handleMotion(event: MotionEvent, dispatcherHandled: Boolean = false) {
+    fun handleMotion(event: MotionEvent, dispatcherHandled: Boolean = false): Boolean {
         val stickX = event.getAxisValue(MotionEvent.AXIS_X)
         val stickY = event.getAxisValue(MotionEvent.AXIS_Y)
         val newDir = when {
@@ -44,6 +44,7 @@ class StickAutoRepeat @Inject constructor(
             stickX > 0.5f -> DIR_RIGHT
             else -> 0
         }
+        val handled = newDir != 0 || heldDir != 0
         if (newDir != heldDir) {
             handler.removeCallbacks(runnable)
             heldDir = newDir
@@ -55,6 +56,7 @@ class StickAutoRepeat @Inject constructor(
                 handler.postDelayed(runnable, INITIAL_DELAY_MS)
             }
         }
+        return handled
     }
 
     fun stop() {

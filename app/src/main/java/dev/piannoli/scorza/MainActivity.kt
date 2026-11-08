@@ -793,8 +793,8 @@ class MainActivity : ComponentActivity(), ActivityActions {
             return true
         }
         val handled = inputDispatcher.handleMotionEvent(event)
-        stickAutoRepeat.handleMotion(event, dispatcherHandled = handled)
-        return handled || super.onGenericMotionEvent(event)
+        val stickHandled = stickAutoRepeat.handleMotion(event, dispatcherHandled = handled)
+        return handled || stickHandled || super.onGenericMotionEvent(event)
     }
 
     private val keyboardHatSync = dev.piannoli.scorza.input.HatKeySync()
@@ -836,7 +836,9 @@ class MainActivity : ComponentActivity(), ActivityActions {
             return true
         }
 
-        return super.dispatchGenericMotionEvent(event)
+        // Own stick navigation before views or Android's synthetic D-pad focus can also handle it.
+        // Unmapped hat motion still falls through for Android's existing D-pad key synthesis.
+        return onGenericMotionEvent(event) || super.dispatchGenericMotionEvent(event)
     }
 
     private fun requestStoragePermission() {

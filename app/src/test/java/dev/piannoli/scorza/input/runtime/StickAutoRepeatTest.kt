@@ -10,6 +10,8 @@ import io.mockk.verify
 import org.junit.Before
 import org.junit.Test
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -69,6 +71,16 @@ class StickAutoRepeatTest {
 
     @Test fun `analog-only stick transition fires immediately when dispatcher did not handle`() {
         autoRepeat.handleMotion(motion(stickY = 0.7f), dispatcherHandled = false)
+        verify(exactly = 1) { dispatcher.onDown() }
+    }
+
+    @Test fun `stick hold and release are consumed so Android cannot synthesize parallel navigation`() {
+        assertFalse(autoRepeat.handleMotion(motion()))
+        assertTrue(autoRepeat.handleMotion(motion(stickY = 0.7f)))
+        assertTrue(autoRepeat.handleMotion(motion(stickY = 0.8f)))
+        assertTrue(autoRepeat.handleMotion(motion()))
+        assertFalse(autoRepeat.handleMotion(motion()))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
         verify(exactly = 1) { dispatcher.onDown() }
     }
 
