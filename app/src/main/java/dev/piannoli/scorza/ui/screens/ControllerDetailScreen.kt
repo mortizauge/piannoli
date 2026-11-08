@@ -146,6 +146,7 @@ fun ControllerDetailScreen(
                     when (entry) {
                         is ControllerDetailEntry.KeyValue -> PillRowKeyValue(
                             label = entry.label,
+                            touchCycle = true,
                             value = entry.value,
                             isSelected = isSelected,
                             fontSize = listFontSize,

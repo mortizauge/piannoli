@@ -155,6 +155,8 @@ class SystemListInputHandler @Inject constructor(
         if (newIdx != state.selectedIndex) systemListViewModel.setSelectedIndex(newIdx)
     }
 
+    fun selectTouchItem(index: Int) = systemListViewModel.setSelectedIndex(index)
+
     private fun onSystemListConfirm() {
         if (nav.navigating) return
         systemListViewModel.savePosition()

@@ -543,6 +543,9 @@ fun AppNavGraph(
     )
     CompositionLocalProvider(
         LocalPiannoliColors provides piannoliColors,
+        dev.piannoli.ui.components.LocalTouchInput provides inputRouter?.let {
+            remember(it, labels) { dev.piannoli.scorza.input.LauncherTouchInput(it, labels) }
+        },
         dev.piannoli.ui.components.LocalScreenBackground provides dev.piannoli.ui.components.ScreenBackgroundStyle(
             appSettings.backgroundImagePath, appSettings.backgroundTint
         ),
@@ -746,6 +749,10 @@ fun AppNavGraph(
                     List(
                         items = currentScreen.items,
                         selectedIndex = highlightedIndex,
+                        isItemSelectable = { it.isSelectable },
+                        onTouchSelect = { index ->
+                            inputRouter?.touchSelect(selectableIndices.indexOf(index), currentScreen.selectedIndex)
+                        },
                         itemHeight = itemHeight,
                         scrollTarget = currentScreen.scrollTarget,
                         onListStateChanged = onListStateChanged

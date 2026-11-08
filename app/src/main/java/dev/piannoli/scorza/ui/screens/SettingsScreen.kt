@@ -84,7 +84,8 @@ fun SettingsScreen(
                     selectedIndex = state.selectedIndex,
                     itemHeight = itemHeight,
                     onListStateChanged = onListStateChanged,
-                    key = { _, item -> item.key }
+                    key = { _, item -> item.key },
+                    isItemSelectable = { !it.disabled },
                 ) { _, item, isSelected ->
                     val hasValue = item.valueText != null || item.valueRes != null || item.swatchColor != null
                     Box(modifier = Modifier.fillMaxWidth().alpha(if (item.disabled) 0.4f else 1f)) {
@@ -98,7 +99,8 @@ fun SettingsScreen(
                             fontSize = listFontSize,
                             lineHeight = listLineHeight,
                             verticalPadding = listVerticalPadding,
-                            swatchColor = item.swatchColor
+                            swatchColor = item.swatchColor,
+                            touchCycle = item.canCycle && !item.isEditable && !item.disabled,
                         )
                     } else {
                         PillRowText(

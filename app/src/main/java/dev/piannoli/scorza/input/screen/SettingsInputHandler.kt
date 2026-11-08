@@ -59,6 +59,8 @@ class SettingsInputHandler @Inject constructor(
 ) : ScreenInputHandler {
     override val navigationContext: Any get() = settingsViewModel.state.value
 
+    fun selectTouchItem(index: Int) = settingsViewModel.selectTouchItem(index)
+
     override fun onUp() {
         settingsViewModel.moveSelection(-1)
     }

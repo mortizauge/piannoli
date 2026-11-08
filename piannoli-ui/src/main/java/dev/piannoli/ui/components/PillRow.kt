@@ -25,8 +25,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.indication
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
@@ -48,6 +52,7 @@ import dev.piannoli.ui.theme.LocalScaleFactor
 import dev.piannoli.ui.theme.Radius
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 
 val screenPadding = 20.dp
 val pillInternalH = 14.dp
@@ -115,8 +120,9 @@ fun MarqueeEffect(scrollState: ScrollState, active: Boolean, key: Any = active, 
     LaunchedEffect(key, active, uiActive) {
         uiActive.collectLatest { focused ->
             if (!focused) return@collectLatest
-            scrollState.scrollTo(0)
+            if (scrollState.value != 0) scrollState.scrollTo(0)
             if (!active) return@collectLatest
+            snapshotFlow { scrollState.maxValue }.first { it in 1 until Int.MAX_VALUE }
             delay(initialDelayMs)
             while (true) {
                 val max = scrollState.maxValue
@@ -142,28 +148,22 @@ fun PillRow(
     val heightMod = if (lineHeight != TextUnit.Unspecified) {
         Modifier.height(pillItemHeight(lineHeight, verticalPadding))
     } else Modifier
-    if (isSelected) {
-        Box(
-            modifier = modifier
-                .then(heightMod)
-                .padding(vertical = pillInset())
-                .clip(Radius.Pill)
-                .background(colors.highlight)
-                .padding(horizontal = pillInternalPadding(), vertical = verticalPadding),
-            contentAlignment = Alignment.CenterStart
-        ) {
-            content()
-        }
-    } else {
-        Box(
-            modifier = modifier
-                .then(heightMod)
-                .padding(vertical = pillInset())
-                .padding(horizontal = pillInternalPadding(), vertical = verticalPadding),
-            contentAlignment = Alignment.CenterStart
-        ) {
-            content()
-        }
+    val row = LocalTouchRow.current
+    Box(
+        modifier = modifier
+            .then(heightMod)
+            .padding(vertical = pillInset())
+            .then(if (isSelected || row != null) Modifier.clip(Radius.Pill) else Modifier)
+            .then(if (isSelected && row == null) Modifier.background(colors.highlight) else Modifier)
+            .then(if (row != null) Modifier.indication(row.pressInteractions, LocalIndication.current) else Modifier)
+            .then(if (row != null) Modifier.onGloballyPositioned {
+                row.pillCoordinates = it
+                row.updatePillBounds()
+            } else Modifier)
+            .padding(horizontal = pillInternalPadding(), vertical = verticalPadding),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        content()
     }
 }
 
@@ -186,7 +186,7 @@ fun PillRowText(
     val textStyle = remember(baseStyle, fontSize, lineHeight) {
         baseStyle.copy(fontSize = fontSize, lineHeight = lineHeight)
     }
-    val textColor = if (isSelected) colors.highlightText else colors.text
+    val textColor = pillTextColor(isSelected, colors.text)
 
     val scrollState = rememberScrollState()
     MarqueeEffect(scrollState, isSelected, key = label to isSelected)
@@ -202,7 +202,8 @@ fun PillRowText(
                     Text(
                         text = "\u2195",
                         style = textStyle,
-                        color = textColor
+                        color = textColor,
+                        modifier = Modifier.pillForeground()
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                 }
@@ -218,7 +219,7 @@ fun PillRowText(
                             text = PiannoliIcons.Folder.glyph,
                             style = textStyle.copy(fontFamily = LocalPiannoliIconFont.current),
                             color = textColor,
-                            modifier = Modifier.clearAndSetSemantics { contentDescription = folderLabel },
+                            modifier = Modifier.pillForeground().clearAndSetSemantics { contentDescription = folderLabel },
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                     }
@@ -228,7 +229,7 @@ fun PillRowText(
                             text = PiannoliIcons.Pin.glyph,
                             style = textStyle.copy(fontFamily = LocalPiannoliIconFont.current),
                             color = textColor,
-                            modifier = Modifier.clearAndSetSemantics { contentDescription = pinnedLabel },
+                            modifier = Modifier.pillForeground().clearAndSetSemantics { contentDescription = pinnedLabel },
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                     }
@@ -238,7 +239,7 @@ fun PillRowText(
                             text = PiannoliIcons.Favorite.glyph,
                             style = textStyle.copy(fontFamily = LocalPiannoliIconFont.current),
                             color = textColor,
-                            modifier = Modifier.clearAndSetSemantics { contentDescription = favoriteLabel },
+                            modifier = Modifier.pillForeground().clearAndSetSemantics { contentDescription = favoriteLabel },
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                     }
@@ -246,6 +247,7 @@ fun PillRowText(
                         text = label,
                         style = textStyle,
                         color = textColor,
+                        modifier = Modifier.pillForeground(),
                         maxLines = 1,
                         softWrap = false
                     )
@@ -254,7 +256,8 @@ fun PillRowText(
                         Text(
                             text = tagSuffix,
                             style = textStyle.copy(fontSize = (fontSize.value * 0.75f).sp),
-                            color = if (isSelected) colors.highlightText else colors.accent,
+                            color = pillTextColor(isSelected, colors.accent),
+                            modifier = Modifier.pillForeground(),
                             maxLines = 1,
                             softWrap = false
                         )
@@ -276,8 +279,10 @@ fun PillRowKeyValue(
     swatchColor: Color? = null,
     valueIcon: String? = null,
     dotIndicator: Boolean? = null,
-    checkState: Boolean? = null
+    checkState: Boolean? = null,
+    touchCycle: Boolean = false,
 ) {
+    LocalTouchRow.current?.cycle = touchCycle
     val colors = LocalPiannoliColors.current
     val baseStyle = MaterialTheme.typography.bodyLarge
     val baseValueStyle = MaterialTheme.typography.bodyMedium
@@ -291,9 +296,9 @@ fun PillRowKeyValue(
     val scrollState = rememberScrollState()
     MarqueeEffect(scrollState, isSelected)
 
-    val labelColor = if (isSelected) colors.highlightText else colors.text
-    val valueColor = if (isSelected) colors.highlightText else colors.accent
-    val borderColor = if (isSelected) colors.highlightText.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.3f)
+    val labelColor = pillTextColor(isSelected, colors.text)
+    val valueColor = pillTextColor(isSelected, colors.accent)
+    val borderColor = pillTextColor(isSelected, Color.White).copy(alpha = 0.3f)
 
     PillRow(isSelected = isSelected, verticalPadding = verticalPadding, lineHeight = lineHeight, modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -313,6 +318,7 @@ fun PillRowKeyValue(
                     text = label,
                     style = textStyle,
                     color = labelColor,
+                    modifier = Modifier.pillForeground(),
                     maxLines = 1,
                     softWrap = false
                 )
@@ -337,6 +343,7 @@ fun PillRowKeyValue(
                     text = valueIcon,
                     style = valueStyle.copy(fontFamily = LocalPiannoliIconFont.current),
                     color = labelColor,
+                    modifier = Modifier.pillForeground(),
                     maxLines = 1
                 )
                 Spacer(modifier = Modifier.width(6.dp))
@@ -345,6 +352,7 @@ fun PillRowKeyValue(
                 text = value,
                 style = valueStyle,
                 color = valueColor,
+                modifier = Modifier.pillForeground(),
                 maxLines = 1
             )
             if (dotIndicator != null) {
@@ -353,6 +361,7 @@ fun PillRowKeyValue(
                 Box(
                     modifier = Modifier
                         .size((fontSize.value * 0.42f).dp)
+                        .pillForeground()
                         .border(if (dotIndicator) 0.dp else 1.dp, dotColor, CircleShape)
                         .background(if (dotIndicator) dotColor else Color.Transparent, CircleShape)
                 )
@@ -375,7 +384,7 @@ fun PillRowInfo(
     val textStyle = remember(baseStyle, fontSize, lineHeight) {
         baseStyle.copy(fontSize = fontSize, lineHeight = lineHeight)
     }
-    val textColor = if (isSelected) colors.highlightText else colors.text
+    val textColor = pillTextColor(isSelected, colors.text)
 
     val scrollState = rememberScrollState()
     MarqueeEffect(scrollState, isSelected, key = label to isSelected)
@@ -395,6 +404,7 @@ fun PillRowInfo(
                     text = label,
                     style = textStyle,
                     color = textColor,
+                    modifier = Modifier.pillForeground(),
                     maxLines = 1,
                     softWrap = false
                 )
@@ -411,7 +421,8 @@ fun PillCheckGlyph(checked: Boolean, style: TextStyle, color: Color) {
     Text(
         text = if (checked) "☑" else "☐",
         style = style,
-        color = color
+        color = color,
+        modifier = Modifier.pillForeground()
     )
     Spacer(modifier = Modifier.width(8.dp))
 }

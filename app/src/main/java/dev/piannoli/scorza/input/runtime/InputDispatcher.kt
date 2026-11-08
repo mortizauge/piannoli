@@ -415,8 +415,8 @@ class InputDispatcher @Inject constructor(
         fun screen(): dev.piannoli.scorza.input.ScreenInputHandler = activeScreen()
         fun sounding(sound: MenuSound, action: () -> Unit): () -> Unit = {
             cancelKeyboardDeleteHold()
-            onMenuSound(sound)
             action()
+            onMenuSound(sound)
         }
         fun navigating(button: CanonicalButton, action: () -> Unit): () -> Unit = {
             val feedback = navigationRepeat.dispatch(

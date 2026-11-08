@@ -23,6 +23,8 @@ it no longer includes an emulator engine, bundled cores or an in-game menu.
   navigation sounds and haptic feedback.
 - **Smoother browsing:** Background artwork loading, improved scrolling and
   search navigation, and preserved browsing positions when returning from games.
+  In touch-enabled lists, the sliding selection pill reveals selected text and
+  icon colors only where it overlaps them, without recoloring artwork or swatches.
 - **Original Xbox support:** Launch games with X1 BOX or hakuX.
 
 ## Getting started

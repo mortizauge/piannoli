@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredWidth
-import androidx.compose.foundation.verticalScroll
+import dev.piannoli.ui.components.screenVerticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -167,7 +167,7 @@ private fun PdfContent(
                     contentDescription = null,
                     modifier = Modifier
                         .horizontalScroll(hScrollState)
-                        .verticalScroll(scrollState)
+                        .screenVerticalScroll(scrollState)
                         .requiredWidth(maxWidth * scale),
                     contentScale = ContentScale.FillWidth
                 )
@@ -221,7 +221,7 @@ private fun TxtContent(
             modifier = Modifier
                 .fillMaxSize()
                 .onGloballyPositioned { viewportHeight = it.size.height }
-                .verticalScroll(scrollState)
+                .screenVerticalScroll(scrollState)
         )
     }
 }
@@ -277,7 +277,7 @@ private fun ImageContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .onGloballyPositioned { viewportHeight = it.size.height }
-                        .verticalScroll(scrollState),
+                        .screenVerticalScroll(scrollState),
                     contentScale = ContentScale.FillWidth
                 )
             } else {
@@ -286,7 +286,7 @@ private fun ImageContent(
                     contentDescription = null,
                     modifier = Modifier
                         .horizontalScroll(hScrollState)
-                        .verticalScroll(scrollState)
+                        .screenVerticalScroll(scrollState)
                         .requiredWidth(maxWidth * scale)
                         .onGloballyPositioned { viewportHeight = it.size.height },
                     contentScale = ContentScale.FillWidth

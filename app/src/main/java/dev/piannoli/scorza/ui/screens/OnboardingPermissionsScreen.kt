@@ -1,6 +1,5 @@
 package dev.piannoli.scorza.ui.screens
 
-import dev.piannoli.ui.components.screenBackground
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -17,7 +16,10 @@ import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.clickable
+import dev.piannoli.ui.components.LocalTouchInput
+import dev.piannoli.ui.components.ScreenBackground
+import dev.piannoli.ui.components.screenVerticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -67,90 +69,107 @@ fun OnboardingPermissionsScreen(
     val isContinueFocused = continueEnabled && selectedIndex == storageRowIndex + 1
     val isExistingInstall = existingInstallVolumeIndex != null && volumeIndex == existingInstallVolumeIndex
     val existingFolderPath = if (isExistingInstall) selectedVolume?.second?.plus("Piannoli/") else null
+    val touch = LocalTouchInput.current
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .screenBackground()
-            .padding(screenInsets())
-    ) {
-        Column(
+    ScreenBackground {
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = footerReservation())
-                .verticalScroll(rememberScrollState())
+                .padding(screenInsets())
         ) {
-            Text(
-                text = stringResource(R.string.onboarding_header),
-                style = typo.labelSmall,
-                color = colors.text.copy(alpha = 0.6f),
-            )
-            Spacer(modifier = Modifier.height(Spacing.Sm))
-            Text(
-                text = stringResource(R.string.onboarding_permissions_title),
-                style = typo.titleLarge,
-                color = Color.White,
-            )
-            Spacer(modifier = Modifier.height(Spacing.Lg))
-
-            permissions.forEachIndexed { index, perm ->
-                if (index > 0) Spacer(modifier = Modifier.height(Spacing.Md))
-                PermissionCard(
-                    label = stringResource(R.string.onboarding_storage_label),
-                    rationale = stringResource(R.string.onboarding_storage_rationale),
-                    isGranted = perm in granted,
-                    isFocused = index == selectedIndex,
-                    accent = accent,
-                    typo = typo,
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = footerReservation())
+                    .screenVerticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    text = stringResource(R.string.onboarding_header),
+                    style = typo.labelSmall,
+                    color = colors.text.copy(alpha = 0.6f),
                 )
+                Spacer(modifier = Modifier.height(Spacing.Sm))
+                Text(
+                    text = stringResource(R.string.onboarding_permissions_title),
+                    style = typo.titleLarge,
+                    color = Color.White,
+                )
+                Spacer(modifier = Modifier.height(Spacing.Lg))
+
+                permissions.forEachIndexed { index, perm ->
+                    if (index > 0) Spacer(modifier = Modifier.height(Spacing.Md))
+                    Box(Modifier.clickable(enabled = touch != null && perm !in granted) {
+                        touch?.select(index, selectedIndex)
+                        touch?.activate(false)
+                    }) {
+                        PermissionCard(
+                            label = stringResource(R.string.onboarding_storage_label),
+                            rationale = stringResource(R.string.onboarding_storage_rationale),
+                            isGranted = perm in granted,
+                            isFocused = index == selectedIndex,
+                            accent = accent,
+                            typo = typo,
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(Spacing.Md))
+
+                Box(Modifier.clickable(enabled = touch != null && allGranted) {
+                    touch?.select(storageRowIndex, selectedIndex)
+                    touch?.activate(volumes.size > 1)
+                }) {
+                    StorageCard(
+                        value = when {
+                            isCustom && customPath != null -> customPath
+                            isCustom -> stringResource(R.string.setup_folder_unset)
+                            else -> selectedVolume?.first ?: stringResource(R.string.setup_folder_unset)
+                        },
+                        isLocked = !allGranted,
+                        isFocused = isStorageRowFocused,
+                        customPickPrompt = isStorageRowFocused && isCustom && customPath == null,
+                        existingFolderPath = existingFolderPath,
+                        accent = accent,
+                        typo = typo,
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(Spacing.Md))
+
+                Box(Modifier.clickable(enabled = touch != null && continueEnabled) {
+                    touch?.select(storageRowIndex + 1, selectedIndex)
+                    touch?.activate(false)
+                }) {
+                    ContinueCard(
+                        isEnabled = continueEnabled,
+                        isFocused = isContinueFocused,
+                        accent = accent,
+                        typo = typo,
+                    )
+                }
             }
 
-            Spacer(modifier = Modifier.height(Spacing.Md))
-
-            StorageCard(
-                value = when {
-                    isCustom && customPath != null -> customPath
-                    isCustom -> stringResource(R.string.setup_folder_unset)
-                    else -> selectedVolume?.first ?: stringResource(R.string.setup_folder_unset)
-                },
-                isLocked = !allGranted,
-                isFocused = isStorageRowFocused,
-                customPickPrompt = isStorageRowFocused && isCustom && customPath == null,
-                existingFolderPath = existingFolderPath,
-                accent = accent,
-                typo = typo,
-            )
-
-            Spacer(modifier = Modifier.height(Spacing.Md))
-
-            ContinueCard(
-                isEnabled = continueEnabled,
-                isFocused = isContinueFocused,
-                accent = accent,
-                typo = typo,
+            val leftItems = mutableListOf(buttonStyle.back to stringResource(R.string.label_quit))
+            if (isStorageRowFocused && volumes.size > 1) {
+                leftItems.add(DPAD_HORIZONTAL to stringResource(R.string.label_change))
+            }
+            val rightItems = mutableListOf<Pair<String, String>>()
+            val focusedPerm = permissions.getOrNull(selectedIndex)
+            if (focusedPerm != null && focusedPerm !in granted) {
+                rightItems.add(buttonStyle.confirm to stringResource(R.string.label_grant))
+            }
+            if (isStorageRowFocused && isCustom && customPath == null) {
+                rightItems.add(buttonStyle.confirm to stringResource(R.string.onboarding_select_folder))
+            }
+            if (isContinueFocused) {
+                rightItems.add(buttonStyle.confirm to stringResource(R.string.label_continue))
+            }
+            BottomBar(
+                modifier = Modifier.align(Alignment.BottomCenter),
+                leftItems = leftItems,
+                rightItems = rightItems,
             )
         }
-
-        val leftItems = mutableListOf(buttonStyle.back to stringResource(R.string.label_quit))
-        if (isStorageRowFocused && volumes.size > 1) {
-            leftItems.add(DPAD_HORIZONTAL to stringResource(R.string.label_change))
-        }
-        val rightItems = mutableListOf<Pair<String, String>>()
-        val focusedPerm = permissions.getOrNull(selectedIndex)
-        if (focusedPerm != null && focusedPerm !in granted) {
-            rightItems.add(buttonStyle.confirm to stringResource(R.string.label_grant))
-        }
-        if (isStorageRowFocused && isCustom && customPath == null) {
-            rightItems.add(buttonStyle.confirm to stringResource(R.string.onboarding_select_folder))
-        }
-        if (isContinueFocused) {
-            rightItems.add(buttonStyle.confirm to stringResource(R.string.label_continue))
-        }
-        BottomBar(
-            modifier = Modifier.align(Alignment.BottomCenter),
-            leftItems = leftItems,
-            rightItems = rightItems,
-        )
     }
 }
 

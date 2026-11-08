@@ -6,11 +6,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.piannoli.ui.components.List
+import dev.piannoli.ui.components.LocalTouchInput
+import dev.piannoli.ui.components.TouchInput
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -35,23 +38,31 @@ class ListScrollEffectTest {
 
     private lateinit var listState: LazyListState
     private val selected = mutableIntStateOf(0)
+    private val touch = object : TouchInput {
+        override fun select(index: Int, currentIndex: Int) { selected.intValue = index }
+        override fun activate(cycle: Boolean) {}
+        override fun contextMenu() {}
+        override fun hint(glyph: String) {}
+    }
 
-    private fun render(count: Int, tallRows: Set<Int>) {
+    private fun render(count: Int, tallRows: Set<Int>, touchEnabled: Boolean = false) {
         selected.intValue = 0
         compose.setContent {
             listState = rememberLazyListState()
-            Box(modifier = Modifier.height(viewportHeight)) {
-                List(
-                    items = (0 until count).toList(),
-                    selectedIndex = selected.intValue,
-                    itemHeight = rowHeight,
-                    listState = listState,
-                ) { index, _, _ ->
-                    Box(
-                        modifier = Modifier
-                            .height(if (index in tallRows) rowHeight * 2 else rowHeight)
-                            .fillMaxWidth()
-                    )
+            CompositionLocalProvider(LocalTouchInput provides if (touchEnabled) touch else null) {
+                Box(modifier = Modifier.height(viewportHeight)) {
+                    List(
+                        items = (0 until count).toList(),
+                        selectedIndex = selected.intValue,
+                        itemHeight = rowHeight,
+                        listState = listState,
+                    ) { index, _, _ ->
+                        Box(
+                            modifier = Modifier
+                                .height(if (index in tallRows) rowHeight * 2 else rowHeight)
+                                .fillMaxWidth()
+                        )
+                    }
                 }
             }
         }
@@ -87,6 +98,19 @@ class ListScrollEffectTest {
     @Test fun `uniform rows stay visible walking down`() {
         render(count = 20, tallRows = emptySet())
         walkDown(20)
+    }
+
+    @Test fun `controller navigation reaches the end of a touch enabled list and returns`() {
+        render(count = 20, tallRows = emptySet(), touchEnabled = true)
+        walkDown(20)
+        walkUp(20)
+    }
+
+    @Test fun `controller jump reaches the last header row without touch padding`() {
+        render(count = 30, tallRows = (0 until 30 step 2).toSet() + 29, touchEnabled = true)
+        selected.intValue = 29
+        compose.waitForIdle()
+        assertSelectionOnScreen(29)
     }
 
     @Test fun `uniform rows stay visible walking back up`() {

@@ -619,11 +619,6 @@ class MainActivity : ComponentActivity(), ActivityActions {
         }
     }
 
-    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        val dialog = nav.dialogState.value
-        return if (dialog is KeyboardHost || dialog is DialogState.KeyboardHelp) super.dispatchTouchEvent(event) else true
-    }
-
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_DOWN) {
             dev.piannoli.scorza.util.InputLog.write(

@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -122,8 +123,16 @@ fun LegendPill(label: String, modifier: Modifier = Modifier, glyphs: @Composable
 }
 
 @Composable
-fun LegendPill(button: String, label: String, modifier: Modifier = Modifier) =
-    LegendPill(label = label, modifier = modifier) { GlyphPill(button) }
+fun LegendPill(button: String, label: String, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
+    val touch = LocalTouchInput.current
+    val action = onClick ?: touch?.let { { it.hint(button) } }
+    LegendPill(
+        label = label,
+        modifier = if (action != null) {
+            modifier.focusProperties { canFocus = false }.clickable(onClick = action)
+        } else modifier,
+    ) { GlyphPill(button) }
+}
 
 @Composable
 fun BottomBar(
@@ -144,7 +153,7 @@ fun BottomBar(
                 LegendPill(
                     button = button,
                     label = label,
-                    modifier = if (onLeftItemClick != null) Modifier.clickable { onLeftItemClick(index) } else Modifier,
+                    onClick = onLeftItemClick?.let { { it(index) } },
                 )
             }
         }
@@ -156,7 +165,7 @@ fun BottomBar(
                 LegendPill(
                     button = button,
                     label = label,
-                    modifier = if (onRightItemClick != null) Modifier.clickable { onRightItemClick(index) } else Modifier,
+                    onClick = onRightItemClick?.let { { it(index) } },
                 )
             }
         }

@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
+import dev.piannoli.ui.components.screenVerticalScroll
+import dev.piannoli.ui.components.touchScrollInProgress
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -73,12 +75,19 @@ fun RommGameDetailScreen(
 
             val scrollState = rememberScrollState()
             val stepPx = with(LocalDensity.current) { SCROLL_STEP.toPx() }
+            val touchScrolling = touchScrollInProgress()
             LaunchedEffect(scrollStep, scrollState.maxValue, stepPx) {
+                if (touchScrolling) return@LaunchedEffect
                 val maxValue = scrollState.maxValue
                 val maxStep = if (stepPx > 0f) ceil(maxValue / stepPx).toInt() else 0
                 val clamped = scrollStep.coerceIn(0, maxStep)
                 if (clamped != scrollStep) onScrollStepChanged(clamped)
                 scrollState.scrollTo((clamped * stepPx).toInt().coerceAtMost(maxValue))
+            }
+            LaunchedEffect(scrollState, stepPx, touchScrolling) {
+                if (touchScrolling) {
+                    snapshotFlow { (scrollState.value / stepPx).toInt() }.collect(onScrollStepChanged)
+                }
             }
 
             Column(modifier = Modifier.fillMaxSize().padding(bottom = footerReservation())) {
@@ -95,7 +104,7 @@ fun RommGameDetailScreen(
                             .weight(1f)
                             .fillMaxHeight()
                             .padding(start = pillInternalPadding())
-                            .verticalScroll(scrollState),
+                            .screenVerticalScroll(scrollState),
                     ) {
                         DetailBody(game, scale)
                     }

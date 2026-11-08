@@ -40,6 +40,8 @@ class GameListInputHandler @Inject constructor(
 
     var buildContextOptions: ((item: ListItem, glState: GameListViewModel.State) -> List<String>)? = null
 
+    fun selectTouchItem(index: Int) = gameListViewModel.setSelectedIndex(index)
+
     var selectHandled = false
     private var collectionSelectHeld = false
     private var gameSelectDown = false

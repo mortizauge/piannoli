@@ -2,6 +2,7 @@ package dev.piannoli.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,6 +59,7 @@ fun ColorPickerOverlay(
     val typo = LocalPiannoliTypography.current
     val currentName = colorDisplayName(currentColor)
     val highlight = LocalPiannoliColors.current.highlight
+    val touch = LocalTouchInput.current
 
     Box(
         modifier = Modifier
@@ -109,6 +111,10 @@ fun ColorPickerOverlay(
                                 Box(
                                     modifier = Modifier
                                         .size(48.dp)
+                                        .then(if (touch != null) Modifier.clickable {
+                                            touch.select(ri * COLOR_GRID_COLS + ci, selectedRow * COLOR_GRID_COLS + selectedCol)
+                                            touch.activate(false)
+                                        } else Modifier)
                                         .clip(RoundedCornerShape(Radius.Lg))
                                         .then(
                                             if (isSelected) Modifier.border(3.dp, highlight, RoundedCornerShape(Radius.Lg))
@@ -156,6 +162,7 @@ fun HexColorInputOverlay(
         try { Color(0xFF000000 or currentHex.toLong(16)) } catch (_: Exception) { Color.Black }
     } else Color.Black
     val highlight = LocalPiannoliColors.current.highlight
+    val touch = LocalTouchInput.current
 
     Box(
         modifier = Modifier
@@ -211,6 +218,10 @@ fun HexColorInputOverlay(
                                 Box(
                                     modifier = Modifier
                                         .weight(1f)
+                                        .then(if (touch != null) Modifier.clickable {
+                                            touch.select(i, selectedIndex)
+                                            touch.activate(false)
+                                        } else Modifier)
                                         .aspectRatio(1f)
                                         .clip(RoundedCornerShape(Radius.Lg))
                                         .then(

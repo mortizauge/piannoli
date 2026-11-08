@@ -27,12 +27,15 @@ import dev.piannoli.scorza.ui.components.CreditsRootRow
 import dev.piannoli.scorza.ui.screens.DialogState
 import dev.piannoli.scorza.input.runtime.InputDispatcher
 import dev.piannoli.scorza.util.NaturalSort
+import dev.piannoli.scorza.util.MenuSound
 import dev.piannoli.scorza.di.IoScope
 import dev.piannoli.ui.components.KeyboardState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import javax.inject.Inject
 
 @ActivityScoped
@@ -70,6 +73,8 @@ class InputRouter @Inject constructor(
     private val menuHaptics: dev.piannoli.scorza.util.MenuHaptics,
 ) {
     var unregisterCoreQueryReceiver: () -> Unit = {}
+    private val controllerInputEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val controllerInput = controllerInputEvents.asSharedFlow()
 
     fun wire(dispatcher: InputDispatcher) {
         gameListHandler.buildContextOptions = dialogHandler::buildGameContextOptions
@@ -89,9 +94,9 @@ class InputRouter @Inject constructor(
             screenResolver = { activeScreenHandler() },
             navigationContext = { nav.currentScreen },
             onMenuSound = { sound ->
+                controllerInputEvents.tryEmit(Unit)
                 if (nav.currentScreen !is LauncherScreen.InputTester) {
-                    menuSounds.play(sound)
-                    menuHaptics.play(sound)
+                    playNavigationFeedback(sound)
                 }
             },
         )
@@ -99,6 +104,156 @@ class InputRouter @Inject constructor(
 
     private fun activeScreenHandler(): ScreenInputHandler =
         dedicatedHandlerFor(nav.currentScreen) ?: screenInputRegistry.top
+
+    private fun playNavigationFeedback(sound: MenuSound) {
+        if (nav.currentScreen is LauncherScreen.InputTester) return
+        menuSounds.play(sound)
+        menuHaptics.play(sound)
+    }
+
+    private fun touchFeedback(sound: MenuSound, action: () -> Unit) {
+        val screen = activeScreenHandler()
+        val before = screen.navigationContext
+        val dialog = nav.dialogState.value
+        val currentScreen = nav.currentScreen
+        val navigating = nav.navigating
+        val movement = ListNavigation.observe(action)
+        val changed = movement.moved || before !== screen.navigationContext ||
+            dialog != nav.dialogState.value || currentScreen != nav.currentScreen || navigating != nav.navigating
+        if (changed) playNavigationFeedback(sound)
+    }
+
+    fun touchSelect(index: Int, currentIndex: Int) {
+        if (nav.navigating || index == currentIndex) return
+        touchFeedback(MenuSound.TICK) { selectTouchItem(index, currentIndex) }
+    }
+
+    private fun selectTouchItem(index: Int, currentIndex: Int) {
+        when (val dialog = nav.dialogState.value) {
+            is DialogState.ColorPicker -> {
+                if (index in dev.piannoli.ui.theme.COLOR_PRESETS.indices) {
+                    nav.dialogState.value = dialog.copy(
+                        selectedRow = index / dev.piannoli.ui.components.COLOR_GRID_COLS,
+                        selectedCol = index % dev.piannoli.ui.components.COLOR_GRID_COLS,
+                    )
+                }
+                return
+            }
+            is DialogState.HexColorInput -> {
+                if (index in dev.piannoli.ui.components.HEX_KEYS.indices)
+                    nav.dialogState.value = dialog.copy(selectedIndex = index)
+                return
+            }
+            else -> {}
+        }
+        if (nav.dialogState.value == DialogState.None) {
+            when (nav.currentScreen) {
+                is LauncherScreen.GameList -> {
+                    gameListHandler.selectTouchItem(index)
+                    return
+                }
+                LauncherScreen.SystemList -> {
+                    systemListHandler.selectTouchItem(index)
+                    return
+                }
+                is LauncherScreen.Settings -> {
+                    settingsHandler.selectTouchItem(index)
+                    return
+                }
+                else -> {}
+            }
+            val handler = activeScreenHandler()
+            if (handler is ScrollListInputHandler) {
+                handler.selectTouchItem(index)
+                return
+            }
+        }
+        ListNavigation.withRepeat(true) {
+            repeat(kotlin.math.abs(index - currentIndex)) {
+                if (nav.dialogState.value != DialogState.None) {
+                    if (index > currentIndex) dialogHandler.onDown() else dialogHandler.onUp()
+                } else {
+                    if (index > currentIndex) activeScreenHandler().onDown() else activeScreenHandler().onUp()
+                }
+            }
+        }
+    }
+
+    fun touchContextMenu() {
+        if (nav.navigating || nav.dialogState.value != DialogState.None) return
+        touchFeedback(MenuSound.CONFIRM) {
+            when (val handler = activeScreenHandler()) {
+                is GameListInputHandler, is SystemListInputHandler, is ScrollListInputHandler -> handler.onStart()
+            }
+        }
+    }
+
+    fun touchAction(action: dev.piannoli.ui.MenuAction?) {
+        if (nav.navigating) return
+        val sound = when (action) {
+            null, dev.piannoli.ui.MenuAction.L1, dev.piannoli.ui.MenuAction.R1 -> MenuSound.TICK
+            dev.piannoli.ui.MenuAction.BACK, dev.piannoli.ui.MenuAction.WEST -> MenuSound.BACK
+            else -> MenuSound.CONFIRM
+        }
+        touchFeedback(sound) { performTouchAction(action) }
+    }
+
+    private fun performTouchAction(action: dev.piannoli.ui.MenuAction?) {
+        if (nav.dialogState.value != DialogState.None) {
+            when (action) {
+                null -> dialogHandler.onRight()
+                dev.piannoli.ui.MenuAction.R1 -> dialogHandler.onR1()
+                dev.piannoli.ui.MenuAction.L1 -> dialogHandler.onL1()
+                dev.piannoli.ui.MenuAction.CONFIRM -> {
+                    dialogHandler.onConfirm()
+                    dialogHandler.onConfirmUp()
+                }
+                dev.piannoli.ui.MenuAction.BACK -> dialogHandler.onBack()
+                dev.piannoli.ui.MenuAction.NORTH -> {
+                    dialogHandler.onNorth()
+                    dialogHandler.onNorthUp()
+                }
+                dev.piannoli.ui.MenuAction.WEST -> dialogHandler.onWest()
+                dev.piannoli.ui.MenuAction.START -> dialogHandler.onStart()
+                dev.piannoli.ui.MenuAction.SELECT -> {
+                    dialogHandler.onSelect()
+                    onSelectUp()
+                }
+                dev.piannoli.ui.MenuAction.MENU -> dialogHandler.onMenu()
+                dev.piannoli.ui.MenuAction.L2 -> dialogHandler.onL2()
+                dev.piannoli.ui.MenuAction.R2 -> dialogHandler.onR2()
+                dev.piannoli.ui.MenuAction.L3 -> dialogHandler.onL3()
+                dev.piannoli.ui.MenuAction.R3 -> dialogHandler.onR3()
+            }
+            return
+        }
+        val handler = activeScreenHandler()
+        when (action) {
+            null -> handler.onRight()
+            dev.piannoli.ui.MenuAction.CONFIRM -> {
+                handler.onConfirm()
+                handler.onConfirmUp()
+            }
+            dev.piannoli.ui.MenuAction.BACK -> handler.onBack()
+            dev.piannoli.ui.MenuAction.NORTH -> {
+                handler.onNorth()
+                handler.onNorthUp()
+            }
+            dev.piannoli.ui.MenuAction.WEST -> handler.onWest()
+            dev.piannoli.ui.MenuAction.START -> handler.onStart()
+            dev.piannoli.ui.MenuAction.SELECT -> {
+                handler.onSelect()
+                onSelectUp()
+            }
+            dev.piannoli.ui.MenuAction.MENU -> if (!dialogHandler.onMenu()) handler.onMenu()
+            dev.piannoli.ui.MenuAction.L1 -> handler.onL1()
+            dev.piannoli.ui.MenuAction.R1 -> handler.onR1()
+            dev.piannoli.ui.MenuAction.L2 -> handler.onL2()
+            dev.piannoli.ui.MenuAction.R2 -> handler.onR2()
+            dev.piannoli.ui.MenuAction.L3 -> handler.onL3()
+            dev.piannoli.ui.MenuAction.R3 -> handler.onR3()
+        }
+    }
 
     private fun dedicatedHandlerFor(screen: LauncherScreen): ScreenInputHandler? = when (screen) {
         is LauncherScreen.SystemList -> systemListHandler

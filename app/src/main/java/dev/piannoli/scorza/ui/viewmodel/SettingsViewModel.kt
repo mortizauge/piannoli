@@ -369,6 +369,16 @@ class SettingsViewModel @Inject constructor(
         _state.update { it.copy(categoryIndex = index) }
     }
 
+    fun selectTouchItem(index: Int) {
+        _state.update { current ->
+            if (current.inSubList) {
+                if (index in current.items.indices) current.copy(selectedIndex = index) else current
+            } else {
+                if (index in current.categories.indices) current.copy(categoryIndex = index) else current
+            }
+        }
+    }
+
     fun enterCategory(): Boolean {
         val current = _state.value
         if (current.inSubList) return false

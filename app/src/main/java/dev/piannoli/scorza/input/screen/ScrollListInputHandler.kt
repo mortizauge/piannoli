@@ -52,6 +52,15 @@ class ScrollListInputHandler @AssistedInject constructor(
     override fun onUp() = move(-1)
     override fun onDown() = move(1)
 
+    fun selectTouchItem(index: Int) {
+        val count = itemCount()
+        val current = selectedIndex()
+        if (index in 0 until count && index != current) {
+            onMove(index)
+            ListNavigation.recordMove(current, selectedIndex(), index - current, count)
+        }
+    }
+
     override fun onLeft() {
         if (onLeftOverride != null) {
             onLeftOverride.invoke()

@@ -14,6 +14,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import dev.piannoli.ui.components.activateSelectedItemOnTap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
@@ -143,7 +144,8 @@ fun RommGameListScreen(
                             modifier = Modifier
                                 .fillMaxHeight()
                                 .fillMaxWidth()
-                                .padding(start = 16.dp),
+                                .padding(start = 16.dp)
+                                .activateSelectedItemOnTap(),
                             contentAlignment = Alignment.Center
                         ) {
                             if (coverUrl != null) {

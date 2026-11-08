@@ -15,9 +15,10 @@ fun ListScrollEffect(
     itemCount: Int,
     scrollTarget: Int = -1,
     reorderMode: Boolean = false,
+    touchScrolling: Boolean = false,
 ) {
     LaunchedEffect(itemCount, scrollTarget) {
-        if (itemCount > 0 && scrollTarget >= 0) {
+        if (!touchScrolling && itemCount > 0 && scrollTarget >= 0) {
             val target = scrollTarget.coerceIn(0, itemCount - 1)
             if (listState.firstVisibleItemIndex != target) {
                 listState.scrollToItem(target)
@@ -26,9 +27,10 @@ fun ListScrollEffect(
     }
 
     val prevIndex = remember { mutableIntStateOf(selectedIndex) }
-    LaunchedEffect(selectedIndex, itemCount) {
+    LaunchedEffect(selectedIndex, itemCount, touchScrolling) {
         val previous = prevIndex.intValue
         prevIndex.intValue = selectedIndex
+        if (touchScrolling) return@LaunchedEffect
         if (itemCount == 0) return@LaunchedEffect
         val index = selectedIndex.coerceAtLeast(0).coerceAtMost(itemCount - 1)
         // visibleItemsInfo can be empty mid-recomposition; under fast auto-repeat (80ms)
@@ -75,14 +77,19 @@ fun ListScrollEffect(
             val target = if (jumped && index < capacity) 0 else index
             listState.scrollToItem(target)
         } else if (index > lastFullyVisible) {
-            // Reveal the row at the bottom edge. Counting rows back from the selection would assume
-            // every row is the same height, which SectionedList breaks by drawing the header inside
-            // the item; the count taken from the old window then overshoots and leaves the selection
-            // clipped. Scroll the row to the top so it gets measured, then give back the slack.
-            listState.scrollToItem(index)
+            val onScreen = visible.firstOrNull { it.index == index }
+            if (onScreen != null) {
+                listState.scrollBy((onScreen.offset + onScreen.size - viewportHeight).coerceAtLeast(0).toFloat())
+                return@LaunchedEffect
+            }
+            // Start near the bottom, not the top, then correct for the measured row height.
+            // Section headers make the actual height differ from the current window's estimate.
+            listState.scrollToItem(index, -(viewportHeight - itemSize).coerceAtLeast(0))
             val revealed = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
-            val slack = listState.layoutInfo.viewportEndOffset - (revealed?.size ?: 0)
-            if (slack > 0) listState.scrollBy(-slack.toFloat())
+                ?: return@LaunchedEffect
+            // At the end of an unpadded list scrollToItem cannot put the row at offset zero.
+            val slack = listState.layoutInfo.viewportEndOffset - (revealed.offset + revealed.size)
+            if (slack != 0) listState.scrollBy(-slack.toFloat())
         }
     }
 }

@@ -33,6 +33,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import dev.piannoli.ui.components.activateSelectedItemOnTap
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.painter.BitmapPainter
@@ -273,7 +274,8 @@ fun SystemListScreen(
                         modifier = Modifier
                             .fillMaxHeight()
                             .fillMaxWidth()
-                            .padding(start = 16.dp),
+                            .padding(start = 16.dp)
+                            .activateSelectedItemOnTap(),
                         contentAlignment = Alignment.Center
                     ) {
                         val art = selectedArt

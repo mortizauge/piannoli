@@ -18,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import dev.piannoli.ui.components.activateSelectedItemOnTap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -74,6 +75,8 @@ import dev.piannoli.ui.components.footerReservation
 import dev.piannoli.ui.components.listTitleSpacing
 import dev.piannoli.ui.components.pillItemHeight
 import dev.piannoli.ui.components.pillInternalPadding
+import dev.piannoli.ui.components.pillForeground
+import dev.piannoli.ui.components.pillTextColor
 import dev.piannoli.ui.components.screenPadding
 import dev.piannoli.ui.theme.Spacing
 
@@ -211,6 +214,7 @@ fun DialogOverlay(
                             if (parts.size == 2) {
                                 PillRowKeyValue(
                                     label = parts[0],
+                                    touchCycle = true,
                                     value = parts[1],
                                     isSelected = isSelected,
                                     fontSize = listFontSize,
@@ -232,7 +236,8 @@ fun DialogOverlay(
                         SubcomposeAsyncImage(
                             model = preview,
                             contentDescription = options.getOrNull(selectedIndex),
-                            modifier = Modifier.fillMaxWidth(0.4f).fillMaxHeight().padding(start = 12.dp),
+                            modifier = Modifier.fillMaxWidth(0.4f).fillMaxHeight().padding(start = 12.dp)
+                                .activateSelectedItemOnTap(),
                             contentScale = ContentScale.Fit,
                             loading = {
                                 Text(
@@ -462,6 +467,7 @@ fun DialogOverlay(
                         PillRowKeyValue(
                             label = label,
                             value = stringResource(dialogState.order.labelRes),
+                            touchCycle = true,
                             isSelected = isSelected,
                             fontSize = listFontSize,
                             lineHeight = listLineHeight,
@@ -551,6 +557,7 @@ fun DialogOverlay(
                     when (row) {
                         RommSettingsRow.CONCURRENT -> PillRowKeyValue(
                             label = stringResource(R.string.romm_settings_concurrent),
+                            touchCycle = true,
                             value = dialogState.concurrent.toString(),
                             isSelected = isSelected,
                             fontSize = listFontSize,
@@ -559,6 +566,7 @@ fun DialogOverlay(
                         )
                         RommSettingsRow.COVER_ART -> PillRowKeyValue(
                             label = stringResource(R.string.romm_settings_cover_art),
+                            touchCycle = true,
                             value = stringResource(rommArtLabelRes(dialogState.artType)),
                             isSelected = isSelected,
                             fontSize = listFontSize,
@@ -622,6 +630,7 @@ fun DialogOverlay(
                     when (row) {
                         RommSaveSyncRow.TOGGLE -> PillRowKeyValue(
                             label = stringResource(R.string.setting_romm_save_sync),
+                            touchCycle = true,
                             value = stringResource(
                                 if (!dialogState.supported) R.string.romm_save_sync_needs_500
                                 else if (dialogState.enabled) R.string.value_on else R.string.value_off
@@ -633,6 +642,7 @@ fun DialogOverlay(
                         )
                         RommSaveSyncRow.BACKUPS -> PillRowKeyValue(
                             label = stringResource(R.string.setting_romm_save_backups),
+                            touchCycle = true,
                             value = if (dialogState.backupCount <= 0) stringResource(R.string.value_off)
                             else dialogState.backupCount.toString(),
                             isSelected = isSelected,
@@ -1163,7 +1173,7 @@ private const val SYNC_TIME_SCALE = 0.8f
 @Composable
 private fun SyncHistoryRowItem(row: SyncHistoryRow, isSelected: Boolean, fontSize: TextUnit, lineHeight: TextUnit, verticalPadding: Dp) {
     val colors = LocalPiannoliColors.current
-    val textColor = if (isSelected) colors.highlightText else colors.text
+    val textColor = pillTextColor(isSelected, colors.text)
     val muted = textColor.copy(alpha = 0.55f)
     val glyph = when (row.direction) {
         SyncDirection.UPLOAD -> PiannoliIcons.SyncUpload.glyph
@@ -1180,11 +1190,12 @@ private fun SyncHistoryRowItem(row: SyncHistoryRow, isSelected: Boolean, fontSiz
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(glyph, color = textColor, fontFamily = LocalPiannoliIconFont.current, fontSize = (fontSize.value * SYNC_GLYPH_SCALE).sp)
+            Text(glyph, modifier = Modifier.pillForeground(), color = textColor, fontFamily = LocalPiannoliIconFont.current, fontSize = (fontSize.value * SYNC_GLYPH_SCALE).sp)
             Spacer(modifier = Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = row.name,
+                    modifier = Modifier.pillForeground(),
                     color = textColor,
                     fontFamily = LocalPiannoliFont.current,
                     fontSize = fontSize,
@@ -1194,6 +1205,7 @@ private fun SyncHistoryRowItem(row: SyncHistoryRow, isSelected: Boolean, fontSiz
                 if (row.detail != null) {
                     Text(
                         text = row.detail,
+                        modifier = Modifier.pillForeground(),
                         color = muted,
                         fontFamily = LocalPiannoliFont.current,
                         fontSize = (fontSize.value * SYNC_TIME_SCALE).sp,
@@ -1203,7 +1215,7 @@ private fun SyncHistoryRowItem(row: SyncHistoryRow, isSelected: Boolean, fontSiz
                 }
             }
             Spacer(modifier = Modifier.width(8.dp))
-            Text(row.relativeTime, color = muted, fontFamily = LocalPiannoliFont.current, fontSize = (fontSize.value * SYNC_TIME_SCALE).sp)
+            Text(row.relativeTime, modifier = Modifier.pillForeground(), color = muted, fontFamily = LocalPiannoliFont.current, fontSize = (fontSize.value * SYNC_TIME_SCALE).sp)
         }
     }
 }
@@ -1211,7 +1223,7 @@ private fun SyncHistoryRowItem(row: SyncHistoryRow, isSelected: Boolean, fontSiz
 @Composable
 private fun SyncErrorRowItem(err: dev.piannoli.scorza.romm.sync.SyncFailure, isSelected: Boolean, fontSize: TextUnit, lineHeight: TextUnit, verticalPadding: Dp) {
     val colors = LocalPiannoliColors.current
-    val textColor = if (isSelected) colors.highlightText else colors.text
+    val textColor = pillTextColor(isSelected, colors.text)
     val muted = textColor.copy(alpha = 0.55f)
     dev.piannoli.ui.components.PillRow(
         isSelected = isSelected,
@@ -1222,6 +1234,7 @@ private fun SyncErrorRowItem(err: dev.piannoli.scorza.romm.sync.SyncFailure, isS
         Column(modifier = Modifier.fillMaxWidth()) {
             Text(
                 text = err.displayName,
+                modifier = Modifier.pillForeground(),
                 color = textColor,
                 fontFamily = LocalPiannoliFont.current,
                 fontSize = fontSize,
@@ -1230,6 +1243,7 @@ private fun SyncErrorRowItem(err: dev.piannoli.scorza.romm.sync.SyncFailure, isS
             )
             Text(
                 text = err.reason,
+                modifier = Modifier.pillForeground(),
                 color = muted,
                 fontFamily = LocalPiannoliFont.current,
                 fontSize = (fontSize.value * SYNC_TIME_SCALE).sp,
@@ -1244,7 +1258,7 @@ private fun SyncErrorRowItem(err: dev.piannoli.scorza.romm.sync.SyncFailure, isS
 private fun DownloadRow(item: RommDownloadItem, isSelected: Boolean, fontSize: TextUnit, lineHeight: TextUnit, verticalPadding: Dp) {
     val colors = LocalPiannoliColors.current
     val font = LocalPiannoliFont.current
-    val text = if (isSelected) colors.highlightText else colors.text
+    val text = pillTextColor(isSelected, colors.text)
     val muted = text.copy(alpha = 0.55f)
     val context = androidx.compose.ui.platform.LocalContext.current
     val label = if (item.kind == RommDownloadKind.MANUAL)
@@ -1258,7 +1272,7 @@ private fun DownloadRow(item: RommDownloadItem, isSelected: Boolean, fontSize: T
         verticalPadding = verticalPadding
     ) {
         if (item.status == DownloadStatus.Done) {
-            Text(PiannoliIcons.CheckCircle.glyph, color = text, fontFamily = LocalPiannoliIconFont.current, fontSize = (fontSize.value * 0.9f).sp, lineHeight = lineHeight)
+            Text(PiannoliIcons.CheckCircle.glyph, modifier = Modifier.pillForeground(), color = text, fontFamily = LocalPiannoliIconFont.current, fontSize = (fontSize.value * 0.9f).sp, lineHeight = lineHeight)
         } else {
             val right = when (val s = item.status) {
                 is DownloadStatus.Downloading ->
@@ -1269,7 +1283,7 @@ private fun DownloadRow(item: RommDownloadItem, isSelected: Boolean, fontSize: T
                 is DownloadStatus.Failed -> stringResource(R.string.romm_download_failed)
                 else -> ""
             }
-            Text(right, color = muted, fontFamily = font, fontSize = (fontSize.value * 0.8f).sp)
+            Text(right, modifier = Modifier.pillForeground(), color = muted, fontFamily = font, fontSize = (fontSize.value * 0.8f).sp)
         }
     }
 }

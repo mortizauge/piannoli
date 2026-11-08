@@ -60,6 +60,7 @@ fun LoggingSettingsScreen(
                 ) { _, category, isSelected ->
                     PillRowKeyValue(
                         label = labelFor(category),
+                        touchCycle = true,
                         value = if (LoggingPrefs.isEnabled(category)) stringResource(R.string.value_on)
                             else stringResource(R.string.value_off),
                         isSelected = isSelected,

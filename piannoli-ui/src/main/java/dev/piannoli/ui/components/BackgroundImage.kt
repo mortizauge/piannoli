@@ -9,6 +9,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawBehind
@@ -38,11 +41,16 @@ fun ScreenBackground(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    Box(
-        modifier = modifier.fillMaxSize().screenBackground(
-            backgroundImagePath, backgroundTint, backgroundAlpha, backgroundColor
-        )
-    ) { content() }
+    val touch = LocalTouchInput.current
+    val surface = remember(touch) { TouchSurface() }
+    CompositionLocalProvider(LocalTouchSurface provides surface.takeIf { touch != null }) {
+        Box(
+            modifier = (if (touch != null) modifier.touchScrolling(surface) else modifier)
+                .fillMaxSize().screenBackground(
+                    backgroundImagePath, backgroundTint, backgroundAlpha, backgroundColor
+                )
+        ) { content() }
+    }
 }
 
 fun Modifier.screenBackground(
@@ -92,5 +100,7 @@ fun Modifier.screenBackground(
                 }
         }
     }
-    result
+    if (LocalTouchInput.current != null) result.pointerInput(Unit) {
+        detectTapGestures(onTap = {})
+    } else result
 }
