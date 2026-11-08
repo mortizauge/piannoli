@@ -329,11 +329,11 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         set(value) = jsonWrite { put(KEY_KEYBOARD_TYPE, value.name) }
 
     var navigationSound: Boolean
-        get() = jsonRead { optBoolean(KEY_NAVIGATION_SOUND, false) }
+        get() = jsonRead { optBoolean(KEY_NAVIGATION_SOUND, true) }
         set(value) = jsonWrite { put(KEY_NAVIGATION_SOUND, value) }
 
     var hapticFeedback: Boolean
-        get() = jsonRead { optBoolean(KEY_HAPTIC_FEEDBACK, false) }
+        get() = jsonRead { optBoolean(KEY_HAPTIC_FEEDBACK, true) }
         set(value) = jsonWrite { put(KEY_HAPTIC_FEEDBACK, value) }
 
     var controllerNotifications: Boolean

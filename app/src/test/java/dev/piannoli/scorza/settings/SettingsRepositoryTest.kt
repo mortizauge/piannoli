@@ -338,7 +338,7 @@ class SettingsRepositoryTest {
 
     @Test
     @Config(sdk = [28])
-    fun `navigation sound defaults off toggles in input and supports cancel and persistence`() {
+    fun `navigation sound defaults on toggles in input and supports cancel and persistence`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         Shadows.shadowOf(context as android.app.Application)
             .grantPermissions(android.Manifest.permission.READ_EXTERNAL_STORAGE)
@@ -347,26 +347,26 @@ class SettingsRepositoryTest {
         try {
             settings.sdCardRoot = tmp.root.absolutePath
             settings.setupCompleted = true
-            assertFalse(settings.navigationSound)
+            assertEquals(true, settings.navigationSound)
             val viewModel = SettingsViewModel(settings, AppFonts(context), context, mockk(relaxed = true))
             viewModel.load()
             viewModel.setCategoryIndex(viewModel.state.value.categories.indexOfFirst { it.key == "input" })
             viewModel.enterCategory()
             viewModel.selectItem("navigation_sound")
-            assertEquals(R.string.value_off, viewModel.getSelectedItem()?.valueRes)
-            viewModel.cycleSelected(1)
-            assertEquals(true, settings.navigationSound)
             assertEquals(R.string.value_on, viewModel.getSelectedItem()?.valueRes)
-            viewModel.cancel()
+            viewModel.cycleSelected(1)
             assertFalse(settings.navigationSound)
-            settings.navigationSound = true
+            assertEquals(R.string.value_off, viewModel.getSelectedItem()?.valueRes)
+            viewModel.cancel()
+            assertEquals(true, settings.navigationSound)
+            settings.navigationSound = false
         } finally {
             settings.shutdown()
         }
         val reopened = newRepo()
         try {
             reopened.sdCardRoot = tmp.root.absolutePath
-            assertEquals(true, reopened.navigationSound)
+            assertFalse(reopened.navigationSound)
         } finally {
             reopened.shutdown()
         }
@@ -374,7 +374,7 @@ class SettingsRepositoryTest {
 
     @Test
     @Config(sdk = [28])
-    fun `haptics default off toggle in input independently of sound and support cancel save and persistence`() {
+    fun `haptics default on toggle in input independently of sound and support cancel save and persistence`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         Shadows.shadowOf(context as android.app.Application)
             .grantPermissions(android.Manifest.permission.READ_EXTERNAL_STORAGE)
@@ -383,20 +383,20 @@ class SettingsRepositoryTest {
         try {
             settings.sdCardRoot = tmp.root.absolutePath
             settings.setupCompleted = true
-            assertFalse(settings.hapticFeedback)
+            assertEquals(true, settings.hapticFeedback)
             val viewModel = SettingsViewModel(settings, AppFonts(context), context, mockk(relaxed = true))
             viewModel.load()
             viewModel.setCategoryIndex(viewModel.state.value.categories.indexOfFirst { it.key == "input" })
             viewModel.enterCategory()
             viewModel.selectItem("haptic_feedback")
             assertEquals(R.string.setting_haptic_feedback, viewModel.getSelectedItem()?.labelRes)
-            assertEquals(R.string.value_off, viewModel.getSelectedItem()?.valueRes)
-            viewModel.cycleSelected(1)
-            assertEquals(true, settings.hapticFeedback)
-            assertFalse(settings.navigationSound)
             assertEquals(R.string.value_on, viewModel.getSelectedItem()?.valueRes)
-            viewModel.cancel()
+            viewModel.cycleSelected(1)
             assertFalse(settings.hapticFeedback)
+            assertEquals(true, settings.navigationSound)
+            assertEquals(R.string.value_off, viewModel.getSelectedItem()?.valueRes)
+            viewModel.cancel()
+            assertEquals(true, settings.hapticFeedback)
             viewModel.load()
             viewModel.setCategoryIndex(viewModel.state.value.categories.indexOfFirst { it.key == "input" })
             viewModel.enterCategory()
@@ -404,17 +404,17 @@ class SettingsRepositoryTest {
             viewModel.cycleSelected(-1)
             viewModel.save()
             viewModel.cycleSelected(1)
-            assertFalse(settings.hapticFeedback)
-            viewModel.cancel()
             assertEquals(true, settings.hapticFeedback)
+            viewModel.cancel()
+            assertFalse(settings.hapticFeedback)
         } finally {
             settings.shutdown()
         }
         val reopened = newRepo()
         try {
             reopened.sdCardRoot = tmp.root.absolutePath
-            assertEquals(true, reopened.hapticFeedback)
-            assertFalse(reopened.navigationSound)
+            assertFalse(reopened.hapticFeedback)
+            assertEquals(true, reopened.navigationSound)
         } finally {
             reopened.shutdown()
         }
