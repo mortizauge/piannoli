@@ -9,14 +9,14 @@ import dev.piannoli.scorza.input.ListNavigation
 import javax.inject.Inject
 
 /**
- * Held-state poller that drives navigation auto-repeat. Reads `PortRouter.isCanonicalPressedAt`
+ * Input-woken held-state timer that drives navigation auto-repeat. Reads `PortRouter.isCanonicalPressedAt`
  * across all ports for BTN_UP / BTN_DOWN / BTN_LEFT / BTN_RIGHT; on a direction transition from
  * none-held to held, waits [INITIAL_DELAY_MS], then fires the matching dispatcher callback every
  * [REPEAT_INTERVAL_MS]. Source-agnostic: works for keycode-bound, hat-bound, or stick-bound
  * navigation as long as the canonical is tracked in `PortRouter`.
  *
  * Initial press fires synchronously via `InputDispatcher.handleKeyEvent`; the poller only handles
- * auto-repeat (it skips the first fire on transition).
+ * auto-repeat (it skips the first fire on transition). No timer is scheduled without a held direction.
  */
 @ActivityScoped
 class MenuNavigationPoller @Inject constructor(
@@ -28,6 +28,7 @@ class MenuNavigationPoller @Inject constructor(
     private var heldDir: CanonicalButton? = null
     private var nextFireAt = 0L
     private var running = false
+    private val inputChanged: () -> Unit = { wakeOnInput() }
 
     private val tick = object : Runnable {
         override fun run() {
@@ -42,26 +43,28 @@ class MenuNavigationPoller @Inject constructor(
                 ListNavigation.withRepeat(true) { fire(current) }
                 nextFireAt = now + REPEAT_INTERVAL_MS
             }
-            // Wake just before the next fire if a direction is held; otherwise idle-poll. This
-            // keeps auto-repeat cadence within a few ms of the configured interval instead of
-            // letting the 33ms poll tick introduce up to a full poll of jitter per fire.
-            val next = if (heldDir != null) {
-                (nextFireAt - now).coerceIn(1L, POLL_INTERVAL_MS)
-            } else {
-                POLL_INTERVAL_MS
+            if (heldDir != null) {
+                handler.postDelayed(this, (nextFireAt - now).coerceAtLeast(1L))
             }
-            handler.postDelayed(this, next)
         }
     }
 
     fun start() {
         if (running) return
         running = true
+        dispatcher.onNavigationStateChanged = inputChanged
+        handler.post(tick)
+    }
+
+    internal fun wakeOnInput() {
+        if (!running) return
+        handler.removeCallbacks(tick)
         handler.post(tick)
     }
 
     fun stop() {
         running = false
+        if (dispatcher.onNavigationStateChanged === inputChanged) dispatcher.onNavigationStateChanged = null
         handler.removeCallbacks(tick)
         heldDir = null
         nextFireAt = 0L
@@ -96,7 +99,6 @@ class MenuNavigationPoller @Inject constructor(
     companion object {
         private const val INITIAL_DELAY_MS = 280L
         private const val REPEAT_INTERVAL_MS = 80L
-        private const val POLL_INTERVAL_MS = 33L
         private const val MAX_PORTS = 4
     }
 }

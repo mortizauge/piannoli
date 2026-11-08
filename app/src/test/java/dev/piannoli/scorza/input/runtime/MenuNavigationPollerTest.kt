@@ -1,6 +1,7 @@
 package dev.piannoli.scorza.input.runtime
 
 import android.os.Looper
+import android.view.KeyEvent
 import dev.piannoli.scorza.input.CanonicalButton
 import dev.piannoli.scorza.input.ListNavigation
 import dev.piannoli.scorza.input.ScreenInputHandler
@@ -53,6 +54,7 @@ class MenuNavigationPollerTest {
                 assertEquals(if (delta < 0) 1 else 2, calls)
                 assertEquals(calls, feedback)
                 held = false
+                poller.wakeOnInput()
                 shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(40))
                 nav.lastKeyRepeatCount = 99
                 held = true
@@ -63,6 +65,48 @@ class MenuNavigationPollerTest {
             } finally {
                 poller.stop()
             }
+        }
+    }
+
+    @Test fun `idle and stopped navigation schedule no polling and input wakes repeat immediately`() {
+        val router = mockk<PortRouter>()
+        every { router.mappingFor(any()) } returns null
+        every { router.evaluatorFor(any()) } returns null
+        var held = false
+        var reads = 0
+        every { router.isCanonicalPressedAt(any(), any()) } answers {
+            reads++
+            held && firstArg<Int>() == 0 && secondArg<CanonicalButton>() == CanonicalButton.BTN_DOWN
+        }
+        val dispatcher = InputDispatcher(router, ActiveMappingHolder())
+        var repeats = 0
+        dispatcher.onDown = { repeats++ }
+        val poller = MenuNavigationPoller(router, dispatcher)
+        try {
+            poller.start()
+            shadowOf(Looper.getMainLooper()).idle()
+            val idleReads = reads
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(5))
+            assertEquals(idleReads, reads)
+            held = true
+            dispatcher.handleKeyboardDirectionForTest(999, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.ACTION_DOWN)
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(279))
+            assertEquals(1, repeats)
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1))
+            assertEquals(2, repeats)
+            held = false
+            dispatcher.handleKeyboardDirectionForTest(999, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.ACTION_UP)
+            shadowOf(Looper.getMainLooper()).idle()
+            val releasedReads = reads
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(5))
+            assertEquals(releasedReads, reads)
+            assertEquals(2, repeats)
+            poller.stop()
+            assertEquals(null, dispatcher.onNavigationStateChanged)
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(5))
+            assertEquals(releasedReads, reads)
+        } finally {
+            poller.stop()
         }
     }
 }

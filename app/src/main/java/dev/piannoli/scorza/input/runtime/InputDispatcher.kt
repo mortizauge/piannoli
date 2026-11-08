@@ -45,6 +45,7 @@ class InputDispatcher @Inject constructor(
     var onWest: () -> Unit = {}
     var onNorth: () -> Unit = {}
     var onMenu: () -> Unit = {}
+    internal var onNavigationStateChanged: (() -> Unit)? = null
 
     // When set, resolves the active screen handler synchronously from nav state instead of the
     // recompose-lagging registry. Set per wiring via wireToRegistry: the launcher passes one, the
@@ -334,6 +335,7 @@ class InputDispatcher @Inject constructor(
     }
 
     private fun dispatchReleased(button: CanonicalButton, mapping: DeviceMapping): Boolean {
+        if (button in NAV_CANONICALS) onNavigationStateChanged?.invoke()
         cancelNavigationRepeat(button)
         when (button) {
             mapping.menuConfirm -> onConfirmUp()
@@ -349,6 +351,7 @@ class InputDispatcher @Inject constructor(
     }
 
     private fun dispatchMapped(canonical: CanonicalButton, mapping: DeviceMapping): Boolean {
+        if (canonical in NAV_CANONICALS) onNavigationStateChanged?.invoke()
         when (canonical) {
             CanonicalButton.BTN_UP -> onUp()
             CanonicalButton.BTN_DOWN -> onDown()
