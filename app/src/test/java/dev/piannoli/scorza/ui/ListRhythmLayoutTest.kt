@@ -21,6 +21,9 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,6 +31,7 @@ import dev.piannoli.ui.components.List
 import dev.piannoli.ui.components.ListRhythm
 import dev.piannoli.ui.components.LocalListRhythm
 import dev.piannoli.ui.components.PillRowText
+import dev.piannoli.ui.components.PillRowKeyValue
 import dev.piannoli.ui.components.ScreenTitle
 import dev.piannoli.ui.components.bottomBarHeight
 import dev.piannoli.ui.components.footerReservation
@@ -45,6 +49,7 @@ import dev.piannoli.ui.theme.LocalPillScale
 import dev.piannoli.ui.theme.LocalScaleFactor
 import androidx.compose.foundation.layout.BoxWithConstraints
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -61,6 +66,42 @@ import org.robolectric.annotation.Config
 class ListRhythmLayoutTest {
 
     @get:Rule val compose = createComposeRule()
+
+    @Test fun `long setting paths cannot consume the label half of a row`() {
+        val path = "/storage/emulated/0/" + "a-very-long-directory-name/".repeat(12)
+        val selected = androidx.compose.runtime.mutableStateOf(false)
+        compose.setContent {
+            PiannoliTheme {
+                Column(modifier = Modifier.requiredSize(640.dp, 480.dp)) {
+                    for (label in listOf("Piannoli Root", "ROM Directory")) {
+                        Box(modifier = Modifier.fillMaxWidth().testTag(label)) {
+                            PillRowKeyValue(
+                                label = label, value = path, isSelected = selected.value,
+                                fontSize = 22.sp, lineHeight = 32.sp, verticalPadding = 6.dp,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        for (active in listOf(false, true)) {
+            compose.runOnIdle { selected.value = active }
+            for (label in listOf("Piannoli Root", "ROM Directory")) {
+                val row = compose.onNodeWithTag(label).fetchSemanticsNode().boundsInRoot
+                val labelViewport = compose.onNode(
+                    hasScrollAction() and hasAnyDescendant(hasText(label)),
+                ).fetchSemanticsNode().boundsInRoot
+                val valueViewport = compose.onNode(
+                    hasScrollAction() and hasAnyDescendant(hasText(path)) and
+                        androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(label)),
+                ).fetchSemanticsNode().boundsInRoot
+                assertEquals(labelViewport.width, valueViewport.width, 1f)
+                assertTrue(labelViewport.right <= row.center.x)
+                assertTrue(valueViewport.left >= row.center.x)
+                assertTrue(labelViewport.width > row.width * 0.4f)
+            }
+        }
+    }
 
     private var solved: ListRhythm? = null
     private var aboveInk = 0f

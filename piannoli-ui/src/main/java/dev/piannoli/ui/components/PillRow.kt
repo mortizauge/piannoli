@@ -6,6 +6,7 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
@@ -295,6 +296,8 @@ fun PillRowKeyValue(
 
     val scrollState = rememberScrollState()
     MarqueeEffect(scrollState, isSelected)
+    val valueScrollState = rememberScrollState()
+    MarqueeEffect(valueScrollState, isSelected, key = value to isSelected)
 
     val labelColor = pillTextColor(isSelected, colors.text)
     val valueColor = pillTextColor(isSelected, colors.accent)
@@ -324,47 +327,56 @@ fun PillRowKeyValue(
                 )
             }
             Spacer(modifier = Modifier.width(8.dp))
-            if (swatchColor != null) {
-                Box(
-                    modifier = Modifier
-                        .size((fontSize.value * 0.7f).dp)
-                        .clip(RoundedCornerShape(Radius.Sm))
-                        .background(swatchColor)
-                        .border(1.dp, borderColor, RoundedCornerShape(Radius.Sm))
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-            }
-            if (valueIcon != null) {
-                // Same style as the value beside it, differing only in family. Passing fontSize
-                // alone left lineHeight unspecified, so the glyph resolved the icon font's own
-                // metrics while the value used the theme's, and CenterVertically then centred two
-                // boxes of different heights.
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(valueScrollState),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (swatchColor != null) {
+                    Box(
+                        modifier = Modifier
+                            .size((fontSize.value * 0.7f).dp)
+                            .clip(RoundedCornerShape(Radius.Sm))
+                            .background(swatchColor)
+                            .border(1.dp, borderColor, RoundedCornerShape(Radius.Sm))
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                if (valueIcon != null) {
+                    // Same style as the value beside it, differing only in family. Passing fontSize
+                    // alone left lineHeight unspecified, so the glyph resolved the icon font's own
+                    // metrics while the value used the theme's, and CenterVertically then centred two
+                    // boxes of different heights.
+                    Text(
+                        text = valueIcon,
+                        style = valueStyle.copy(fontFamily = LocalPiannoliIconFont.current),
+                        color = labelColor,
+                        modifier = Modifier.pillForeground(),
+                        maxLines = 1
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
                 Text(
-                    text = valueIcon,
-                    style = valueStyle.copy(fontFamily = LocalPiannoliIconFont.current),
-                    color = labelColor,
+                    text = value,
+                    style = valueStyle,
+                    color = valueColor,
                     modifier = Modifier.pillForeground(),
-                    maxLines = 1
+                    maxLines = 1,
+                    softWrap = false,
                 )
-                Spacer(modifier = Modifier.width(6.dp))
-            }
-            Text(
-                text = value,
-                style = valueStyle,
-                color = valueColor,
-                modifier = Modifier.pillForeground(),
-                maxLines = 1
-            )
-            if (dotIndicator != null) {
-                val dotColor = if (dotIndicator) labelColor else labelColor.copy(alpha = 0.45f)
-                if (value.isNotEmpty()) Spacer(modifier = Modifier.width(6.dp))
-                Box(
-                    modifier = Modifier
-                        .size((fontSize.value * 0.42f).dp)
-                        .pillForeground()
-                        .border(if (dotIndicator) 0.dp else 1.dp, dotColor, CircleShape)
-                        .background(if (dotIndicator) dotColor else Color.Transparent, CircleShape)
-                )
+                if (dotIndicator != null) {
+                    val dotColor = if (dotIndicator) labelColor else labelColor.copy(alpha = 0.45f)
+                    if (value.isNotEmpty()) Spacer(modifier = Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .size((fontSize.value * 0.42f).dp)
+                            .pillForeground()
+                            .border(if (dotIndicator) 0.dp else 1.dp, dotColor, CircleShape)
+                            .background(if (dotIndicator) dotColor else Color.Transparent, CircleShape)
+                    )
+                }
             }
         }
     }
