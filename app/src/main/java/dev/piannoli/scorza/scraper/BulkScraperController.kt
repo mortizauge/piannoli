@@ -27,6 +27,11 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import kotlin.coroutines.coroutineContext
 
+fun scrapeListName(title: String): String {
+    val name = title.trimEnd()
+    return if (name.endsWith(" Games", ignoreCase = true)) name.dropLast(6).trimEnd() else name
+}
+
 @ActivityScoped
 class BulkScraperController @Inject constructor(
     @ActivityContext private val context: Context,
@@ -141,7 +146,7 @@ class BulkScraperController @Inject constructor(
     private fun configure() {
         page = Page.CONFIG
         history.clear()
-        val title = if (listTitle != null) context.getString(R.string.bulk_list_games, listTitle)
+        val title = if (listTitle != null) context.getString(R.string.bulk_list_games, scrapeListName(requireNotNull(listTitle)))
         else if (systemPlatforms != null) context.getString(R.string.bulk_systems)
         else if (allPlatforms) context.getString(R.string.bulk_all)
         else context.getString(R.string.bulk_platform_games,

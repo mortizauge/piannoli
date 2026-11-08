@@ -451,7 +451,7 @@ fun DialogOverlay(
                 ) { _, row, isSelected ->
                     val label = when {
                         row == dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.SCRAPING && dialogState.scrapeListTitle != null ->
-                            stringResource(R.string.bulk_list_games, dialogState.scrapeListTitle)
+                            stringResource(R.string.bulk_list_games, dev.piannoli.scorza.scraper.scrapeListName(dialogState.scrapeListTitle))
                         row == dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.CONFLICTS && conflictCount > 0 ->
                             pluralStringResource(dev.piannoli.ui.R.plurals.quick_menu_conflicts, conflictCount, conflictCount)
                         row == dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.ERRORS && dialogState.syncErrorCount > 0 ->

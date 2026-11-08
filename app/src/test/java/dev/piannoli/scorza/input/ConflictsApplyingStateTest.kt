@@ -52,6 +52,7 @@ class ConflictsApplyingStateTest {
     private val apps = mockk<dev.piannoli.scorza.db.AppsRepository>(relaxed = true)
     private val roms = mockk<dev.piannoli.scorza.db.RomsRepository>(relaxed = true)
     private val artwork = mockk<dev.piannoli.scorza.util.ArtworkLookup>(relaxed = true)
+    private val downloader = mockk<dev.piannoli.scorza.romm.download.RommDownloader>(relaxed = true)
 
     // Never advanced: the apply coroutine stays queued so the assertions see only what Start did
     // synchronously, which is the part the user perceives.
@@ -84,7 +85,7 @@ class ConflictsApplyingStateTest {
             controllersViewModel = mockk(relaxed = true),
             emulatorMappingBuilder = mockk(relaxed = true),
             rommStore = mockk(relaxed = true),
-            rommDownloader = mockk(relaxed = true),
+            rommDownloader = downloader,
             rommBrowseViewModel = mockk(relaxed = true),
             rommArtFetcher = mockk(relaxed = true),
             raPreloadController = mockk(relaxed = true),
@@ -902,6 +903,28 @@ class ConflictsApplyingStateTest {
         nav.dialogState.value = DialogState.QuickMenu(rows = listOf(QuickMenuRow.SCRAPING))
         handler.onConfirm()
         verify(exactly = 1) { bulkScraper.open(null, any()) }
+    }
+
+    @Test fun `apps quick menu omits bulk scraping while Android games retain it`() = runTest(dispatcher) {
+        Dispatchers.setMain(dispatcher)
+        try {
+            every { downloader.queue.state } returns kotlinx.coroutines.flow.MutableStateFlow(emptyList())
+            nav.push(LauncherScreen.GameList)
+            for ((platform, title) in listOf("tools" to "Apps", "ports" to "Android Games")) {
+                every { games.state } returns kotlinx.coroutines.flow.MutableStateFlow(
+                    dev.piannoli.scorza.ui.viewmodel.GameListViewModel.State(platformTag = platform, breadcrumb = title),
+                )
+                nav.dialogState.value = DialogState.None
+                assertTrue(handler.onMenu())
+                dispatcher.scheduler.advanceUntilIdle()
+                val menu = nav.dialogState.value as DialogState.QuickMenu
+                assertEquals(platform != "tools", QuickMenuRow.SCRAPING in menu.rows)
+                assertFalse(QuickMenuRow.SCRAPE_SYSTEMS in menu.rows)
+                assertEquals(title, menu.listTitle)
+            }
+        } finally {
+            Dispatchers.resetMain()
+        }
     }
 
     @Test fun bulk_menu_selection_and_busy_back_use_bulk_controller() {

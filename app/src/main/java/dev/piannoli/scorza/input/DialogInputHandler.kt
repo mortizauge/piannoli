@@ -213,6 +213,8 @@ class DialogInputHandler @Inject constructor(
             downloadCount = rommDownloader.queue.state.value.size,
             contentList = contentList,
             gameList = list != null,
+            appsList = nav.currentScreen == LauncherScreen.GameList &&
+                gameListViewModel.state.value.platformTag == "tools",
         )
         return DialogState.QuickMenu(
             rows = rows,

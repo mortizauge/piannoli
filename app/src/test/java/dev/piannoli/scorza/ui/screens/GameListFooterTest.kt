@@ -78,6 +78,9 @@ class GameListFooterTest {
         }
         compose.onNodeWithText("Scrape All Game Boy Games").assertIsDisplayed()
         compose.onAllNodesWithText("Scrape All Systems").assertCountEquals(0)
+        compose.runOnIdle { dialog.value = dialog.value.copy(scrapeListTitle = "Android Games") }
+        compose.onNodeWithText("Scrape All Android Games").assertIsDisplayed()
+        compose.onAllNodesWithText("Scrape All Android Games Games").assertCountEquals(0)
     }
 
     @Test fun `quick menu displays list subtitle and omits it on the main menu`() {

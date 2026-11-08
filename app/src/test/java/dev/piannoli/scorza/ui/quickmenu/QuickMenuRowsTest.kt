@@ -4,6 +4,13 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class QuickMenuRowsTest {
+    @Test fun `apps lists hide bulk scraping but keep order and other menu actions`() {
+        assertEquals(
+            listOf(QuickMenuRow.ORDER_BY, QuickMenuRow.RESCAN, QuickMenuRow.INFO),
+            QuickMenuRow.visibleRows(rommPaired = false, contentList = true, gameList = true, appsList = true),
+        )
+    }
+
     @Test fun `game lists hide system scraping independently of order controls`() {
         for (canOrder in listOf(false, true)) {
             val rows = QuickMenuRow.visibleRows(rommPaired = false, contentList = canOrder, gameList = true)

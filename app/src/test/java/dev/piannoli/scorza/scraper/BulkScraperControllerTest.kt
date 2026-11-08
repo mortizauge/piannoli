@@ -122,6 +122,17 @@ class BulkScraperControllerTest {
         }
     }
 
+    @Test fun `category scraping title removes only a trailing Games word`() {
+        for ((name, expected) in listOf(
+            "Android Games" to "Scrape All Android Games",
+            "Android games " to "Scrape All Android Games",
+            "Games Collection" to "Scrape All Games Collection Games",
+        )) {
+            controller.openList(name, emptyList()) {}
+            assertEquals(expected, (nav.dialogState.value as DialogState.ScraperMenu).title)
+        }
+    }
+
     @Test fun `empty list never falls back to library and opening library clears list scope`() = scope.runTest {
         controller.openList("Empty", emptyList()) {}
         click(R.string.bulk_start)
