@@ -95,18 +95,21 @@ class EmulatorIntentBuilderTest {
         assertEquals(setOf("AutoStartFile"), intent.extras?.keySet())
     }
 
-    @Test fun `bundled hakuX launches its real package with readable content URI data`() {
+    @Test fun `bundled hakuX and Mali variant launch their own packages with readable content URI data`() {
         val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
-        val config = PlatformConfig(tmp.root, ctx.assets).getAppConfig("XBOX", "com.rfandango.haku_x")
+        val platforms = PlatformConfig(tmp.root, ctx.assets)
         val file = tmp.newFile("Game.XISO").apply { writeBytes(byteArrayOf(0)) }
-        val resolved = EmulatorIntentBuilder.resolve(ctx, config, file)
-        val intent = EmulatorIntentBuilder.toAndroidIntent(ctx, resolved, config)
+        for (packageName in listOf("com.rfandango.haku_x", "com.rfandango.haku_x.debug")) {
+            val config = platforms.getAppConfig("XBOX", packageName)
+            val resolved = EmulatorIntentBuilder.resolve(ctx, config, file)
+            val intent = EmulatorIntentBuilder.toAndroidIntent(ctx, resolved, config)
 
-        assertEquals(ComponentName("com.rfandango.haku_x", "com.rfandango.haku_x.LauncherActivity"), intent.component)
-        assertEquals(Intent.ACTION_VIEW, intent.action)
-        assertEquals(ctx.romFileProviderUri(file), intent.data)
-        assertTrue(intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
-        assertNull(intent.extras)
+            assertEquals(ComponentName(packageName, "com.rfandango.haku_x.LauncherActivity"), intent.component)
+            assertEquals(Intent.ACTION_VIEW, intent.action)
+            assertEquals(ctx.romFileProviderUri(file), intent.data)
+            assertTrue(intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+            assertNull(intent.extras)
+        }
     }
 
     @Test fun `MAIN with explicit activity and uri_string extra`() {
