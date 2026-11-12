@@ -58,7 +58,6 @@ class PiannoliPaths(val root: File) {
     val guidePositionsFile: File get() = File(configState, "guide_positions.ini")
     val cheatStateFile: File get() = File(configState, "cheat_state.ini")
     val raGameIdsFile: File get() = File(configRetroAchievements, "ra_game_ids.txt")
-    val configRaOffline: File get() = File(configRetroAchievements, "Offline")
     val raGameIdsLegacyFile: File get() = File(configRetroArch, "ra_game_ids.txt")
     val raLaunchCfg: File get() = File(configRetroArch, "retroarch_launch.cfg")
     // Keep the existing path so user-installed fonts remain available after renaming.

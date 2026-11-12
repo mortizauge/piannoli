@@ -11,7 +11,7 @@ class RaConnectClient(
     private val clientProvider: () -> OkHttpClient = { sharedClient },
     private val userAgent: String = "Piannoli",
 ) {
-    data class RawResponse(val code: Int, val body: String)
+    private data class RawResponse(val code: Int, val body: String)
     data class Login(val username: String, val token: String)
 
     fun loginWithPassword(username: String, password: String): Login? {
@@ -24,25 +24,6 @@ class RaConnectClient(
             val name = json.optString("User", username)
             if (!json.optBoolean("Success") || token.isBlank() || name.isBlank()) null else Login(name, token)
         } catch (_: org.json.JSONException) { null }
-    }
-
-    fun login2(username: String, token: String): RawResponse =
-        post(FormBody.Builder().add("r", "login2").add("u", username).add("t", token).build())
-
-    fun achievementSets(username: String, token: String, gameId: Int): RawResponse =
-        post(FormBody.Builder().add("r", "achievementsets").add("u", username).add("t", token)
-            .add("g", gameId.toString()).build())
-
-    fun startSession(username: String, token: String, gameId: Int): RawResponse =
-        post(FormBody.Builder().add("r", "startsession").add("u", username).add("t", token)
-            .add("g", gameId.toString()).add("l", RA_CLIENT_VERSION).build())
-
-    /** Returns the RA game id (0 if the hash is unrecognized), or -1 if the server could not be reached. */
-    fun resolveGameId(username: String, token: String, hash: String): Int {
-        val res = post(FormBody.Builder().add("r", "gameid").add("u", username).add("t", token)
-            .add("m", hash).build())
-        if (res.code !in 200..299) return -1
-        return try { JSONObject(res.body).optInt("GameID", 0) } catch (_: Exception) { 0 }
     }
 
     private fun post(form: FormBody): RawResponse {
@@ -58,10 +39,6 @@ class RaConnectClient(
     }
 
     companion object {
-        private const val RA_CLIENT_VERSION = "12.3.0"
-
-        /** OkHttp is designed to be shared; one instance reuses the connection pool and dispatcher
-         *  across every request instead of spinning up a new pool per call during bulk preload. */
         private val sharedClient: OkHttpClient by lazy { OkHttpClient() }
     }
 }

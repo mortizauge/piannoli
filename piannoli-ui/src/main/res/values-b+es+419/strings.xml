@@ -32,7 +32,6 @@
     <!-- Input binding label. %1$s is the hat (D-pad) direction. -->
     <!-- Input binding label. %1$d is the joystick axis index; + is the positive direction. -->
     <!-- Input binding label. %1$d is the joystick axis index; - is the negative direction. -->
-    <!-- Input setting toggle: swap the on-screen positions of the Play and Resume actions. -->
     <!-- Input setting toggle: controls whether the in-game Quit returns to the main menu. -->
     <!-- Input toggle: automatically save a state when quitting a game. -->
     <!-- Same row as setting_set_default_launcher, shown when Piannoli is already the default launcher and the user wants to pick another one. -->
@@ -157,10 +156,6 @@
     <!-- OSD toast. %d = number of cheats restored. -->
     <!-- %d = number of system folders created. -->
     <!-- %1$s = platform name. -->
-    <!-- RA achievement preload. %1$s = game name. -->
-    <!-- %1$d = achievements cached, %2$d = points. -->
-    <!-- %1$d = games cached, %2$d = total games. -->
-    <!-- %1$d = achievement count, %2$s = set name. -->
     <!-- Save Slots screen -->
     <!-- Screen title. %1$s = game name. -->
     <!-- %1$s = slot name. -->

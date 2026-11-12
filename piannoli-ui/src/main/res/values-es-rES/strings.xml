@@ -32,7 +32,6 @@
     <string name="label_update">ACTUALIZAR</string>
     <string name="label_logout">CERRAR SESION</string>
     <!-- Bottom-bar button opening cached RetroAchievements sets for offline play. RA = RetroAchievements. -->
-    <string name="label_offline_sets">PARAMETROS FUERA DE LINEA</string>
     <string name="label_hex">HEX</string>
     <string name="label_rename">RENOMBRAR</string>
     <string name="label_set">ESTABLECER</string>
@@ -128,8 +127,6 @@
     <string name="binding_axis_pos">Eje %1$d+</string>
     <!-- Input binding label. %1$d is the joystick axis index; - is the negative direction. -->
     <string name="binding_axis_neg">Eje %1$d-</string>
-    <!-- Input setting toggle: swap the on-screen positions of the Play and Resume actions. -->
-    <string name="setting_swap_play_resume">Intercambiar juego y reanudar</string>
     <!-- Input setting toggle: controls whether the in-game Quit returns to the main menu. -->
     <string name="setting_main_menu_quit">Menú principal salir</string>
     <!-- Input toggle: automatically save a state when quitting a game. -->
@@ -594,16 +591,6 @@
     <string name="label_clear_override">LIMPIAR</string>
     <!-- %1$s = platform name. -->
     <string name="dialog_reset_platform_confirm">¿Restablecer %1$s? Se prefiere un emulador externo instalado. Si no hay ninguno disponible, configura uno.</string>
-    <!-- RA achievement preload. %1$s = game name. -->
-    <string name="ra_preload_progress">Precarga %1$s</string>
-    <string name="ra_preload_none">No se han encontrado logros para este juego</string>
-    <string name="ra_preload_failed">La precarga falló. Compruebe su conexión.</string>
-    <!-- %1$d = achievements cached, %2$d = points. -->
-    <!-- %1$d = games cached, %2$d = total games. -->
-    <string name="ra_offline_sets_title">Conjuntos de Logros Desconectados</string>
-    <string name="ra_offline_sets_empty">Ningún logro se almacena</string>
-    <!-- %1$d = achievement count, %2$s = set name. -->
-    <string name="ra_offline_set_value">Logros %1$d - %2$s</string>
     <string name="label_refresh">REFERENCIA</string>
     <!-- Save Slots screen -->
     <!-- Screen title. %1$s = game name. -->

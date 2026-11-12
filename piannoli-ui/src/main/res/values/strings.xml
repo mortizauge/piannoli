@@ -38,7 +38,6 @@
     <string name="label_update">Update</string>
     <string name="label_logout">Logout</string>
     <!-- Bottom-bar button opening cached RetroAchievements sets for offline play. RA = RetroAchievements. -->
-    <string name="label_offline_sets">Offline Sets</string>
     <string name="label_hex">Hex</string>
     <string name="label_rename">Rename</string>
     <string name="label_set">Set</string>
@@ -168,8 +167,6 @@
     <string name="binding_axis_pos">Axis %1$d+</string>
     <!-- Input binding label. %1$d is the joystick axis index; - is the negative direction. -->
     <string name="binding_axis_neg">Axis %1$d-</string>
-    <!-- Input setting toggle: swap the on-screen positions of the Play and Resume actions. -->
-    <string name="setting_swap_play_resume">Swap Play and Resume</string>
     <!-- Input setting toggle: controls whether the in-game Quit returns to the main menu. -->
     <string name="setting_main_menu_quit">Main Menu Quit</string>
     <string name="setting_experimental_features">Experimental Features</string>
@@ -691,21 +688,6 @@
     <string name="label_clear_override">Clear</string>
     <!-- %1$s = platform name. -->
     <string name="dialog_reset_platform_confirm">Reset %1$s? Use the first supported installed standalone emulator, then a configured RetroArch core. If neither is available, set up an external emulator.</string>
-    <!-- RA achievement preload. %1$s = game name. -->
-    <string name="ra_preload_progress">Preloading %1$s</string>
-    <string name="ra_preload_none">No achievements found for this game</string>
-    <string name="ra_preload_failed">Preload failed. Check your connection.</string>
-    <!-- %1$d = achievements cached, %2$d = points. -->
-    <plurals name="ra_preload_success">
-        <item quantity="one">Cached %1$d achievement (%2$d pts) for offline play</item>
-        <item quantity="other">Cached %1$d achievements (%2$d pts) for offline play</item>
-    </plurals>
-    <!-- %1$d = games cached, %2$d = total games. -->
-    <string name="ra_preload_bulk_done">Cached %1$d of %2$d games for offline play</string>
-    <string name="ra_offline_sets_title">Offline Achievement Sets</string>
-    <string name="ra_offline_sets_empty">No Achievement Sets Cached</string>
-    <!-- %1$d = achievement count, %2$s = set name. -->
-    <string name="ra_offline_set_value">%1$d Achievements - %2$s</string>
     <string name="label_refresh">Refresh</string>
 
     <!-- Save Slots screen -->
@@ -780,6 +762,5 @@
     <string name="kbd_help_submit">Submit</string>
     <string name="kbd_help_cancel">Cancel</string>
     <string name="dialog_external_emulator_hint">Install a supported external emulator and configure its ROM access, or choose another emulator in Emulator Mapping.</string>
-    <string name="ra_identification_failed">Unable to identify this ROM. Check the disc files and playlist references. Unsupported formats (including PlayStation CHD/PBP) require a RetroAchievements game ID, for example from RomM.</string>
     <string name="launch_error_config">Could not prepare the external emulator configuration. Check Piannoli\'s storage access.</string>
 </resources>

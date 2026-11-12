@@ -32,7 +32,6 @@
     <string name="label_update">MISE À JOUR</string>
     <string name="label_logout">DÉCONNECTER</string>
     <!-- Bottom-bar button opening cached RetroAchievements sets for offline play. RA = RetroAchievements. -->
-    <string name="label_offline_sets">PARAMÈTRES HORS CONNEXION</string>
     <string name="label_hex">HEX</string>
     <string name="label_rename">RENOMMER</string>
     <string name="label_set">DÉFINIR</string>
@@ -128,8 +127,6 @@
     <string name="binding_axis_pos">Axe %1$d+</string>
     <!-- Input binding label. %1$d is the joystick axis index; - is the negative direction. -->
     <string name="binding_axis_neg">Axe %1$d-</string>
-    <!-- Input setting toggle: swap the on-screen positions of the Play and Resume actions. -->
-    <string name="setting_swap_play_resume">Permuter la lecture et la reprise</string>
     <!-- Input setting toggle: controls whether the in-game Quit returns to the main menu. -->
     <!-- Input toggle: automatically save a state when quitting a game. -->
     <string name="setting_experimental_features">Fonctionnalités expérimentales</string>
@@ -593,21 +590,6 @@
     <string name="label_clear_override">EFFACER</string>
     <!-- %1$s = platform name. -->
     <string name="dialog_reset_platform_confirm">Réinitialiser %1$s ? Un émulateur externe installé est privilégié. Si aucun n\'est disponible, configurez-en un.</string>
-    <!-- RA achievement preload. %1$s = game name. -->
-    <string name="ra_preload_progress">Préchargement de %1$s</string>
-    <string name="ra_preload_none">Aucun succès trouvé pour ce jeu</string>
-    <string name="ra_preload_failed">Le préchargement a échoué. Vérifiez votre connexion.</string>
-    <!-- %1$d = achievements cached, %2$d = points. -->
-    <plurals name="ra_preload_success">
-        <item quantity="one">%1$d Succès mise en cache (%2$d pts) pour jouer hors ligne</item>
-        <item quantity="other">%1$d Succès mise en cache (%2$d pts) pour jouer hors ligne</item>
-    </plurals>
-    <!-- %1$d = games cached, %2$d = total games. -->
-    <string name="ra_preload_bulk_done"> %1$d sur %2$d jeux mis en cache pour le mode hors ligne</string>
-    <string name="ra_offline_sets_title">Ensemble de Succès Hors Ligne</string>
-    <string name="ra_offline_sets_empty">Aucun succès mis en cache</string>
-    <!-- %1$d = achievement count, %2$s = set name. -->
-    <string name="ra_offline_set_value">Succès %1$d - %2$s</string>
     <string name="label_refresh">ACTUALISER</string>
     <!-- Save Slots screen -->
     <!-- Screen title. %1$s = game name. -->

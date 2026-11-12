@@ -32,7 +32,6 @@
     <string name="label_update">更新</string>
     <string name="label_logout">LOGOUT</string>
     <!-- Bottom-bar button opening cached RetroAchievements sets for offline play. RA = RetroAchievements. -->
-    <string name="label_offline_sets">オフラインセット</string>
     <string name="label_hex">HEX</string>
     <string name="label_rename">名前の変更</string>
     <string name="label_set">設定</string>
@@ -128,8 +127,6 @@
     <string name="binding_axis_pos">Axis %1$d+</string>
     <!-- Input binding label. %1$d is the joystick axis index; - is the negative direction. -->
     <string name="binding_axis_neg">Axis %1$d-</string>
-    <!-- Input setting toggle: swap the on-screen positions of the Play and Resume actions. -->
-    <string name="setting_swap_play_resume">再生と再開を入れ替え</string>
     <!-- Input setting toggle: controls whether the in-game Quit returns to the main menu. -->
     <string name="setting_main_menu_quit">メインメニューを終了</string>
     <!-- Input toggle: automatically save a state when quitting a game. -->
@@ -590,20 +587,6 @@
     <string name="label_clear_override">消去</string>
     <!-- %1$s = platform name. -->
     <string name="dialog_reset_platform_confirm">%1$sをリセットしますか？ インストール済みの外部エミュレータを優先します。利用できない場合は外部エミュレータを設定してください。</string>
-    <!-- RA achievement preload. %1$s = game name. -->
-    <string name="ra_preload_progress">%1$s のプリロード中</string>
-    <string name="ra_preload_none">このゲームの実績は見つかりませんでした</string>
-    <string name="ra_preload_failed">プリロードに失敗しました。接続を確認してください。</string>
-    <!-- %1$d = achievements cached, %2$d = points. -->
-    <plurals name="ra_preload_success">
-        <item quantity="other">オフライン再生のために、 %1$d 実績をキャッシュしました (%2$d pts)</item>
-    </plurals>
-    <!-- %1$d = games cached, %2$d = total games. -->
-    <string name="ra_preload_bulk_done">オフラインでプレイするための %1$d %2$d ゲームの Anumber@@2 をキャッシュしました</string>
-    <string name="ra_offline_sets_title">オフライン実績セット</string>
-    <string name="ra_offline_sets_empty">キャッシュされた実績セットはありません</string>
-    <!-- %1$d = achievement count, %2$s = set name. -->
-    <string name="ra_offline_set_value">%1$d 実績 - %2$s</string>
     <string name="label_refresh">更新</string>
     <!-- Save Slots screen -->
     <!-- Screen title. %1$s = game name. -->

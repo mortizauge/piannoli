@@ -70,7 +70,6 @@ class InputRouter @Inject constructor(
     private val rommBrowseViewModel: dev.piannoli.scorza.ui.viewmodel.RommBrowseViewModel,
     private val rommDownloader: dev.piannoli.scorza.romm.download.RommDownloader,
     private val osdController: dev.piannoli.ui.components.OsdController,
-    private val raPreloadController: dev.piannoli.scorza.ra.RaPreloadController,
     @IoScope private val ioScope: CoroutineScope,
     private val menuSounds: dev.piannoli.scorza.util.MenuSounds,
     private val menuHaptics: dev.piannoli.scorza.util.MenuHaptics,
@@ -391,69 +390,8 @@ class InputRouter @Inject constructor(
         is LauncherScreen.RommVirtualTypes      -> rommVirtualTypesHandler()
         is LauncherScreen.RommCollectionList    -> rommCollectionListHandler()
         is LauncherScreen.RommCollectionGameList -> rommCollectionGameListHandler()
-        is LauncherScreen.RetroAchievementsOfflinePlatforms -> raOfflinePlatformsHandler()
-        is LauncherScreen.RetroAchievementsOfflineSets -> raOfflineSetsHandler()
         else -> object : ScreenInputHandler {}
     }
-
-    private fun raOfflineStore() = dev.piannoli.scorza.ra.RaOfflineStore(
-        dev.piannoli.scorza.config.PiannoliPaths(settings.sdCardRoot).configRaOffline
-    )
-
-    private fun reloadOfflineSets() {
-        val s = nav.currentScreen as? LauncherScreen.RetroAchievementsOfflineSets ?: return
-        val entries = raOfflineStore().entries().filter { it.platformTag == s.platformTag }
-        nav.replaceTop(s.copy(entries = entries, selectedIndex = s.selectedIndex.coerceIn(0, (entries.size - 1).coerceAtLeast(0))))
-    }
-
-    private fun refreshOfflinePlatforms() {
-        val s = nav.currentScreen as? LauncherScreen.RetroAchievementsOfflinePlatforms ?: return
-        val platforms = raOfflineStore().entries()
-            .groupBy { it.platformTag }
-            .map { (tag, list) -> LauncherScreen.RaOfflinePlatform(tag, platformConfig.getDisplayName(tag), list.size) }
-            .sortedBy { it.name.lowercase() }
-        nav.replaceTop(s.copy(platforms = platforms, selectedIndex = s.selectedIndex.coerceIn(0, (platforms.size - 1).coerceAtLeast(0))))
-    }
-
-    private fun raOfflinePlatformsHandler() = scrollable<LauncherScreen.RetroAchievementsOfflinePlatforms>(
-        onBack = {
-            nav.pop()
-            nav.dialogState.value = returnDialog
-        },
-        onConfirm = {
-            val p = platforms.getOrNull(selectedIndex) ?: return@scrollable
-            val entries = raOfflineStore().entries().filter { it.platformTag == p.tag }
-            nav.push(
-                LauncherScreen.RetroAchievementsOfflineSets(
-                    platformTag = p.tag,
-                    platformName = p.name,
-                    entries = entries,
-                )
-            )
-        },
-    )
-
-    private fun raOfflineSetsHandler() = scrollable<LauncherScreen.RetroAchievementsOfflineSets>(
-        onBack = {
-            nav.pop()
-            refreshOfflinePlatforms()
-        },
-        onNorth = {
-            val entry = entries.getOrNull(selectedIndex) ?: return@scrollable
-            raPreloadController.start(
-                romPath = entry.romPath,
-                platformTag = entry.platformTag,
-                displayName = entry.gameName,
-                gameId = entry.gameId,
-                onComplete = { reloadOfflineSets() },
-            )
-        },
-        onWest = {
-            val entry = entries.getOrNull(selectedIndex) ?: return@scrollable
-            raOfflineStore().deleteGame(entry.gameId)
-            reloadOfflineSets()
-        },
-    )
 
     private inline fun <reified T> scrollable(
         crossinline onConfirm: T.() -> Unit = {},

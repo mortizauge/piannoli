@@ -64,14 +64,6 @@ class RomsRepository(
         }
     }
 
-    fun setRaCachedGameId(romId: Long, gameId: Int?) {
-        if (gameId == null) {
-            db.execute("UPDATE roms SET ra_cached_game_id = NULL WHERE id = ?", romId)
-        } else {
-            db.execute("UPDATE roms SET ra_cached_game_id = ? WHERE id = ?", gameId, romId)
-        }
-    }
-
     fun updateRomPath(romId: Long, newRelativePath: String) = db.execute(
         "UPDATE roms SET path = ? WHERE id = ?",
         newRelativePath, romId,
@@ -215,8 +207,7 @@ class RomsRepository(
             launchTarget = LaunchTarget.RetroArch,
             raGameId = if (stmt.isNull(5)) null else stmt.getLong(5).toInt(),
             lastPlayedAt = if (stmt.isNull(6)) null else stmt.getLong(6),
-            raCachedGameId = if (stmt.isNull(7)) null else stmt.getLong(7).toInt(),
-            isHidden = stmt.getLong(8) != 0L,
+            isHidden = stmt.getLong(7) != 0L,
         )
     }
 
@@ -232,6 +223,6 @@ class RomsRepository(
     }
 
     private companion object {
-        const val BASE_SELECT = "SELECT id, path, platform_tag, display_name, tags, ra_game_id, last_played_at, ra_cached_game_id, is_hidden FROM roms"
+        const val BASE_SELECT = "SELECT id, path, platform_tag, display_name, tags, ra_game_id, last_played_at, is_hidden FROM roms"
     }
 }

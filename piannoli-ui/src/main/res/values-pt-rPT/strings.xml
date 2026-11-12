@@ -32,7 +32,6 @@
     <string name="label_update">ATUALIZAR</string>
     <string name="label_logout">TERMINAR SESSÃO</string>
     <!-- Bottom-bar button opening cached RetroAchievements sets for offline play. RA = RetroAchievements. -->
-    <string name="label_offline_sets">CONJUNTOS OFFLINE</string>
     <string name="label_hex">EX</string>
     <string name="label_rename">RENOMEAR</string>
     <string name="label_set">DEFINIR</string>
@@ -128,8 +127,6 @@
     <string name="binding_axis_pos">Eixo %1$d+</string>
     <!-- Input binding label. %1$d is the joystick axis index; - is the negative direction. -->
     <string name="binding_axis_neg">Eixo %1$d-</string>
-    <!-- Input setting toggle: swap the on-screen positions of the Play and Resume actions. -->
-    <string name="setting_swap_play_resume">Trocar Jogar e Retomar</string>
     <!-- Input setting toggle: controls whether the in-game Quit returns to the main menu. -->
     <string name="setting_main_menu_quit">Sair para o Menu Principal</string>
     <!-- Input toggle: automatically save a state when quitting a game. -->
@@ -594,21 +591,6 @@
     <string name="label_clear_override">LIMPAR</string>
     <!-- %1$s = platform name. -->
     <string name="dialog_reset_platform_confirm">Repor %1$s? É preferido um emulador externo instalado. Se nenhum estiver disponível, configure um.</string>
-    <!-- RA achievement preload. %1$s = game name. -->
-    <string name="ra_preload_progress">A pré-carregar %1$s</string>
-    <string name="ra_preload_none">Nenhuma conquista encontrada para este jogo</string>
-    <string name="ra_preload_failed">Falha no pré-carregamento. Verifique a sua ligação.</string>
-    <!-- %1$d = achievements cached, %2$d = points. -->
-    <plurals name="ra_preload_success">
-        <item quantity="one">%1$d conquista guardada em cache (%2$d pts) para jogar offline</item>
-        <item quantity="other">%1$d conquistas guardadas em cache (%2$d pts) para jogar offline</item>
-    </plurals>
-    <!-- %1$d = games cached, %2$d = total games. -->
-    <string name="ra_preload_bulk_done">%1$d de %2$d jogos guardados em cache para jogar offline</string>
-    <string name="ra_offline_sets_title">Conjuntos de Conquistas Offline</string>
-    <string name="ra_offline_sets_empty">Nenhum conjunto de conquistas em cache</string>
-    <!-- %1$d = achievement count, %2$s = set name. -->
-    <string name="ra_offline_set_value">%1$d Conquistas - %2$s</string>
     <string name="label_refresh">ATUALIZAR</string>
     <!-- Save Slots screen -->
     <!-- Screen title. %1$s = game name. -->

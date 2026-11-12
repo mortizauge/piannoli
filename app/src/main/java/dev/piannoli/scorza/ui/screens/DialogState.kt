@@ -137,8 +137,6 @@ sealed interface DialogState {
     data class About(val statusMessage: String? = null) : DialogState
     data class RAAccount(val username: String, val score: Int = 0) : DialogState
     data class RALoggingIn(val message: String = "Logging in$ELLIPSIS") : DialogState
-    data class RAPreloadProgress(val gameName: String) : DialogState
-    data class RAPreloadResult(val success: Boolean, val message: String) : DialogState
     data class RommPairing(
         val host: String = "",
         val message: String = "",

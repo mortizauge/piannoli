@@ -32,7 +32,6 @@
     <string name="label_update">ΕΝΗΜΕΡΩΣΗ</string>
     <string name="label_logout">LOGOUT</string>
     <!-- Bottom-bar button opening cached RetroAchievements sets for offline play. RA = RetroAchievements. -->
-    <string name="label_offline_sets">ΠΡΟΓΡΑΜΜΜΑΤΑ ΣΤΟΙΧΕΙΩΝ</string>
     <string name="label_hex">HEX</string>
     <string name="label_rename">ΕΠΙΣΤΡΟΦΗ</string>
     <string name="label_set">ΕΝΑΡΞΗ</string>
@@ -128,8 +127,6 @@
     <string name="binding_axis_pos">Άξονας %1$d+</string>
     <!-- Input binding label. %1$d is the joystick axis index; - is the negative direction. -->
     <string name="binding_axis_neg">Άξονας %1$d-</string>
-    <!-- Input setting toggle: swap the on-screen positions of the Play and Resume actions. -->
-    <string name="setting_swap_play_resume">Εναλλαγή παιχνιδιού και συνέχισης</string>
     <!-- Input setting toggle: controls whether the in-game Quit returns to the main menu. -->
     <string name="setting_main_menu_quit">Κύριο Μενού Έξοδος</string>
     <!-- Input toggle: automatically save a state when quitting a game. -->
@@ -584,21 +581,6 @@
     <string name="label_clear_override">ΚΑΘΑΡΙΣΜΟΣ</string>
     <!-- %1$s = platform name. -->
     <string name="dialog_reset_platform_confirm">Επαναφορά %1$s; Προτιμάται ένας εγκατεστημένος εξωτερικός εξομοιωτής. Αν δεν υπάρχει διαθέσιμος, ρυθμίστε έναν.</string>
-    <!-- RA achievement preload. %1$s = game name. -->
-    <string name="ra_preload_progress">Προφόρτωση %1$s</string>
-    <string name="ra_preload_none">Δεν βρέθηκαν επιτεύγματα για αυτό το παιχνίδι</string>
-    <string name="ra_preload_failed">Η προφόρτωση απέτυχε. Ελέγξτε τη σύνδεσή σας.</string>
-    <!-- %1$d = achievements cached, %2$d = points. -->
-    <plurals name="ra_preload_success">
-        <item quantity="one">Cached %1$d επίτευγμα (%2$d pts) για offline παιχνίδι</item>
-        <item quantity="other">Cached %1$d επιτεύγματα (%2$d pts) για παιχνίδι χωρίς σύνδεση</item>
-    </plurals>
-    <!-- %1$d = games cached, %2$d = total games. -->
-    <string name="ra_preload_bulk_done">Cached %1$d %2$d παιχνίδια για παιχνίδι εκτός σύνδεσης</string>
-    <string name="ra_offline_sets_title">Σύνολα Επιτευγμάτων Εκτός Σύνδεσης</string>
-    <string name="ra_offline_sets_empty">Κανένα επίτευγμα δεν θέτει προσωρινά αποθηκευμένα</string>
-    <!-- %1$d = achievement count, %2$s = set name. -->
-    <string name="ra_offline_set_value">%1$d Επιτεύγματα - %2$s</string>
     <string name="label_refresh">REFRESH</string>
     <!-- Save Slots screen -->
     <!-- Screen title. %1$s = game name. -->

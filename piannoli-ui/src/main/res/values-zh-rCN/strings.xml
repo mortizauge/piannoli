@@ -32,7 +32,6 @@
     <string name="label_update">更新</string>
     <string name="label_logout">登出</string>
     <!-- Bottom-bar button opening cached RetroAchievements sets for offline play. RA = RetroAchievements. -->
-    <string name="label_offline_sets">离线成就</string>
     <string name="label_hex">HEX</string>
     <string name="label_rename">重命名</string>
     <string name="label_set">设置</string>
@@ -128,8 +127,6 @@
     <string name="binding_axis_pos">方向轴 %1$d+</string>
     <!-- Input binding label. %1$d is the joystick axis index; - is the negative direction. -->
     <string name="binding_axis_neg">方向轴 %1$d</string>
-    <!-- Input setting toggle: swap the on-screen positions of the Play and Resume actions. -->
-    <string name="setting_swap_play_resume">交换游玩和恢复</string>
     <!-- Input setting toggle: controls whether the in-game Quit returns to the main menu. -->
     <string name="setting_main_menu_quit">退出主菜单</string>
     <!-- Input toggle: automatically save a state when quitting a game. -->
@@ -593,20 +590,6 @@
     <string name="label_clear_override">清除</string>
     <!-- %1$s = platform name. -->
     <string name="dialog_reset_platform_confirm">重置 %1$s吗？优先使用已安装的外部模拟器。如果没有可用的外部模拟器，请配置一个。</string>
-    <!-- RA achievement preload. %1$s = game name. -->
-    <string name="ra_preload_progress">预加载 %1$s</string>
-    <string name="ra_preload_none">没有找到这个游戏的成就</string>
-    <string name="ra_preload_failed">预加载失败。请检查您的连接。</string>
-    <!-- %1$d = achievements cached, %2$d = points. -->
-    <plurals name="ra_preload_success">
-        <item quantity="other">为离线游玩缓存 %1$d 成就 (%2$d ps)</item>
-    </plurals>
-    <!-- %1$d = games cached, %2$d = total games. -->
-    <string name="ra_preload_bulk_done">在 %2$d 游戏中缓存了 %1$d 以便离线游玩</string>
-    <string name="ra_offline_sets_title">离线成就集</string>
-    <string name="ra_offline_sets_empty">没有缓存成就集</string>
-    <!-- %1$d = achievement count, %2$s = set name. -->
-    <string name="ra_offline_set_value">%1$d 成就 - %2$s</string>
     <string name="label_refresh">刷新</string>
     <!-- Save Slots screen -->
     <!-- Screen title. %1$s = game name. -->

@@ -12,7 +12,6 @@ data class Rom(
     val launchTarget: LaunchTarget = LaunchTarget.RetroArch,
     val raGameId: Int? = null,
     val lastPlayedAt: Long? = null,
-    val raCachedGameId: Int? = null,
     val isHidden: Boolean = false,
 ) {
     val isMultiDisc: Boolean
