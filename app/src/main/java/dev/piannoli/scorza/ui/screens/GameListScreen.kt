@@ -99,7 +99,6 @@ fun GameListScreen(
     listVerticalPadding: Dp = 8.dp,
     onListStateChanged: ((androidx.compose.foundation.lazy.LazyListState?) -> Unit)? = null,
     resumableGames: Set<String> = emptySet(),
-    swapPlayResume: Boolean = false,
     artWidth: Int = 40,
     artRadius: Int = 25,
     artScale: ArtScale = ArtScale.FIT,
@@ -312,8 +311,6 @@ fun GameListScreen(
                 emptyList()
             } else if (state.multiSelectMode) {
                 listOf(buttonStyle.confirm to actionLabel, buttonStyle.start to stringResource(R.string.label_confirm))
-            } else if (hasResumeState && swapPlayResume) {
-                listOf(buttonStyle.north to actionLabel, buttonStyle.confirm to resumeLabel)
             } else {
                 buildList {
                     if (hasResumeState) add(buttonStyle.north to resumeLabel)

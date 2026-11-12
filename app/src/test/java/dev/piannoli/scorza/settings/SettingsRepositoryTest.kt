@@ -88,6 +88,24 @@ class SettingsRepositoryTest {
 
     @Test
     @Config(sdk = [28])
+    fun `legacy play resume swap preference no longer appears in general settings`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        Shadows.shadowOf(context as android.app.Application)
+            .grantPermissions(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+        writeSettingsJson(tmp.root, """{"swap_play_resume":true}""")
+        val settings = newRepo()
+        try {
+            settings.sdCardRoot = tmp.root.absolutePath
+            val viewModel = SettingsViewModel(settings, AppFonts(context), context, mockk(relaxed = true))
+            viewModel.load()
+            viewModel.enterSubCategory("general", R.string.settings_general)
+            assertFalse(viewModel.state.value.items.any { it.key == "swap_play_resume" })
+            org.junit.Assert.assertTrue(viewModel.state.value.items.any { it.key == "main_menu_quit" })
+        } finally { settings.shutdown() }
+    }
+
+    @Test
+    @Config(sdk = [28])
     fun `library orders persist independently and default order supports preview cancellation`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         Shadows.shadowOf(context as android.app.Application)

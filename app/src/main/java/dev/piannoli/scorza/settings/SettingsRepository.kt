@@ -226,10 +226,6 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         get() = jsonRead { optString(KEY_BG_IMAGE, "").ifEmpty { null } }
         set(value) = jsonWrite { if (value != null) put(KEY_BG_IMAGE, value) else remove(KEY_BG_IMAGE) }
 
-    var swapPlayResume: Boolean
-        get() = jsonRead { optBoolean(KEY_SWAP_PLAY_RESUME, false) }
-        set(value) = jsonWrite { put(KEY_SWAP_PLAY_RESUME, value) }
-
     var mainMenuQuit: Boolean
         get() = jsonRead { optBoolean(KEY_MAIN_MENU_QUIT, false) }
         set(value) = jsonWrite { put(KEY_MAIN_MENU_QUIT, value) }
@@ -659,7 +655,6 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         private const val KEY_COLOR_TITLE = "color_title"
         private const val KEY_COLOR_BACKGROUND = "color_background"
         private const val KEY_COLOR_STATUS_BAR = "color_status_bar"
-        private const val KEY_SWAP_PLAY_RESUME = "swap_play_resume"
         private const val KEY_MAIN_MENU_QUIT = "main_menu_quit"
         private const val KEY_EXPERIMENTAL_FEATURES = "experimental_features"
         private const val KEY_SHOW_WIFI = "show_wifi"

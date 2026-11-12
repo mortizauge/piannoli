@@ -81,7 +81,6 @@ fun SystemListScreen(
     systemArtRadius: Int = 0,
     systemArtworkType: dev.piannoli.scorza.settings.SystemArtworkType = dev.piannoli.scorza.settings.SystemArtworkType.LOGO,
     resumableGames: Set<String> = emptySet(),
-    swapPlayResume: Boolean = false,
     fiveGameHandheld: Boolean = false,
     buttonStyle: ButtonStyle = ButtonStyle(),
 ) {
@@ -338,13 +337,8 @@ fun SystemListScreen(
                     emptyList()
                 } else {
                     buildList {
-                        if (hasResumeState && swapPlayResume) {
-                            add(buttonStyle.north to playLabel)
-                            add(buttonStyle.confirm to resumeLabel)
-                        } else {
-                            if (hasResumeState) add(buttonStyle.north to resumeLabel)
-                            add(buttonStyle.confirm to playLabel)
-                        }
+                        if (hasResumeState) add(buttonStyle.north to resumeLabel)
+                        add(buttonStyle.confirm to playLabel)
                     }
                 }
             } else if (state.items.isEmpty()) {

@@ -51,54 +51,54 @@ class GameListResumeHoldTest {
         nav.resumableGames = setOf(rom.path.absolutePath)
     }
 
-    @Test fun confirm_tap_on_resumable_resumes_latest_when_swap_on() {
-        every { settings.swapPlayResume } returns true
+    @Test fun confirm_on_resumable_always_plays_immediately() {
         every { glvm.state } returns MutableStateFlow(GameListViewModel.State())
-        handler.onConfirm()              // arm (no launch yet)
-        verify(exactly = 0) { actions.launchSelected(any(), any()) }
-        handler.onConfirmUp()            // release before timeout = tap
-        verify { actions.launchSelected(romItem, true) }
+        handler.onConfirm()
+        handler.onConfirmUp()
+        handler.resumeHoldRunnable.run()
+        verify(exactly = 1) { actions.launchSelected(romItem, false) }
+        verify(exactly = 0) { actions.buildSaveStatePicker(any(), any()) }
     }
 
-    @Test fun confirm_hold_on_resumable_opens_picker_when_swap_on() {
-        every { settings.swapPlayResume } returns true
+    @Test fun north_hold_opens_picker_without_launching_on_release() {
+        every { glvm.state } returns MutableStateFlow(GameListViewModel.State())
         every { actions.buildSaveStatePicker(rom, any()) } returns
-            LauncherScreen.SaveStatePicker(rom, "/x/base", List(11) { false }, 0, awaitConfirmRelease = true)
-        handler.onConfirm()              // arm
-        handler.resumeHoldRunnable.run() // simulate 400ms elapse
+            LauncherScreen.SaveStatePicker(rom, "/x/base", List(11) { false }, 0)
+        handler.onNorth()
+        handler.resumeHoldRunnable.run()
+        handler.onNorthUp()
         assertTrue(nav.currentScreen is LauncherScreen.SaveStatePicker)
         verify(exactly = 0) { actions.launchSelected(any(), any()) }
-        verify { actions.buildSaveStatePicker(rom, true) }
+        verify { actions.buildSaveStatePicker(rom, false) }
     }
 
-    @Test fun held_confirm_pushes_picker_only_once() {
-        every { settings.swapPlayResume } returns true
+    @Test fun held_north_pushes_picker_only_once() {
         every { actions.buildSaveStatePicker(rom, any()) } returns
-            LauncherScreen.SaveStatePicker(rom, "/x/base", List(11) { false }, 0, awaitConfirmRelease = true)
-        handler.onConfirm()              // arm
-        handler.onConfirm()              // auto-repeat while held: must not re-arm
+            LauncherScreen.SaveStatePicker(rom, "/x/base", List(11) { false }, 0)
+        handler.onNorth()
+        handler.onNorth()
         val depthBefore = nav.screenStack.size
-        handler.resumeHoldRunnable.run() // timer fires -> push once
-        handler.resumeHoldRunnable.run() // any stale scheduled copy -> no-op
+        handler.resumeHoldRunnable.run()
+        handler.resumeHoldRunnable.run()
+        handler.onNorthUp()
         assertEquals(depthBefore + 1, nav.screenStack.size)
     }
 
-    @Test fun confirm_when_swap_off_is_immediate_play_not_armed() {
-        every { settings.swapPlayResume } returns false
+    @Test fun north_tap_resumes_latest_once() {
         every { glvm.state } returns MutableStateFlow(GameListViewModel.State())
-        handler.onConfirm()
-        // swap off: confirm is Play fresh, launches immediately on press
-        verify { actions.launchSelected(romItem, false) }
+        handler.onNorth()
+        verify(exactly = 0) { actions.launchSelected(any(), any()) }
+        handler.onNorthUp()
+        handler.onNorthUp()
+        verify(exactly = 1) { actions.launchSelected(romItem, true) }
     }
 
-    @Test fun north_hold_opens_picker_when_swap_off() {
-        every { settings.swapPlayResume } returns false
-        every { glvm.state } returns mockk(relaxed = true)
-        every { actions.buildSaveStatePicker(rom, any()) } returns
-            LauncherScreen.SaveStatePicker(rom, "/x/base", List(11) { false }, 0)
-        handler.onNorth()                // arm (north is Resume when swap off)
+    @Test fun changing_selection_cancels_pending_resume_hold() {
+        handler.onNorth()
+        handler.onDown()
         handler.resumeHoldRunnable.run()
-        assertTrue(nav.currentScreen is LauncherScreen.SaveStatePicker)
-        verify { actions.buildSaveStatePicker(rom, false) }
+        handler.onNorthUp()
+        verify(exactly = 0) { actions.buildSaveStatePicker(any(), any()) }
+        verify(exactly = 0) { actions.launchSelected(any(), any()) }
     }
 }

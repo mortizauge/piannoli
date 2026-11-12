@@ -65,29 +65,28 @@ class GameListInputHandler @Inject constructor(
         selectHoldHandler.removeCallbacks(collectionSelectHoldRunnable)
     }
 
-    private enum class ResumeButton { CONFIRM, NORTH }
-    private var armedResumeButton: ResumeButton? = null
+    private var resumeHoldArmed = false
     private var resumeHoldFired = false
     private val resumeHoldHandler = Handler(Looper.getMainLooper())
     val resumeHoldRunnable = Runnable {
-        val button = armedResumeButton ?: return@Runnable
-        armedResumeButton = null
+        if (!resumeHoldArmed) return@Runnable
+        resumeHoldArmed = false
         resumeHoldFired = true
         val item = gameListViewModel.getSelectedItem() as? ListItem.RomItem ?: return@Runnable
-        nav.push(launcherActions.buildSaveStatePicker(item.rom, awaitConfirmRelease = button == ResumeButton.CONFIRM))
+        nav.push(launcherActions.buildSaveStatePicker(item.rom, awaitConfirmRelease = false))
     }
 
-    private fun armResumeHold(button: ResumeButton) {
-        if (armedResumeButton == button) return
+    private fun armResumeHold() {
+        if (resumeHoldArmed) return
         resumeHoldHandler.removeCallbacks(resumeHoldRunnable)
-        armedResumeButton = button
+        resumeHoldArmed = true
         resumeHoldFired = false
         resumeHoldHandler.postDelayed(resumeHoldRunnable, 400)
     }
 
     private fun cancelResumeHoldTimer() {
         resumeHoldHandler.removeCallbacks(resumeHoldRunnable)
-        armedResumeButton = null
+        resumeHoldArmed = false
         resumeHoldFired = false
     }
 
@@ -124,16 +123,8 @@ class GameListInputHandler @Inject constructor(
         when {
             gameListViewModel.isMultiSelectMode() -> gameListViewModel.toggleChecked()
             gameListViewModel.isReorderMode() -> gameListViewModel.confirmReorder()
-            settings.swapPlayResume && isResumableRomSelected() -> armResumeHold(ResumeButton.CONFIRM)
             else -> onGameListConfirm()
         }
-    }
-
-    override fun onConfirmUp() {
-        if (armedResumeButton != ResumeButton.CONFIRM) return
-        val fired = resumeHoldFired
-        cancelResumeHoldTimer()
-        if (!fired) onGameListConfirm()
     }
 
     override fun onR1() {
@@ -296,15 +287,15 @@ class GameListInputHandler @Inject constructor(
     }
 
     override fun onNorth() {
-        if (!settings.swapPlayResume && isResumableRomSelected()) {
-            armResumeHold(ResumeButton.NORTH)
+        if (isResumableRomSelected()) {
+            armResumeHold()
         } else {
             northAction()
         }
     }
 
     override fun onNorthUp() {
-        if (armedResumeButton != ResumeButton.NORTH) return
+        if (!resumeHoldArmed && !resumeHoldFired) return
         val fired = resumeHoldFired
         cancelResumeHoldTimer()
         if (!fired) northAction()
@@ -318,7 +309,7 @@ class GameListInputHandler @Inject constructor(
         val isResumable = nav.resumableGames.contains(recentKey)
         if (isResumable) {
             val trackRecent = glState.platformTag != "tools"
-            val errorDialog = launcherActions.launchSelected(item, !settings.swapPlayResume)
+            val errorDialog = launcherActions.launchSelected(item, true)
             if (errorDialog != null) {
                 nav.dialogState.value = errorDialog
             } else if (nav.dialogState.value is DialogState.SaveSyncChecking) {
@@ -367,10 +358,9 @@ class GameListInputHandler @Inject constructor(
         }
 
         val recentKey = selectedRecentKey(item) ?: return
-        val isResumable = nav.resumableGames.contains(recentKey)
         val tag = gameListViewModel.state.value.platformTag
         val trackRecent = tag != "tools"
-        val errorDialog = launcherActions.launchSelected(item, isResumable && settings.swapPlayResume)
+        val errorDialog = launcherActions.launchSelected(item, false)
         if (errorDialog != null) {
             nav.dialogState.value = errorDialog
         } else if (nav.dialogState.value is DialogState.SaveSyncChecking) {

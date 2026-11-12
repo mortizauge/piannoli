@@ -120,7 +120,7 @@ class SystemListInputHandler @Inject constructor(
             val recentKey = item.recentKey
             val isResumable = nav.resumableGames.contains(recentKey)
             if (isResumable) {
-                val errorDialog = launcherActions.launchSelected(item.item, !settings.swapPlayResume)
+                val errorDialog = launcherActions.launchSelected(item.item, true)
                 if (errorDialog != null) {
                     nav.dialogState.value = errorDialog
                 } else if (nav.dialogState.value is DialogState.SaveSyncChecking) {
@@ -203,9 +203,7 @@ class SystemListInputHandler @Inject constructor(
             }
             is SystemListViewModel.ListItem.GameItem -> {
                 val recentKey = item.recentKey
-                val isResumable = nav.resumableGames.contains(recentKey)
-                val resume = isResumable && settings.swapPlayResume
-                val errorDialog = launcherActions.launchSelected(item.item, resume)
+                val errorDialog = launcherActions.launchSelected(item.item, false)
                 if (errorDialog != null) {
                     nav.dialogState.value = errorDialog
                 } else if (nav.dialogState.value is DialogState.SaveSyncChecking) {
