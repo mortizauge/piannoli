@@ -373,6 +373,17 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
             jsonWrite { put("default_library_order", value.name) }
         }
 
+    var homeCategoryOrder: List<String>
+        get() = jsonRead {
+            val saved = optJSONArray("home_category_order")
+            val ids = if (saved == null) emptyList() else (0 until saved.length()).map { saved.getString(it) }
+            (ids + HOME_CATEGORY_IDS).distinct().filter { it in HOME_CATEGORY_IDS }
+        }
+        set(value) {
+            require(value.size == HOME_CATEGORY_IDS.size && value.toSet() == HOME_CATEGORY_IDS.toSet())
+            jsonWrite { put("home_category_order", org.json.JSONArray(value)) }
+        }
+
     fun listOrder(key: String): LibraryOrder = LibraryOrder.fromStored(
         jsonRead { optJSONObject("list_orders")?.optString(key).orEmpty() }, LibraryOrder.DEFAULT,
     )
@@ -620,6 +631,7 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         set(value) = jsonWrite { put(KEY_ROMM_SAVE_BACKUP_COUNT, value.coerceAtLeast(0)) }
 
     companion object {
+        private val HOME_CATEGORY_IDS = listOf("recent", "favorites", "collections")
         const val DEFAULT_ROOT = "/storage/emulated/0/Piannoli/"
         const val DEFAULT_RA_PACKAGE = "dev.piannoli.ricotta.aarch64"
         private const val KEY_SETUP_COMPLETED = "setup_completed"

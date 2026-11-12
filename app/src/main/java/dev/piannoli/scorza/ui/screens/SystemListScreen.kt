@@ -247,7 +247,7 @@ fun SystemListScreen(
                         is ListItem.ToolsFolder -> item.name
                         is ListItem.PortsFolder -> item.name
                     }
-                    val showReorder = state.reorderMode && isSelected && (item is ListItem.PlatformItem || item is ListItem.ToolsFolder || item is ListItem.PortsFolder || item is ListItem.CollectionItem || item is ListItem.GameItem)
+                    val showReorder = state.reorderMode && isSelected
                     val tagSuffix = (item as? ListItem.GameItem)
                         ?.takeIf { mixedPlatforms || it.displayName in duplicateGameNames }
                         ?.let { gi ->

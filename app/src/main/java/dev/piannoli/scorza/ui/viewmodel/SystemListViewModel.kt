@@ -20,6 +20,7 @@ import dev.piannoli.scorza.navigation.BrowsePosition
 import dev.piannoli.scorza.scanner.RomDirectoryWatcher
 import dev.piannoli.scorza.settings.ContentMode
 import dev.piannoli.scorza.settings.LibraryOrder
+import dev.piannoli.scorza.settings.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -45,6 +46,7 @@ class SystemListViewModel @Inject constructor(
     private val romDirectoryWatcher: RomDirectoryWatcher,
     private val scanScheduler: ScanScheduler,
     private val ordering: LibraryOrdering,
+    private val settings: SettingsRepository,
 ) {
     private val romDirectory: File get() = piannoliPaths.romDir
     fun canOrderContent(): Boolean = currentFghCollectionId != null &&
@@ -317,6 +319,8 @@ class SystemListViewModel @Inject constructor(
                         items.add(ListItem.CollectionsFolder)
                     }
                 }
+                val homeOrder = settings.homeCategoryOrder
+                items.sortBy { homeOrder.indexOf(browseId(it)) }
             }
 
             val reorderableItems = mutableListOf<ListItem>()
@@ -476,7 +480,13 @@ class SystemListViewModel @Inject constructor(
         if (!current.reorderMode) return
         val gameItems = current.items.filterIsInstance<ListItem.GameItem>()
         val collectionItems = current.items.filterIsInstance<ListItem.CollectionItem>()
-        if (gameItems.isNotEmpty()) {
+        if (current.items.getOrNull(current.selectedIndex)?.isHomeCategory() == true) {
+            val visible = current.items.filter { it.isHomeCategory() }.map { requireNotNull(browseId(it)) }
+            val reordered = visible.iterator()
+            settings.homeCategoryOrder = settings.homeCategoryOrder.map {
+                if (it in visible) reordered.next() else it
+            }
+        } else if (gameItems.isNotEmpty()) {
             val fghId = currentFghCollectionId
             if (fghId != null) {
                 ordering.rememberManual(ordering.key("collection", fghId.toString()), gameItems.map { it.item })
@@ -512,6 +522,7 @@ class SystemListViewModel @Inject constructor(
     }
 
     private fun canReorderSwap(a: ListItem, b: ListItem): Boolean {
+        if (a.isHomeCategory() || b.isHomeCategory()) return a.isHomeCategory() && b.isHomeCategory()
         if (a !is ListItem.GameItem || b !is ListItem.GameItem) return true
         val favoriteRoms = collectionsRepository.favoriteRomIds()
         val favoriteApps = collectionsRepository.favoriteAppIds()
@@ -529,7 +540,10 @@ class SystemListViewModel @Inject constructor(
         scan(showRecentlyPlayed, showFavorites, contentMode, fghCollectionId, toolsName, portsName)
     }
 
-    private fun ListItem.isReorderable(): Boolean = this is ListItem.PlatformItem || this is ListItem.ToolsFolder || this is ListItem.PortsFolder || this is ListItem.CollectionItem || this is ListItem.GameItem
+    private fun ListItem.isHomeCategory(): Boolean = this == ListItem.RecentlyPlayedItem ||
+        this == ListItem.FavoritesItem || this == ListItem.CollectionsFolder
+
+    private fun ListItem.isReorderable(): Boolean = isHomeCategory() || this is ListItem.PlatformItem || this is ListItem.ToolsFolder || this is ListItem.PortsFolder || this is ListItem.CollectionItem || this is ListItem.GameItem
 
     private fun ListItem.orderTag(): String? = when (this) {
         is ListItem.PlatformItem -> platform.tag

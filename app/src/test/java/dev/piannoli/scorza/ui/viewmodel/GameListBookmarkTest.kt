@@ -222,7 +222,7 @@ class GameListBookmarkTest {
             every { romDir } returns File("Roms")
         }
         val home = SystemListViewModel(roms, mockk(relaxed = true), apps, collections, recent,
-            mockk(relaxed = true), paths, mockk(relaxed = true), scans, ordering)
+            mockk(relaxed = true), paths, mockk(relaxed = true), scans, ordering, mockk(relaxed = true))
         suspend fun loadHome() = suspendCancellableCoroutine<Unit> { done ->
             home.scan(contentMode = ContentMode.FIVE_GAME_HANDHELD, fghCollectionId = 7,
                 scanDisk = false, onReady = { done.resume(Unit) })

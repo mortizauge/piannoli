@@ -10,7 +10,9 @@ import dev.piannoli.scorza.db.RomsRepository
 import dev.piannoli.scorza.db.ScanScheduler
 import dev.piannoli.scorza.di.PiannoliPathsProvider
 import dev.piannoli.scorza.model.Platform
+import dev.piannoli.scorza.model.CollectionType
 import dev.piannoli.scorza.scanner.RomDirectoryWatcher
+import dev.piannoli.scorza.settings.SettingsRepository
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -18,6 +20,9 @@ import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -49,9 +54,15 @@ class SystemListScanTargetsTest {
     private lateinit var romScanner: RomScanner
     private lateinit var romsRepository: RomsRepository
     private val appsRepository = mockk<AppsRepository>(relaxed = true)
+    private val collectionsRepository = mockk<CollectionsRepository>(relaxed = true)
+    private val recentlyPlayedRepository = mockk<RecentlyPlayedRepository>(relaxed = true)
+    private val settings = mockk<SettingsRepository>(relaxed = true)
+    private var homeOrder = listOf("recent", "favorites", "collections")
     private val created = mutableListOf<SystemListViewModel>()
 
     private fun viewModel(romDir: File, indexed: Map<String, Int>, filters: Map<String, Set<String>> = emptyMap()): SystemListViewModel {
+        every { settings.homeCategoryOrder } answers { homeOrder }
+        every { settings.homeCategoryOrder = any() } answers { homeOrder = firstArg() }
         romScanner = mockk(relaxed = true)
         romsRepository = mockk(relaxed = true)
         every { romsRepository.platformCounts() } returns indexed
@@ -77,14 +88,91 @@ class SystemListScanTargetsTest {
             romsRepository = romsRepository,
             romScanner = romScanner,
             appsRepository = appsRepository,
-            collectionsRepository = mockk(relaxed = true),
-            recentlyPlayedRepository = mockk(relaxed = true),
+            collectionsRepository = collectionsRepository,
+            recentlyPlayedRepository = recentlyPlayedRepository,
             platformConfig = platformConfig,
             piannoliPaths = paths,
             romDirectoryWatcher = mockk<RomDirectoryWatcher>(relaxed = true),
             scanScheduler = scheduler,
             ordering = mockk(relaxed = true),
+            settings = settings,
         ).also { created.add(it) }
+    }
+
+    private fun enableHomeCategories() {
+        every { recentlyPlayedRepository.hasAny() } returns true
+        every { collectionsRepository.favoritesId() } returns 1L
+        every { collectionsRepository.romIdsIn(1L) } returns listOf(17L)
+        every { collectionsRepository.topLevel() } returns listOf(
+            CollectionsRepository.CollectionRow(2, "Games", null, 0, CollectionType.STANDARD))
+    }
+
+    private fun load(vm: SystemListViewModel, showFavorites: Boolean = true) {
+        val ready = CountDownLatch(1)
+        vm.scan(scanDisk = false, showFavorites = showFavorites, onReady = { ready.countDown() })
+        assertTrue("load did not finish", ready.await(10, TimeUnit.SECONDS))
+    }
+
+    @Test fun `home categories reorder only within their group and retain order on refresh`() {
+        enableHomeCategories()
+        val vm = viewModel(tmp.newFolder("Roms"), indexed = mapOf("GB" to 1, "SNES" to 4))
+        load(vm)
+        vm.enterReorderMode()
+        assertTrue(vm.isReorderMode())
+        vm.reorderMoveUp()
+        assertEquals(0, vm.state.value.selectedIndex)
+        vm.reorderMoveDown()
+        assertEquals(1, vm.state.value.selectedIndex)
+        vm.reorderMoveDown()
+        assertEquals(2, vm.state.value.selectedIndex)
+        vm.reorderMoveDown()
+        assertEquals("categories must not cross into platforms", 2, vm.state.value.selectedIndex)
+        vm.confirmReorder()
+        assertEquals(listOf("favorites", "collections", "recent"), homeOrder)
+        verify(exactly = 0) { romsRepository.setPlatformOrder(any()) }
+        load(vm)
+        assertEquals(listOf(
+            SystemListViewModel.ListItem.FavoritesItem,
+            SystemListViewModel.ListItem.CollectionsFolder,
+            SystemListViewModel.ListItem.RecentlyPlayedItem,
+        ), vm.state.value.items.take(3))
+
+        vm.setSelectedIndex(3)
+        vm.enterReorderMode()
+        vm.reorderMoveUp()
+        assertEquals("platforms must not cross into categories", 3, vm.state.value.selectedIndex)
+        vm.reorderMoveDown()
+        assertEquals(4, vm.state.value.selectedIndex)
+    }
+
+    @Test fun `hidden home categories keep their saved positions while visible categories reorder`() {
+        enableHomeCategories()
+        homeOrder = listOf("favorites", "collections", "recent")
+        val vm = viewModel(tmp.newFolder("Roms"), indexed = mapOf("GB" to 1))
+        load(vm, showFavorites = false)
+        vm.enterReorderMode()
+        vm.reorderMoveDown()
+        vm.confirmReorder()
+        assertEquals(listOf("favorites", "recent", "collections"), homeOrder)
+        load(vm)
+        assertEquals(listOf(
+            SystemListViewModel.ListItem.FavoritesItem,
+            SystemListViewModel.ListItem.RecentlyPlayedItem,
+            SystemListViewModel.ListItem.CollectionsFolder,
+        ), vm.state.value.items.take(3))
+    }
+
+    @Test fun `cancelling home category reorder restores the saved order`() {
+        enableHomeCategories()
+        val vm = viewModel(tmp.newFolder("Roms"), indexed = mapOf("GB" to 1))
+        load(vm)
+        vm.enterReorderMode()
+        vm.reorderMoveDown()
+        vm.cancelReorder()
+        runBlocking { withTimeout(10_000) { vm.state.first { !it.reorderMode } } }
+        assertEquals(listOf("recent", "favorites", "collections"), homeOrder)
+        assertEquals(SystemListViewModel.ListItem.RecentlyPlayedItem, vm.state.value.items.first())
+        verify(exactly = 0) { settings.homeCategoryOrder = any() }
     }
 
     /** The tags handed to the scanner, in call order. */

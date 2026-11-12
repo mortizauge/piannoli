@@ -157,6 +157,28 @@ class SettingsRepositoryTest {
 
     @Test
     @Config(sdk = [28])
+    fun `home category order persists without changing visibility settings`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        Shadows.shadowOf(context as android.app.Application)
+            .grantPermissions(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+        writeSettingsJson(tmp.root, "{}")
+        val settings = newRepo()
+        try {
+            settings.sdCardRoot = tmp.root.absolutePath
+            settings.setupCompleted = true
+            settings.showFavorites = false
+            settings.homeCategoryOrder = listOf("collections", "favorites", "recent")
+        } finally { settings.shutdown() }
+        val reopened = newRepo()
+        try {
+            reopened.sdCardRoot = tmp.root.absolutePath
+            assertEquals(listOf("collections", "favorites", "recent"), reopened.homeCategoryOrder)
+            assertFalse(reopened.showFavorites)
+        } finally { reopened.shutdown() }
+    }
+
+    @Test
+    @Config(sdk = [28])
     fun `fresh RetroArch package selection uses installed packages and persists`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         Shadows.shadowOf(context as android.app.Application).grantPermissions(android.Manifest.permission.READ_EXTERNAL_STORAGE)
