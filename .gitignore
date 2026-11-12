@@ -26,3 +26,7 @@ piannoli-igm/build/
 
 # Bytecode from the scripts/ test suite.
 __pycache__/
+
+# Local device performance monitoring helpers.
+scripts/monitor-device.cmd
+scripts/monitor-device.ps1
