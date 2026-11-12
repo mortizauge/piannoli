@@ -113,6 +113,14 @@ class BootInitializerReturnTest {
         assertNull(session.pending())
     }
 
+    @Test fun `preparing progress advances to completion`() = runBlocking {
+        val reported = mutableListOf<Float>()
+        assertEquals(BootResult.Success, initializer.run { _, progress, _ -> reported += progress })
+        assertEquals(0f, reported.first())
+        assertEquals(1f, reported.last())
+        assertEquals(reported.sorted(), reported)
+    }
+
     @Test fun `ordinary cold startup still honors automatic library scanning`() = runBlocking {
         assertEquals(BootResult.Success, initializer.run { _, _, _ -> })
         verify(exactly = 1) { actions.rescanSystemList(scanDisk = true, onProgress = any(), onComplete = any()) }

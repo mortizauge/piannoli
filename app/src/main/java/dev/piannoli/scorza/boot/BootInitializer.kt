@@ -73,15 +73,23 @@ class BootInitializer @Inject constructor(
         val romDir = piannoliPaths.romDir
         val warmStart = processSession.isInitialized(root.absolutePath, romDir.absolutePath)
         val importPhase = if (hasLegacyData(root)) BootPhase.IMPORT else BootPhase.INITIAL_SCAN
-        onPhase(BootPhase.LIBRARY_REFRESH, 0f, context.getString(R.string.boot_preparing))
+        val preparingLabel = context.getString(R.string.boot_preparing)
+        var preparedSteps = 0
+        fun prepared() {
+            preparedSteps = (preparedSteps + 1).coerceAtMost(PREPARING_STEPS)
+            onPhase(BootPhase.LIBRARY_REFRESH, preparedSteps.toFloat() / PREPARING_STEPS, preparingLabel)
+        }
+        onPhase(BootPhase.LIBRARY_REFRESH, 0f, preparingLabel)
 
         ScanLog.init(root.absolutePath)
         dev.piannoli.scorza.util.InputLog.init(root.absolutePath)
         StorageLog.init(root.absolutePath)
         dev.piannoli.scorza.util.RommLog.init(root.absolutePath)
         dev.piannoli.scorza.util.ErrorLog.init(root.absolutePath)
+        prepared()
         setupCoordinator.logStorageDiagnostics()
         platformConfig.load()
+        prepared()
         val bookmark = if (warmStart) browseSession.pending() else null
         if (!warmStart) browseSession.clear()
         val scanDisk = !warmStart && settings.scanLibraryAutomatically
@@ -95,6 +103,7 @@ class BootInitializer @Inject constructor(
             }
             ioScope.launch { dev.piannoli.scorza.util.DirectoryLayout.ensure(root, romDir, context.assets, platformConfig) }
         }
+        prepared()
 
         val importer = Importer(
             context = context,
@@ -115,6 +124,7 @@ class BootInitializer @Inject constructor(
             ScanLog.write("ERROR import returned Failure: ${result.cause.message}")
             return BootResult.Failure(result.cause.message ?: context.getString(R.string.boot_import_failed))
         }
+        prepared()
 
         if (!warmStart) {
             ioScope.launch {
@@ -139,6 +149,7 @@ class BootInitializer @Inject constructor(
             nav.screenStack.clear()
             nav.screenStack.add(LauncherScreen.SystemList)
         }
+        prepared()
 
         return suspendCancellableCoroutine { cont ->
             launcherActions.rescanSystemList(
@@ -148,8 +159,10 @@ class BootInitializer @Inject constructor(
                 },
                 onComplete = complete@ {
                     if (!cont.isActive) return@complete
+                    prepared()
                     fun ready() {
                         if (!cont.isActive) return
+                        prepared()
                         processSession.initialized(root.absolutePath, romDir.absolutePath)
                         cont.resume(BootResult.Success)
                     }
@@ -173,5 +186,9 @@ class BootInitializer @Inject constructor(
             p.portsDir.exists() ||
             p.platformCacheFile.exists() ||
             p.gameCacheFile.exists()
+    }
+
+    private companion object {
+        const val PREPARING_STEPS = 7
     }
 }
