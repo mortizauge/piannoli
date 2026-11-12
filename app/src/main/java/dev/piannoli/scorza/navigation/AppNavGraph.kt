@@ -508,6 +508,9 @@ fun AppNavGraph(
 ) {
     val dialog by dialogState.collectAsStateWhileActive()
     val appSettings by settingsViewModel.appSettings.collectAsStateWhileActive()
+    val animationsEnabled = dev.piannoli.ui.components.animationsEnabledWhenActive(
+        appSettings.animations.enabled(inputRouter?.touchInputActive == true),
+    )
 
     val pillScale = pillScaleFor(appSettings.textSize.sp)
     val listFontSize = appSettings.textSize.sp.sp
@@ -543,6 +546,10 @@ fun AppNavGraph(
     )
     CompositionLocalProvider(
         LocalPiannoliColors provides piannoliColors,
+        dev.piannoli.ui.components.LocalAnimationsEnabled provides animationsEnabled,
+        dev.piannoli.ui.components.LocalAnimationMode provides appSettings.animations,
+        androidx.compose.foundation.LocalIndication provides if (animationsEnabled)
+            androidx.compose.foundation.LocalIndication.current else dev.piannoli.ui.components.NoAnimationIndication,
         dev.piannoli.ui.components.LocalTouchInput provides inputRouter?.let {
             remember(it, labels) { dev.piannoli.scorza.input.LauncherTouchInput(it, labels) }
         },

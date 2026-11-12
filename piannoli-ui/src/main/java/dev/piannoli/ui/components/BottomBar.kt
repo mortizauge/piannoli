@@ -129,7 +129,13 @@ fun LegendPill(button: String, label: String, modifier: Modifier = Modifier, onC
     LegendPill(
         label = label,
         modifier = if (action != null) {
-            modifier.focusProperties { canFocus = false }.clickable(onClick = action)
+            modifier.focusProperties { canFocus = false }.clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = if (LocalAnimationsEnabled.current) androidx.compose.foundation.LocalIndication.current else null,
+            ) {
+                touch?.beginNavigation()
+                action()
+            }
         } else modifier,
     ) { GlyphPill(button) }
 }

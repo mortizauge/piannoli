@@ -186,6 +186,7 @@ private fun TxtContent(
     var text by remember { mutableStateOf("") }
     val scrollState = remember(initialScrollY) { ScrollState(initialScrollY) }
     var viewportHeight by remember { mutableStateOf(0) }
+    val animationsEnabled = dev.piannoli.ui.components.LocalAnimationsEnabled.current
 
     LaunchedEffect(scrollDir) {
         while (scrollDir != 0) {
@@ -195,9 +196,8 @@ private fun TxtContent(
     }
     LaunchedEffect(pageJump) {
         if (pageJump > 0 && viewportHeight > 0) {
-            scrollState.animateScrollTo(
-                (scrollState.value + pageJumpDir * viewportHeight).coerceIn(0, scrollState.maxValue)
-            )
+            val target = (scrollState.value + pageJumpDir * viewportHeight).coerceIn(0, scrollState.maxValue)
+            if (animationsEnabled) scrollState.animateScrollTo(target) else scrollState.scrollTo(target)
         }
     }
     LaunchedEffect(Unit) {
@@ -237,6 +237,7 @@ private fun ImageContent(
     val scrollState = remember(initialScrollY) { ScrollState(initialScrollY) }
     val hScrollState = remember(initialScrollX) { ScrollState(initialScrollX) }
     var viewportHeight by remember { mutableStateOf(0) }
+    val animationsEnabled = dev.piannoli.ui.components.LocalAnimationsEnabled.current
 
     LaunchedEffect(scrollDir) {
         while (scrollDir != 0) {
@@ -252,9 +253,8 @@ private fun ImageContent(
     }
     LaunchedEffect(pageJump) {
         if (pageJump > 0 && viewportHeight > 0) {
-            scrollState.animateScrollTo(
-                (scrollState.value + pageJumpDir * viewportHeight).coerceIn(0, scrollState.maxValue)
-            )
+            val target = (scrollState.value + pageJumpDir * viewportHeight).coerceIn(0, scrollState.maxValue)
+            if (animationsEnabled) scrollState.animateScrollTo(target) else scrollState.scrollTo(target)
         }
     }
     LaunchedEffect(Unit) {

@@ -1,4 +1,7 @@
 <resources>
+    <string name="setting_animations">Animations</string>
+    <string name="animations_full">Full</string>
+    <string name="animations_touch_input">Touch Input</string>
     <string name="order_last_added">Last Added</string>
     <string name="order_platform">Platform</string>
     <string name="order_by">Order By</string>

@@ -5,6 +5,7 @@ import androidx.compose.foundation.gestures.FlingBehavior
 import androidx.compose.foundation.gestures.ScrollScope
 import androidx.compose.foundation.gestures.ScrollableDefaults
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.interaction.DragInteraction
@@ -44,6 +45,7 @@ import kotlin.math.abs
 
 interface TouchInput {
     val controllerInput: Flow<Unit> get() = emptyFlow()
+    fun beginNavigation() {}
     fun select(index: Int, currentIndex: Int)
     fun activate(cycle: Boolean)
     fun contextMenu()
@@ -59,11 +61,38 @@ internal class TouchRow {
     var cycle = false
     var selectable = true
     var viewportOffset by mutableIntStateOf(0)
-    var highlightBoundsProvider: (() -> Rect?)? = null
+    // Observable so row text recomposes and redraws when the viewport pill is detached or restored.
+    var highlightBoundsProvider by mutableStateOf<(() -> Rect?)?>(null)
     val highlightBounds: Rect? get() = highlightBoundsProvider?.invoke()
     var coordinates: LayoutCoordinates? = null
     var pillCoordinates: LayoutCoordinates? = null
     var pillBounds by mutableStateOf<Rect?>(null)
+    private var foregroundMasks: MutableSet<ForegroundMask>? = null
+
+    fun registerForegroundMask(mask: ForegroundMask) {
+        val masks = foregroundMasks ?: mutableSetOf<ForegroundMask>().also { foregroundMasks = it }
+        masks.add(mask)
+    }
+
+    fun unregisterForegroundMask(mask: ForegroundMask) {
+        foregroundMasks?.let {
+            it.remove(mask)
+            if (it.isEmpty()) foregroundMasks = null
+        }
+    }
+
+    /** Drops cached drawing objects only. Geometry is kept because layout callbacks do not fire
+     *  again when nothing moved, so clearing it here would leave text unmasked on return. */
+    fun clearAnimationResources() {
+        foregroundMasks?.forEach { it.clear() }
+    }
+
+    fun detach() {
+        clearAnimationResources()
+        coordinates = null
+        pillCoordinates = null
+        pillBounds = null
+    }
 
     fun updatePillBounds() {
         val container = coordinates ?: return
@@ -87,6 +116,7 @@ internal class TouchSurface {
 internal fun Modifier.touchScrolling(surface: TouchSurface): Modifier {
     val touch = LocalTouchInput.current
     val uiActive = LocalUiActive.current
+    val animationsEnabled = androidx.compose.runtime.rememberUpdatedState(LocalAnimationsEnabled.current)
     val context = LocalContext.current
     val defaultFling = ScrollableDefaults.flingBehavior()
     val maxVelocity = android.view.ViewConfiguration.get(context).scaledMaximumFlingVelocity * 0.85f
@@ -112,6 +142,7 @@ internal fun Modifier.touchScrolling(surface: TouchSurface): Modifier {
                     surface.interactions.interactions.collect {
                         when (it) {
                             is DragInteraction.Start -> {
+                                touch?.beginNavigation()
                                 settle?.cancel()
                                 surface.touchNavigation = true
                                 surface.scrolling = true
@@ -131,7 +162,10 @@ internal fun Modifier.touchScrolling(surface: TouchSurface): Modifier {
                                                 abs(it.offset - layout.viewportStartOffset)
                                             }
                                             val distance = nearest?.let { it.offset - layout.viewportStartOffset } ?: 0
-                                            if (distance != 0) list.animateScrollBy(distance.toFloat(), tween(120))
+                                            if (distance != 0) {
+                                                if (animationsEnabled.value) list.animateScrollBy(distance.toFloat(), tween(120))
+                                                else list.scrollBy(distance.toFloat())
+                                            }
                                         }
                                     }
                                     surface.scrolling = false
@@ -186,6 +220,7 @@ fun Modifier.activateSelectedItemOnTap(): Modifier = composed {
         indication = null,
         enabled = surface?.selectedRow?.selectable != false,
     ) {
+        touch.beginNavigation()
         surface?.touchNavigation = true
         surface?.scrolling = false
         touch.activate(surface?.selectedRow?.cycle == true)

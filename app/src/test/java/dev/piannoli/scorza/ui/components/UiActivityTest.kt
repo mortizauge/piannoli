@@ -16,12 +16,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.dp
 import dev.piannoli.ui.components.LocalUiActive
+import dev.piannoli.ui.components.LocalAnimationsEnabled
 import dev.piannoli.ui.components.MarqueeEffect
 import dev.piannoli.ui.components.StatusBar
 import dev.piannoli.ui.components.collectAsStateWhileActive
@@ -40,6 +42,36 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class UiActivityTest {
     @get:Rule val compose = createAndroidComposeRule<androidx.activity.ComponentActivity>()
+
+    @Test fun `marquee subscribes only while selected overflowing and animations are enabled`() {
+        val activity = MutableStateFlow(true)
+        val selected = mutableStateOf(true)
+        val enabled = mutableStateOf(true)
+        val overflowing = mutableStateOf(false)
+        compose.setContent {
+            CompositionLocalProvider(LocalUiActive provides activity, LocalAnimationsEnabled provides enabled.value) {
+                val scroll = rememberScrollState()
+                Box(Modifier.size(80.dp, 20.dp).horizontalScroll(scroll)) {
+                    Spacer(Modifier.width(if (overflowing.value) 500.dp else 20.dp))
+                }
+                MarqueeEffect(scroll, active = selected.value)
+            }
+        }
+        compose.waitForIdle()
+        assertEquals(0, activity.subscriptionCount.value)
+        compose.runOnIdle { overflowing.value = true }
+        compose.waitForIdle()
+        assertEquals(1, activity.subscriptionCount.value)
+        compose.runOnIdle { selected.value = false }
+        compose.waitForIdle()
+        assertEquals(0, activity.subscriptionCount.value)
+        compose.runOnIdle { selected.value = true }
+        compose.waitForIdle()
+        assertEquals(1, activity.subscriptionCount.value)
+        compose.runOnIdle { enabled.value = false }
+        compose.waitForIdle()
+        assertEquals(0, activity.subscriptionCount.value)
+    }
 
     @Test fun `background presentation unsubscribes and catches up without losing composition`() {
         val active = MutableStateFlow(true)

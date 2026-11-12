@@ -398,6 +398,7 @@ class InputDispatcher @Inject constructor(
         onSelectUpOverride: (() -> Unit)? = null,
         screenResolver: (() -> dev.piannoli.scorza.input.ScreenInputHandler)? = null,
         onMenuSound: (MenuSound) -> Unit = {},
+        onControllerInput: () -> Unit = {},
         remap: (CanonicalButton, DeviceMapping) -> CanonicalButton = { button, _ -> button },
         navigationContext: () -> Any? = { null },
     ) {
@@ -414,11 +415,13 @@ class InputDispatcher @Inject constructor(
         menuKeyAction = null
         fun screen(): dev.piannoli.scorza.input.ScreenInputHandler = activeScreen()
         fun sounding(sound: MenuSound, action: () -> Unit): () -> Unit = {
+            onControllerInput()
             cancelKeyboardDeleteHold()
             action()
             onMenuSound(sound)
         }
         fun navigating(button: CanonicalButton, action: () -> Unit): () -> Unit = {
+            onControllerInput()
             val feedback = navigationRepeat.dispatch(
                 button,
                 { NavigationRepeatGate.Context(screen().navigationContext, dialogHandler?.navigationContext, navigationContext()) },
@@ -439,7 +442,10 @@ class InputDispatcher @Inject constructor(
         onConfirm = sounding(MenuSound.CONFIRM) { if (dialogHandler?.onConfirm() != true) screen().onConfirm() }
         onBack = sounding(MenuSound.BACK) { if (dialogHandler?.onBack() != true) screen().onBack() }
         onStart = sounding(MenuSound.CONFIRM) { if (dialogHandler?.onStart() != true) screen().onStart() }
-        onSelect = { if (dialogHandler?.onSelect() != true) screen().onSelect() }
+        onSelect = {
+            onControllerInput()
+            if (dialogHandler?.onSelect() != true) screen().onSelect()
+        }
         onSelectUp = onSelectUpOverride ?: {
             dialogHandler?.cancelSelectHold()
             if (dialogHandler?.onSelectUp() != true) screen().onSelectUp()
@@ -450,10 +456,22 @@ class InputDispatcher @Inject constructor(
         onWest = sounding(MenuSound.BACK) { if (dialogHandler?.onWest() != true) screen().onWest() }
         onL1 = navigating(CanonicalButton.BTN_L) { if (dialogHandler?.onL1() != true) screen().onL1() }
         onR1 = navigating(CanonicalButton.BTN_R) { if (dialogHandler?.onR1() != true) screen().onR1() }
-        onL2 = { if (dialogHandler?.onL2() != true) screen().onL2() }
-        onR2 = { if (dialogHandler?.onR2() != true) screen().onR2() }
-        onL3 = { if (dialogHandler?.onL3() != true) screen().onL3() }
-        onR3 = { if (dialogHandler?.onR3() != true) screen().onR3() }
+        onL2 = {
+            onControllerInput()
+            if (dialogHandler?.onL2() != true) screen().onL2()
+        }
+        onR2 = {
+            onControllerInput()
+            if (dialogHandler?.onR2() != true) screen().onR2()
+        }
+        onL3 = {
+            onControllerInput()
+            if (dialogHandler?.onL3() != true) screen().onL3()
+        }
+        onR3 = {
+            onControllerInput()
+            if (dialogHandler?.onR3() != true) screen().onR3()
+        }
         onMenu = sounding(MenuSound.CONFIRM) { if (dialogHandler?.onMenu() != true) screen().onMenu() }
     }
 

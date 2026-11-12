@@ -128,6 +128,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     data class AppSettings(
+        val animations: dev.piannoli.ui.components.AnimationMode = dev.piannoli.ui.components.AnimationMode.FULL,
         val use24h: Boolean = false,
         val backgroundImagePath: String? = null,
         val backgroundTint: Int = 0,
@@ -183,6 +184,7 @@ class SettingsViewModel @Inject constructor(
     val appSettings: StateFlow<AppSettings> = _appSettings
 
     private fun readAppSettings() = AppSettings(
+        animations = settings.animations,
         use24h = settings.timeFormat == TimeFormat.TWENTY_FOUR_HOUR,
         backgroundImagePath = settings.backgroundImagePath,
         backgroundTint = settings.backgroundTint,
@@ -248,6 +250,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     private data class SettingsSnapshot(
+        val animations: dev.piannoli.ui.components.AnimationMode,
         val keyboardType: KeyboardType,
         val piannoliBindings: Map<dev.piannoli.ui.MenuAction, dev.piannoli.ui.MenuAction>,
         val scrapeFailBehavior: ScrapeFailBehavior,
@@ -514,6 +517,10 @@ class SettingsViewModel @Inject constructor(
                 settings.scrapeFailBehavior = entries[Math.floorMod(index + direction, entries.size)]
             }
             "navigation_sound" -> settings.navigationSound = !settings.navigationSound
+            "animations" -> {
+                val entries = dev.piannoli.ui.components.AnimationMode.entries
+                settings.animations = entries[Math.floorMod(entries.indexOf(settings.animations) + direction, entries.size)]
+            }
             "haptic_feedback" -> settings.hapticFeedback = !settings.hapticFeedback
             "controller_notifications" -> settings.controllerNotifications = !settings.controllerNotifications
             "text_size" -> {
@@ -780,6 +787,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     private fun captureSettings() = SettingsSnapshot(
+        animations = settings.animations,
         keyboardType = settings.keyboardType,
         piannoliBindings = settings.piannoliBindings,
         scrapeFailBehavior = settings.scrapeFailBehavior,
@@ -834,6 +842,7 @@ class SettingsViewModel @Inject constructor(
     )
 
     private fun restoreSettings(snap: SettingsSnapshot) {
+        settings.animations = snap.animations
         settings.keyboardType = snap.keyboardType
         settings.piannoliBindings = snap.piannoliBindings
         settings.scrapeFailBehavior = snap.scrapeFailBehavior
@@ -912,6 +921,11 @@ class SettingsViewModel @Inject constructor(
             }
         }
         "display" -> buildList {
+            add(SettingsItem("animations", R.string.setting_animations, valueRes = when (settings.animations) {
+                dev.piannoli.ui.components.AnimationMode.FULL -> R.string.animations_full
+                dev.piannoli.ui.components.AnimationMode.TOUCH_INPUT -> R.string.animations_touch_input
+                dev.piannoli.ui.components.AnimationMode.OFF -> R.string.value_off
+            }))
             add(SettingsItem("artwork", R.string.settings_artwork, isEditable = true))
             add(SettingsItem("colors", R.string.setting_colors, isEditable = true))
             add(SettingsItem("bg_image", R.string.setting_bg_image, valueText = settings.backgroundImagePath?.let { java.io.File(it).name }, valueRes = if (settings.backgroundImagePath == null) R.string.value_none else null))

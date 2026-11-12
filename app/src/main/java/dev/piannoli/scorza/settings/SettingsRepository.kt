@@ -199,6 +199,10 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         get() = TextSize.fromString(jsonRead { if (has(KEY_TEXT_SIZE)) optString(KEY_TEXT_SIZE) else null })
         set(value) = jsonWrite { put(KEY_TEXT_SIZE, value.name) }
 
+    var animations: dev.piannoli.ui.components.AnimationMode
+        get() = dev.piannoli.ui.components.AnimationMode.fromString(jsonRead { optString(KEY_ANIMATIONS) })
+        set(value) = jsonWrite { put(KEY_ANIMATIONS, value.name) }
+
     var font: String
         get() = jsonRead { optString(KEY_FONT, "default") }
         set(value) = jsonWrite { put(KEY_FONT, value) }
@@ -627,6 +631,7 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         private const val KEY_ROM_DIRECTORY = "rom_directory"
         private const val KEY_RA_PACKAGE = "ra_package"
         private const val KEY_TEXT_SIZE = "text_size"
+        private const val KEY_ANIMATIONS = "animations"
         private const val KEY_FONT = "font"
         private const val KEY_LANGUAGE = "language"
         private const val KEY_TITLE = "title"

@@ -26,7 +26,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.LocalIndication
@@ -53,7 +52,6 @@ import dev.piannoli.ui.theme.LocalScaleFactor
 import dev.piannoli.ui.theme.Radius
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.first
 
 val screenPadding = 20.dp
 val pillInternalH = 14.dp
@@ -118,12 +116,18 @@ const val MarqueeInitialDelayMs = 800L
 @Composable
 fun MarqueeEffect(scrollState: ScrollState, active: Boolean, key: Any = active, initialDelayMs: Long = MarqueeInitialDelayMs) {
     val uiActive = LocalUiActive.current
-    LaunchedEffect(key, active, uiActive) {
+    val animationsEnabled = LocalAnimationsEnabled.current
+    val overflow = scrollState.maxValue in 1 until Int.MAX_VALUE
+    if (!active || !animationsEnabled || !overflow) {
+        if (scrollState.value != 0 && uiActive.value) {
+            LaunchedEffect(key, scrollState) { scrollState.scrollTo(0) }
+        }
+        return
+    }
+    LaunchedEffect(key, scrollState, uiActive) {
         uiActive.collectLatest { focused ->
             if (!focused) return@collectLatest
             if (scrollState.value != 0) scrollState.scrollTo(0)
-            if (!active) return@collectLatest
-            snapshotFlow { scrollState.maxValue }.first { it in 1 until Int.MAX_VALUE }
             delay(initialDelayMs)
             while (true) {
                 val max = scrollState.maxValue
@@ -150,14 +154,16 @@ fun PillRow(
         Modifier.height(pillItemHeight(lineHeight, verticalPadding))
     } else Modifier
     val row = LocalTouchRow.current
+    val animationsEnabled = LocalAnimationsEnabled.current
+    val viewportHighlight = row?.highlightBoundsProvider != null
     Box(
         modifier = modifier
             .then(heightMod)
             .padding(vertical = pillInset())
-            .then(if (isSelected || row != null) Modifier.clip(Radius.Pill) else Modifier)
-            .then(if (isSelected && row == null) Modifier.background(colors.highlight) else Modifier)
-            .then(if (row != null) Modifier.indication(row.pressInteractions, LocalIndication.current) else Modifier)
-            .then(if (row != null) Modifier.onGloballyPositioned {
+            .then(if (isSelected || viewportHighlight) Modifier.clip(Radius.Pill) else Modifier)
+            .then(if (isSelected && !viewportHighlight) Modifier.background(colors.highlight) else Modifier)
+            .then(if (row != null && animationsEnabled) Modifier.indication(row.pressInteractions, LocalIndication.current) else Modifier)
+            .then(if (row != null && viewportHighlight) Modifier.onGloballyPositioned {
                 row.pillCoordinates = it
                 row.updatePillBounds()
             } else Modifier)

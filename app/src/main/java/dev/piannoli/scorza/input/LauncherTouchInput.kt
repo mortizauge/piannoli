@@ -10,6 +10,7 @@ class LauncherTouchInput(
     private val buttons: ButtonStyle,
 ) : TouchInput {
     override val controllerInput get() = router.controllerInput
+    override fun beginNavigation() = router.beginTouchNavigation()
     override fun select(index: Int, currentIndex: Int) {
         router.touchSelect(index, currentIndex)
     }

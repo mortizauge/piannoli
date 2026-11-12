@@ -88,7 +88,6 @@ class ConflictsApplyingStateTest {
             rommDownloader = downloader,
             rommBrowseViewModel = mockk(relaxed = true),
             rommArtFetcher = mockk(relaxed = true),
-            raPreloadController = mockk(relaxed = true),
             deviceRegistrar = mockk(relaxed = true),
             saveSyncService = mockk(relaxed = true),
             slotManager = mockk(relaxed = true),
@@ -1059,7 +1058,7 @@ class ConflictsApplyingStateTest {
             launcherActions = launcherActions,
             screenInputRegistry = mockk(), context = ApplicationProvider.getApplicationContext(),
             settings = mockk(), coreInstaller = mockk(), rommBrowseViewModel = mockk(),
-            rommDownloader = mockk(relaxed = true), osdController = mockk(), raPreloadController = mockk(),
+            rommDownloader = mockk(relaxed = true), osdController = mockk(),
             ioScope = CoroutineScope(dispatcher), menuSounds = menuSounds, menuHaptics = menuHaptics,
         )
     }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.FlingBehavior
 import androidx.compose.foundation.gestures.ScrollScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.Indication
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.IndicationNodeFactory
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.interaction.InteractionSource
@@ -17,16 +18,23 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyListLayoutInfo
+import androidx.compose.foundation.lazy.LazyListPrefetchScope
+import androidx.compose.foundation.lazy.LazyListPrefetchStrategy
+import androidx.compose.foundation.lazy.layout.NestedPrefetchScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.node.DrawModifierNode
 import androidx.compose.ui.node.invalidateDraw
 import androidx.compose.ui.platform.testTag
@@ -48,6 +56,8 @@ import dev.piannoli.ui.components.LegendPill
 import dev.piannoli.ui.components.ConfirmOverlay
 import dev.piannoli.ui.components.List
 import dev.piannoli.ui.components.LocalTouchInput
+import dev.piannoli.ui.components.LocalAnimationsEnabled
+import dev.piannoli.ui.components.AnimationMode
 import dev.piannoli.ui.components.LocalUiActive
 import dev.piannoli.ui.components.PillRowKeyValue
 import dev.piannoli.ui.components.PillRowText
@@ -85,12 +95,296 @@ class TouchNavigationTest {
     private lateinit var listState: LazyListState
     private val actions = mutableListOf<String>()
     private val controllerInputEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    private val animationMode = mutableStateOf(AnimationMode.FULL)
+    private val touchInputActive = mutableStateOf(false)
+    private val renderedSelections = mutableMapOf<String, Boolean>()
     private val touch = object : TouchInput {
         override val controllerInput = controllerInputEvents
+        override fun beginNavigation() { touchInputActive.value = true }
         override fun select(index: Int, currentIndex: Int) { selected.intValue = index }
         override fun activate(cycle: Boolean) { actions += "${if (cycle) "cycle" else "open"}:${selected.intValue}" }
         override fun contextMenu() { actions += "context:${selected.intValue}" }
         override fun hint(glyph: String) { actions += glyph }
+    }
+
+    @OptIn(ExperimentalFoundationApi::class)
+    private fun renderAnimationModes(
+        activity: StateFlow<Boolean>? = null,
+        initialIndex: Int = 0,
+        disablePrefetch: Boolean = false,
+    ) {
+        compose.setContent {
+            LaunchedEffect(Unit) { controllerInputEvents.collect { touchInputActive.value = false } }
+            val animationsEnabled = animationMode.value.enabled(touchInputActive.value)
+            CompositionLocalProvider(
+                LocalTouchInput provides touch,
+                LocalUiActive provides (activity ?: LocalUiActive.current),
+                LocalAnimationsEnabled provides animationsEnabled,
+                dev.piannoli.ui.components.LocalAnimationMode provides animationMode.value,
+                LocalIndication provides if (animationsEnabled) LocalIndication.current
+                    else dev.piannoli.ui.components.NoAnimationIndication,
+                LocalPiannoliColors provides PiannoliColors(text = Color.Red, highlightText = Color.Blue),
+            ) {
+                ScreenBackground(modifier = Modifier.testTag("surface")) {
+                    // Native Robolectric prefetch can spin on vsync when the test clock is paused.
+                    listState = if (disablePrefetch) rememberLazyListState(
+                        initialFirstVisibleItemIndex = initialIndex,
+                        prefetchStrategy = androidx.compose.runtime.remember {
+                            object : LazyListPrefetchStrategy {
+                                override fun LazyListPrefetchScope.onScroll(delta: Float, layoutInfo: LazyListLayoutInfo) {}
+                                override fun LazyListPrefetchScope.onVisibleItemsUpdated(layoutInfo: LazyListLayoutInfo) {}
+                                override fun NestedPrefetchScope.onNestedPrefetch(firstVisibleItemIndex: Int) {}
+                            }
+                        },
+                    ) else rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
+                    List(
+                        items = (0 until 100).map { "Game $it" },
+                        selectedIndex = selected.intValue,
+                        listState = listState,
+                        scrollTarget = initialIndex,
+                        modifier = Modifier.width(220.dp).height(200.dp).testTag("modeList"),
+                    ) { _, item, isSelected ->
+                        androidx.compose.runtime.SideEffect { renderedSelections[item] = isSelected }
+                        PillRowText(item, isSelected, 16.sp, 24.sp, 8.dp)
+                    }
+                }
+            }
+        }
+        compose.waitForIdle()
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `backgrounding removes animation rendering and restores it without losing selection`() {
+        val activity = MutableStateFlow(true)
+        renderAnimationModes(activity)
+        assertEquals("idle highlights must not retain a separate animation observer", 3, activity.subscriptionCount.value)
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithText("Game 1").performTouchInput { click() }
+        compose.mainClock.advanceTimeBy(32)
+        compose.runOnIdle { activity.value = false }
+        compose.mainClock.advanceTimeBy(32)
+        compose.waitForIdle()
+        compose.onNodeWithTag("listSelectionHighlight").assertDoesNotExist()
+        assertEquals(1, selected.intValue)
+        compose.runOnIdle { activity.value = true }
+        compose.mainClock.advanceTimeBy(32)
+        compose.waitForIdle()
+        compose.onNodeWithTag("listSelectionHighlight").assertExists()
+        assertTrue(textPixels("Game 1").blue > 0)
+        compose.mainClock.advanceTimeBy(200)
+        compose.waitForIdle()
+        assertEquals("completed transitions must release their activity observer", 3, activity.subscriptionCount.value)
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test fun `Off mode keeps touch selection and settling without a weighted animated pill`() {
+        animationMode.value = AnimationMode.OFF
+        renderAnimationModes()
+        compose.onNodeWithTag("surface").performTouchInput {
+            swipe(
+                start = Offset(width * 0.9f, height * 0.7f),
+                end = Offset(width * 0.9f, height * 0.3f),
+                durationMillis = 250,
+            )
+        }
+        compose.waitForIdle()
+        assertTrue(listState.firstVisibleItemIndex > 0)
+        assertTrue(selected.intValue >= listState.firstVisibleItemIndex)
+        assertEquals(0, listState.firstVisibleItemScrollOffset)
+        compose.onNodeWithTag("listSelectionHighlight").assertDoesNotExist()
+        assertTrue(actions.isEmpty())
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `Off touch scrolling locks the static pill at either edge until scrolling ends`() {
+        assertTouchEdgesStayPinned(AnimationMode.OFF, "listStaticSelectionHighlight")
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `Touch Input scrolling keeps the animated pill locked at either edge as the fling slows`() {
+        assertTouchEdgesStayPinned(AnimationMode.TOUCH_INPUT, "listSelectionHighlight")
+    }
+
+    private fun assertTouchEdgesStayPinned(mode: AnimationMode, tag: String) {
+        animationMode.value = mode
+        selected.intValue = 42
+        renderAnimationModes(initialIndex = 40, disablePrefetch = true)
+        compose.mainClock.autoAdvance = false
+        val viewport = compose.onNodeWithTag("modeList").fetchSemanticsNode().boundsInRoot
+        val highlightColor = PiannoliColors().highlight.toArgb()
+        for (down in listOf(true, false)) {
+            compose.runOnIdle { selected.intValue = listState.firstVisibleItemIndex + 2 }
+            compose.mainClock.advanceTimeBy(250)
+            compose.waitForIdle()
+            compose.onNodeWithTag("surface").performTouchInput {
+                swipe(
+                    start = Offset(width * 0.9f, height * if (down) 0.65f else 0.2f),
+                    end = Offset(width * 0.9f, height * if (down) 0.2f else 0.65f),
+                    durationMillis = 160,
+                )
+            }
+            var pinned = false
+            val pinnedSelections = mutableSetOf<Int>()
+            repeat(90) {
+                compose.mainClock.advanceTimeByFrame()
+                compose.waitForIdle()
+                val pill = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+                assertTrue("pill must remain inside the viewport: $pill",
+                    pill.top >= viewport.top && pill.bottom <= viewport.bottom)
+                withFrame { bitmap ->
+                    assertEquals("the pill background must be painted on every scrolling frame", highlightColor,
+                        bitmap.getPixel(pill.center.x.toInt(), pill.center.y.toInt()))
+                }
+                if (listState.isScrollInProgress) {
+                    val edge = if (down) pill.top else pill.bottom
+                    val target = if (down) viewport.top else viewport.bottom
+                    if (abs(edge - target) <= 1f) pinned = true
+                    if (pinned) {
+                        assertEquals("scrolling must not release or flicker the $mode pill", target, edge, 1f)
+                        pinnedSelections += selected.intValue
+                    }
+                }
+            }
+            assertTrue("$mode must reach the ${if (down) "top" else "bottom"} edge", pinned)
+            assertTrue("selection must keep changing under the fixed pill", pinnedSelections.size > 1)
+            compose.mainClock.advanceTimeBy(2000)
+            compose.waitForIdle()
+            val label = compose.onNodeWithText("Game ${selected.intValue}", useUnmergedTree = true)
+                .fetchSemanticsNode().boundsInRoot
+            val pill = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+            assertEquals("the resting pill must match the selected row", label.center.y, pill.center.y, 1f)
+            assertEquals(0, listState.firstVisibleItemScrollOffset)
+        }
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test fun `Off controller repeats retain a static pill at the reveal edge without animation observers`() {
+        animationMode.value = AnimationMode.OFF
+        val activity = MutableStateFlow(true)
+        renderAnimationModes(activity)
+        compose.mainClock.autoAdvance = false
+        val viewport = compose.onNodeWithTag("modeList").fetchSemanticsNode().boundsInRoot
+        for (down in listOf(true, false)) {
+            for (index in if (down) 1..24 else 23 downTo 0) {
+                val before = listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
+                compose.runOnIdle {
+                    controllerInputEvents.tryEmit(Unit)
+                    selected.intValue = index
+                }
+                repeat(2) {
+                    compose.mainClock.advanceTimeByFrame()
+                    compose.waitForIdle()
+                    val pill = compose.onNodeWithTag("listStaticSelectionHighlight").fetchSemanticsNode().boundsInRoot
+                    assertTrue("the static pill must never disappear outside the viewport",
+                        pill.top >= viewport.top && pill.bottom <= viewport.bottom)
+                    if (before != (listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset)) {
+                        assertEquals("controller reveal must pin the static pill at the edge",
+                            if (down) viewport.bottom else viewport.top,
+                            if (down) pill.bottom else pill.top, 0.5f)
+                    }
+                }
+            }
+        }
+        assertEquals("static highlights must not add animation activity observers", 2, activity.subscriptionCount.value)
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `Off uses immediate per-row highlights while touch and controller navigation still work`() {
+        animationMode.value = AnimationMode.OFF
+        renderAnimationModes()
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithText("Game 1").performTouchInput { click() }
+        compose.mainClock.advanceTimeBy(32)
+        compose.waitForIdle()
+        assertEquals(listOf("open:1"), actions)
+        compose.runOnIdle { shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(16)) }
+        compose.waitForIdle()
+        compose.onNodeWithTag("listSelectionHighlight").assertDoesNotExist()
+        val selectedPixels = textPixels("Game 1", animated = false)
+        assertTrue("selected row must immediately use highlight text: $selectedPixels selections=$renderedSelections",
+            selectedPixels.blue > 0)
+        assertTrue(textPixels("Game 0", animated = false).red > 0)
+        compose.runOnIdle {
+            controllerInputEvents.tryEmit(Unit)
+            selected.intValue = 2
+        }
+        compose.mainClock.advanceTimeBy(32)
+        compose.waitForIdle()
+        compose.runOnIdle { shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(16)) }
+        compose.waitForIdle()
+        assertTrue(textPixels("Game 2", animated = false).blue > 0)
+        assertTrue(textPixels("Game 1", animated = false).red > 0)
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test fun `Touch Input switches the animated pill on for touch and off for controller navigation`() {
+        animationMode.value = AnimationMode.TOUCH_INPUT
+        renderAnimationModes()
+        compose.onNodeWithTag("listSelectionHighlight").assertDoesNotExist()
+        compose.onNodeWithText("Game 1").performTouchInput { click() }
+        compose.onNodeWithTag("listSelectionHighlight").assertExists()
+        compose.runOnIdle {
+            controllerInputEvents.tryEmit(Unit)
+            selected.intValue = 25
+        }
+        compose.waitForIdle()
+        compose.onNodeWithTag("listSelectionHighlight").assertDoesNotExist()
+        compose.onNodeWithText("Game 25").assertExists()
+        compose.onNodeWithText("Game 25").performTouchInput { click() }
+        compose.onNodeWithTag("listSelectionHighlight").assertExists()
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `Touch Input handoff preserves the pill position and foreground on the first touch frame`() {
+        animationMode.value = AnimationMode.TOUCH_INPUT
+        renderAnimationModes()
+        compose.mainClock.autoAdvance = false
+        repeat(3) {
+            val resting = compose.onNodeWithTag("listStaticSelectionHighlight").fetchSemanticsNode().boundsInRoot
+            assertTrue(textPixels("Game 0", animated = false).blue > 0)
+            compose.onNodeWithTag("surface").performTouchInput {
+                down(Offset(width * 0.9f, height * 0.9f))
+            }
+            repeat(3) {
+                compose.mainClock.advanceTimeByFrame()
+                compose.waitForIdle()
+                val pill = compose.onNodeWithTag("listSelectionHighlight").fetchSemanticsNode().boundsInRoot
+                assertEquals("handoff must not move or recreate an empty pill", resting, pill)
+                assertTrue("the selected text must never lose its highlight during handoff", textPixels("Game 0").blue > 0)
+            }
+            compose.onNodeWithTag("surface").performTouchInput { up() }
+            compose.runOnIdle { controllerInputEvents.tryEmit(Unit) }
+            compose.mainClock.advanceTimeBy(32)
+            compose.waitForIdle()
+            assertEquals(resting,
+                compose.onNodeWithTag("listStaticSelectionHighlight").fetchSemanticsNode().boundsInRoot)
+        }
+        assertTrue(actions.isEmpty())
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `turning animations off cancels an in-flight slide and immediately highlights the selected row`() {
+        renderAnimationModes()
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithText("Game 1").performTouchInput { click() }
+        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
+        compose.onNodeWithTag("listSelectionHighlight").assertExists()
+        compose.runOnIdle { animationMode.value = AnimationMode.OFF }
+        compose.mainClock.advanceTimeBy(32)
+        compose.waitForIdle()
+        compose.onNodeWithTag("listSelectionHighlight").assertDoesNotExist()
+        assertTrue(textPixels("Game 1", animated = false).blue > 0)
+        assertTrue(textPixels("Game 0", animated = false).red > 0)
+        compose.mainClock.autoAdvance = true
     }
 
     @Test fun `touch fling caps fast swipes in either direction but preserves gentle momentum`() = runTest {
@@ -750,9 +1044,9 @@ class TouchNavigationTest {
 
     private data class Pixels(var red: Int = 0, var green: Int = 0, var blue: Int = 0, var yellow: Int = 0)
 
-    private fun textPixels(text: String): Pixels = framePixels(
+    private fun textPixels(text: String, animated: Boolean = true): Pixels = framePixels(
         compose.onNodeWithText(text, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot,
-        compose.onNodeWithTag("listSelectionHighlight").fetchSemanticsNode().boundsInRoot,
+        if (animated) compose.onNodeWithTag("listSelectionHighlight").fetchSemanticsNode().boundsInRoot else null,
     )
 
     private fun framePixels(

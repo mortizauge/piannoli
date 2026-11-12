@@ -12,6 +12,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToDownIgnoreConsumed
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawBehind
@@ -43,9 +45,20 @@ fun ScreenBackground(
 ) {
     val touch = LocalTouchInput.current
     val surface = remember(touch) { TouchSurface() }
-    CompositionLocalProvider(LocalTouchSurface provides surface.takeIf { touch != null }) {
+    val animationsEnabled = animationsEnabledWhenActive()
+    CompositionLocalProvider(
+        LocalTouchSurface provides surface.takeIf { touch != null },
+        LocalAnimationsEnabled provides animationsEnabled,
+    ) {
         Box(
-            modifier = (if (touch != null) modifier.touchScrolling(surface) else modifier)
+            modifier = (if (touch != null) modifier.pointerInput(touch) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (event.changes.any { it.changedToDownIgnoreConsumed() }) touch.beginNavigation()
+                    }
+                }
+            }.touchScrolling(surface) else modifier)
                 .fillMaxSize().screenBackground(
                     backgroundImagePath, backgroundTint, backgroundAlpha, backgroundColor
                 )

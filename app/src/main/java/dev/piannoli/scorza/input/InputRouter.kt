@@ -1,6 +1,9 @@
 package dev.piannoli.scorza.input
 
 import android.content.Context
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.scopes.ActivityScoped
 import dev.piannoli.scorza.config.PlatformConfig
@@ -75,6 +78,12 @@ class InputRouter @Inject constructor(
     var unregisterCoreQueryReceiver: () -> Unit = {}
     private val controllerInputEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val controllerInput = controllerInputEvents.asSharedFlow()
+    var touchInputActive by mutableStateOf(false)
+        private set
+
+    fun beginTouchNavigation() {
+        touchInputActive = true
+    }
 
     fun wire(dispatcher: InputDispatcher) {
         gameListHandler.buildContextOptions = dialogHandler::buildGameContextOptions
@@ -93,8 +102,11 @@ class InputRouter @Inject constructor(
             onSelectUpOverride = { onSelectUp() },
             screenResolver = { activeScreenHandler() },
             navigationContext = { nav.currentScreen },
-            onMenuSound = { sound ->
+            onControllerInput = {
+                touchInputActive = false
                 controllerInputEvents.tryEmit(Unit)
+            },
+            onMenuSound = { sound ->
                 if (nav.currentScreen !is LauncherScreen.InputTester) {
                     playNavigationFeedback(sound)
                 }
@@ -124,6 +136,7 @@ class InputRouter @Inject constructor(
     }
 
     fun touchSelect(index: Int, currentIndex: Int) {
+        beginTouchNavigation()
         if (nav.navigating || index == currentIndex) return
         touchFeedback(MenuSound.TICK) { selectTouchItem(index, currentIndex) }
     }
@@ -180,6 +193,7 @@ class InputRouter @Inject constructor(
     }
 
     fun touchContextMenu() {
+        beginTouchNavigation()
         if (nav.navigating || nav.dialogState.value != DialogState.None) return
         touchFeedback(MenuSound.CONFIRM) {
             when (val handler = activeScreenHandler()) {
@@ -189,6 +203,7 @@ class InputRouter @Inject constructor(
     }
 
     fun touchAction(action: dev.piannoli.ui.MenuAction?) {
+        beginTouchNavigation()
         if (nav.navigating) return
         val sound = when (action) {
             null, dev.piannoli.ui.MenuAction.L1, dev.piannoli.ui.MenuAction.R1 -> MenuSound.TICK

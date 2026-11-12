@@ -50,6 +50,11 @@ import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.job
+import kotlinx.coroutines.launch
 
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
@@ -70,13 +75,18 @@ fun <T> List(
     val touch = LocalTouchInput.current
     val surface = LocalTouchSurface.current
     val uiActive = LocalUiActive.current
+    val animationsEnabled = LocalAnimationsEnabled.current
+    val pinTouchEdges = LocalAnimationMode.current == AnimationMode.TOUCH_INPUT
     val currentIndex = rememberUpdatedState(selectedIndex)
     val currentItems = rememberUpdatedState(items)
     val selectable = rememberUpdatedState(isItemSelectable)
     val selectItem = rememberUpdatedState(onTouchSelect)
     val rows = remember { mutableStateMapOf<Int, TouchRow>() }
-    val highlight = remember { DisplayedHighlight() }
-    SideEffect { surface?.selectedRow = rows[selectedIndex] }
+    var renderingActive by remember(uiActive) { mutableStateOf(uiActive.value) }
+    val highlight = if (touch != null && renderingActive) remember { DisplayedHighlight() } else null
+    SideEffect {
+        surface?.selectedRow = rows[selectedIndex]
+    }
     ListScrollEffect(
         listState, selectedIndex, items.size, scrollTarget, reorderMode,
         touchScrolling = surface?.touchNavigation == true,
@@ -92,20 +102,74 @@ fun <T> List(
                 }
             }
         }
-        LaunchedEffect(surface, listState, touch, items.size, uiActive) {
+        LaunchedEffect(surface, listState, touch, items.size, uiActive, highlight, animationsEnabled, pinTouchEdges) {
             uiActive.collectLatest { active ->
+                renderingActive = active
                 if (!active) {
-                    highlight.touchCenter = null
+                    highlight?.touchCenter = null
+                    rows.values.forEach { it.clearAnimationResources() }
                     return@collectLatest
                 }
                 snapshotFlow { surface.scrolling }.collectLatest { scrolling ->
                     if (!scrolling) return@collectLatest
                     val initialLayout = listState.layoutInfo
-                    val initialCenter = highlight.bounds?.center?.y ?: initialLayout.visibleItemsInfo
+                    val initialCenter = highlight?.bounds?.center?.y ?: initialLayout.visibleItemsInfo
                         .firstOrNull { it.index == currentIndex.value }
                         ?.let { it.offset + (rows[it.index]?.pillBounds?.center?.y ?: it.size / 2f) }
                         ?: ((initialLayout.viewportStartOffset + initialLayout.viewportEndOffset) / 2f)
-                    val motion = TouchHighlightMotion(initialCenter)
+                    fun selectNearest(layout: LazyListLayoutInfo, center: Float) {
+                        var index: Int? = null
+                        var nearestDistance = Float.MAX_VALUE
+                        for (info in layout.visibleItemsInfo) {
+                            val item = currentItems.value.getOrNull(info.index) ?: continue
+                            if (!selectable.value(item)) continue
+                            val pillCenter = rows[info.index]?.pillBounds?.center?.y ?: info.size / 2f
+                            val distance = abs(info.offset + pillCenter - center)
+                            if (distance < nearestDistance) {
+                                nearestDistance = distance
+                                index = info.index
+                            }
+                        }
+                        if (index != null && index != currentIndex.value) {
+                            val select = selectItem.value
+                            if (select != null) select(index) else touch.select(index, currentIndex.value)
+                        }
+                    }
+                    if (!animationsEnabled) {
+                        var center = initialCenter
+                        var firstIndex = initialLayout.visibleItemsInfo.firstOrNull()?.index ?: -1
+                        var firstOffset = initialLayout.visibleItemsInfo.firstOrNull()?.offset ?: 0
+                        try {
+                            snapshotFlow { listState.layoutInfo }.collect { layout ->
+                                val height = (layout.viewportEndOffset - layout.viewportStartOffset).coerceAtLeast(0)
+                                val halfRow = (rows[currentIndex.value]?.pillBounds?.height
+                                    ?: layout.visibleItemsInfo.firstOrNull()?.size?.toFloat() ?: 0f).coerceAtMost(height.toFloat()) / 2f
+                                val first = layout.visibleItemsInfo.firstOrNull()
+                                val reference = layout.visibleItemsInfo.firstOrNull { it.index == firstIndex }
+                                val distance = when {
+                                    reference != null -> (firstOffset - reference.offset).toFloat()
+                                    first == null || firstIndex < 0 -> 0f
+                                    first.index > firstIndex -> height.toFloat()
+                                    first.index < firstIndex -> -height.toFloat()
+                                    else -> 0f
+                                }
+                                if (first != null) {
+                                    firstIndex = first.index
+                                    firstOffset = first.offset
+                                }
+                                center = (center - distance).coerceIn(
+                                    layout.viewportStartOffset + halfRow, layout.viewportEndOffset - halfRow,
+                                )
+                                highlight?.touchCenter = center
+                                selectNearest(layout, center)
+                            }
+                        } finally {
+                            highlight?.touchCenter = null
+                        }
+                        return@collectLatest
+                    }
+                    if (highlight == null) return@collectLatest
+                    val motion = TouchHighlightMotion(initialCenter, pinTouchEdges)
                     try {
                         while (true) {
                             val frameTime = withFrameNanos { it }
@@ -115,22 +179,7 @@ fun <T> List(
                                 ?: layout.visibleItemsInfo.firstOrNull()?.size?.toFloat() ?: continue
                             val center = motion.step(layout, frameTime, rowHeight)
                             highlight.touchCenter = center
-                            var index: Int? = null
-                            var nearestDistance = Float.MAX_VALUE
-                            for (info in layout.visibleItemsInfo) {
-                                val item = currentItems.value.getOrNull(info.index) ?: continue
-                                if (!selectable.value(item)) continue
-                                val pillCenter = rows[info.index]?.pillBounds?.center?.y ?: info.size / 2f
-                                val distance = abs(info.offset + pillCenter - center)
-                                if (distance < nearestDistance) {
-                                    nearestDistance = distance
-                                    index = info.index
-                                }
-                            }
-                            if (index != null && index != currentIndex.value) {
-                                val select = selectItem.value
-                                if (select != null) select(index) else touch.select(index, currentIndex.value)
-                            }
+                            selectNearest(layout, center)
                         }
                     } finally {
                         highlight.touchCenter = null
@@ -176,7 +225,7 @@ fun <T> List(
     }
 
     Box(modifier = listModifier.clipToBounds()) {
-        if (touch != null) {
+        if (highlight != null) {
             val layout = listState.layoutInfo
             var selectedItem: LazyListItemInfo? = null
             var firstItem: LazyListItemInfo? = null
@@ -221,32 +270,38 @@ fun <T> List(
                 else {
                     val row = remember { TouchRow() }
                     row.selectable = isItemSelectable(item)
-                    row.highlightBoundsProvider = remember(row, highlight) {
+                    row.highlightBoundsProvider = if (highlight != null) remember(row, highlight) {
                         { highlight.bounds?.translate(0f, -row.viewportOffset.toFloat()) }
-                    }
+                    } else null
+                    SideEffect { if (highlight == null) row.clearAnimationResources() }
                     DisposableEffect(index, row) {
                         rows[index] = row
-                        onDispose { if (rows[index] === row) rows.remove(index) }
+                        onDispose {
+                            if (rows[index] === row) rows.remove(index)
+                            row.detach()
+                        }
                     }
                     CompositionLocalProvider(LocalTouchRow provides row) {
-                        Box(Modifier.fillMaxWidth().onGloballyPositioned {
+                        Box(Modifier.fillMaxWidth().then(if (highlight != null) Modifier.onGloballyPositioned {
                             row.coordinates = it
                             listState.layoutInfo.visibleItemsInfo.firstOrNull { info -> info.index == index }?.let { info ->
                                 row.viewportOffset = info.offset
                             }
                             row.updatePillBounds()
-                        }.focusProperties { canFocus = false }.combinedClickable(
+                        } else Modifier).focusProperties { canFocus = false }.combinedClickable(
                             interactionSource = row.pressInteractions,
                             indication = null,
                             enabled = isItemSelectable(item),
                             onClick = {
-                                highlight.snapToIndex = if (abs(index - currentIndex.value) > 1) index else null
+                                touch.beginNavigation()
+                                highlight?.snapToIndex = if (abs(index - currentIndex.value) > 1) index else null
                                 surface?.touchNavigation = true
                                 surface?.scrolling = false
                                 if (onTouchSelect != null) onTouchSelect(index) else touch.select(index, currentIndex.value)
                                 touch.activate(row.cycle)
                             },
                             onLongClick = {
+                                touch.beginNavigation()
                                 surface?.touchNavigation = true
                                 surface?.scrolling = false
                                 if (onTouchSelect != null) onTouchSelect(index) else touch.select(index, currentIndex.value)
@@ -262,7 +317,7 @@ fun <T> List(
     }
 }
 
-private class TouchHighlightMotion(private val anchor: Float) {
+private class TouchHighlightMotion(private val anchor: Float, private val pinEdges: Boolean) {
     private var previousFirstIndex = -1
     private var previousFirstOffset = 0
     private var previousLastIndex = -1
@@ -272,6 +327,8 @@ private class TouchHighlightMotion(private val anchor: Float) {
     private var position = anchor
     private var positionVelocity = 0f
     private var carriedDirection = 0
+    private var pinnedDirection = 0
+    private var reverseDistance = 0f
 
     fun step(layout: LazyListLayoutInfo, time: Long, rowHeight: Float): Float {
         val height = (layout.viewportEndOffset - layout.viewportStartOffset).coerceAtLeast(1).toFloat()
@@ -313,7 +370,24 @@ private class TouchHighlightMotion(private val anchor: Float) {
         if (speed >= height * 2.4f) carriedDirection = direction
         // Content carries the pill until it physically meets an edge; speed never teleports it.
         position = (position - distance).coerceIn(start, end)
-        if (carriedDirection != 0) {
+        if (pinEdges) {
+            if (position <= start + 1.5f && distance > 0f) pinnedDirection = 1
+            if (position >= end - 1.5f && distance < 0f) pinnedDirection = -1
+            if ((pinnedDirection > 0 && distance < 0f) || (pinnedDirection < 0 && distance > 0f)) {
+                // Row settling can briefly reverse the content; only a full-row reversal releases the edge.
+                reverseDistance += abs(distance)
+                if (reverseDistance >= rowHeight) {
+                    pinnedDirection = 0
+                    reverseDistance = 0f
+                }
+            } else if (distance != 0f) {
+                reverseDistance = 0f
+            }
+        }
+        if (pinnedDirection != 0) {
+            position = if (pinnedDirection > 0) start else end
+            positionVelocity = 0f
+        } else if (carriedDirection != 0) {
             positionVelocity = 0f
         } else {
             // Critically damped motion retains momentum without overshoot or per-row restarts.
@@ -355,7 +429,27 @@ private fun SelectionHighlight(
     touchScrolling: Boolean,
     touchMotion: Boolean,
 ) {
-    val translation = remember { Animatable(Rect.Zero, RectConverter) }
+    if (!LocalAnimationsEnabled.current) {
+        var previousIndex by remember { mutableIntStateOf(selectedIndex) }
+        val direction = when {
+            selectedIndex > previousIndex -> 1
+            selectedIndex < previousIndex -> -1
+            else -> displayed.direction
+        }
+        SideEffect { previousIndex = selectedIndex }
+        HighlightBox(
+            position = bounds ?: displayed.bounds,
+            selectedIndex = selectedIndex,
+            direction = direction,
+            displayed = displayed,
+            listState = listState,
+            touchScrolling = touchScrolling,
+            touchMotion = touchMotion,
+            tag = "listStaticSelectionHighlight",
+        )
+        return
+    }
+    var translation by remember { mutableStateOf(Rect.Zero) }
     val uiActive = LocalUiActive.current
     var animatedIndex by remember { mutableIntStateOf(selectedIndex) }
     val snapSelection = displayed.snapToIndex == selectedIndex
@@ -374,31 +468,43 @@ private fun SelectionHighlight(
         }
     }
     LaunchedEffect(selectedIndex, bounds != null, controllerScrollPosition, touchMotion, uiActive) {
-        uiActive.collectLatest { active ->
-            if (!active) {
-                translation.snapTo(Rect.Zero)
-                animatedIndex = selectedIndex
-                return@collectLatest
-            }
-            val target = targetBounds ?: return@collectLatest
-            val previous = displayed.bounds
-            displayed.direction = direction
-            if (controllerScrolled) displayed.pinnedIndex = selectedIndex
-            if (controllerScrollPosition == null) displayed.pinnedIndex = null
-            translation.snapTo(
-                if (previous == null || snapSelection) Rect.Zero else Rect(
-                    previous.left - target.left, if (controllerScrolled || touchMotion) 0f else previous.top - target.top,
-                    previous.right - target.right, if (controllerScrolled || touchMotion) 0f else previous.bottom - target.bottom,
-                )
-            )
+        if (!uiActive.value) {
+            translation = Rect.Zero
             animatedIndex = selectedIndex
-            if (snapSelection) displayed.snapToIndex = null
-            if (translation.value != Rect.Zero) {
-                translation.animateTo(Rect.Zero, tween(if (touchScrolling) 160 else 48))
+            return@LaunchedEffect
+        }
+        val target = targetBounds ?: return@LaunchedEffect
+        val previous = displayed.bounds
+        displayed.direction = direction
+        if (controllerScrolled) displayed.pinnedIndex = selectedIndex
+        if (controllerScrollPosition == null) displayed.pinnedIndex = null
+        translation =
+            if (previous == null || snapSelection) Rect.Zero else Rect(
+                previous.left - target.left, if (controllerScrolled || touchMotion) 0f else previous.top - target.top,
+                previous.right - target.right, if (controllerScrolled || touchMotion) 0f else previous.bottom - target.bottom,
+            )
+        animatedIndex = selectedIndex
+        if (snapSelection) displayed.snapToIndex = null
+        if (translation != Rect.Zero) {
+            val animator = Animatable(translation, RectConverter)
+            coroutineScope {
+                val animationJob = currentCoroutineContext().job
+                val activityObserver = launch {
+                    uiActive.first { !it }
+                    animationJob.cancel()
+                }
+                try {
+                    animator.animateTo(Rect.Zero, tween(if (touchScrolling) 160 else 48)) {
+                        translation = value
+                    }
+                } finally {
+                    activityObserver.cancel()
+                    translation = Rect.Zero
+                }
             }
         }
     }
-    val delta = translation.value
+    val delta = translation
     val animated = if (targetBounds == null) displayed.bounds else if (snapSelection) targetBounds
         else if (animatedIndex != selectedIndex && !controllerScrolled) displayed.bounds ?: targetBounds
         else Rect(
@@ -411,6 +517,21 @@ private fun SelectionHighlight(
         val top = it.top.roundToInt().coerceIn(viewportStart, viewportEnd - height).toFloat()
         Rect(it.left, top, it.right, top + height)
     }
+    HighlightBox(position, selectedIndex, direction, displayed, listState, touchScrolling, touchMotion,
+        "listSelectionHighlight")
+}
+
+@Composable
+private fun HighlightBox(
+    position: Rect?,
+    selectedIndex: Int,
+    direction: Int,
+    displayed: DisplayedHighlight,
+    listState: LazyListState,
+    touchScrolling: Boolean,
+    touchMotion: Boolean,
+    tag: String,
+) {
     if (position != null) {
         val density = LocalDensity.current
         Box(
@@ -422,8 +543,8 @@ private fun SelectionHighlight(
                     val moved = scroll != null && displayed.scrollPosition != null && scroll != displayed.scrollPosition
                     if (moved) {
                         displayed.pinnedIndex = selectedIndex
-                        displayed.direction = direction
                     }
+                    displayed.direction = direction
                     displayed.scrollPosition = scroll
                     val layout = listState.layoutInfo
                     val height = position.height.roundToInt().coerceIn(
@@ -452,7 +573,7 @@ private fun SelectionHighlight(
                     with(density) { position.height.coerceAtLeast(0f).toDp() },
                 )
                 .background(LocalPiannoliColors.current.highlight, Radius.Pill)
-                .testTag("listSelectionHighlight")
+                .testTag(tag)
         )
     }
 }

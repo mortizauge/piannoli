@@ -22,6 +22,28 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class LauncherTouchInputTest {
+    @Test fun `input mode switches before controller actions and switches back on touch even without movement`() {
+        val nav = mockk<NavigationController>(relaxed = true)
+        every { nav.dialogState } returns MutableStateFlow<DialogState>(DialogState.None)
+        every { nav.currentScreen } returns LauncherScreen.SystemList
+        val handler = mockk<SystemListInputHandler>(relaxed = true)
+        val router = testRouter(nav, handler, mockk(relaxed = true), mockk(relaxed = true))
+        val dispatcher = dev.piannoli.scorza.input.runtime.InputDispatcher(mockk(relaxed = true), mockk(relaxed = true))
+        router.wire(dispatcher)
+        val touch = LauncherTouchInput(router, ButtonStyle())
+        touch.beginNavigation()
+        assertEquals(true, router.touchInputActive)
+        every { handler.onDown() } answers { assertEquals(false, router.touchInputActive) }
+        dispatcher.onDown()
+        assertEquals(false, router.touchInputActive)
+        touch.select(0, 0)
+        assertEquals(true, router.touchInputActive)
+        dispatcher.onConfirm()
+        assertEquals(false, router.touchInputActive)
+        touch.hint(DPAD_HORIZONTAL)
+        assertEquals(true, router.touchInputActive)
+    }
+
     @Test fun `touch selection and actions give feedback after navigation without controller interruption`() = runTest {
         val nav = mockk<NavigationController>(relaxed = true)
         val dialogs = MutableStateFlow<DialogState>(DialogState.None)
@@ -101,7 +123,6 @@ class LauncherTouchInputTest {
         rommBrowseViewModel = mockk(relaxed = true),
         rommDownloader = mockk(relaxed = true),
         osdController = mockk(relaxed = true),
-        raPreloadController = mockk(relaxed = true),
         ioScope = mockk(relaxed = true),
         menuSounds = sounds,
         menuHaptics = haptics,

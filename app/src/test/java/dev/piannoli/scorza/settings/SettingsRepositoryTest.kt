@@ -33,6 +33,43 @@ class SettingsRepositoryTest {
 
     @Test
     @Config(sdk = [28])
+    fun `appearance animations preview all modes support cancel and persist saved changes`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        Shadows.shadowOf(context as android.app.Application)
+            .grantPermissions(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+        val settings = newRepo()
+        try {
+            settings.sdCardRoot = tmp.root.absolutePath
+            settings.setupCompleted = true
+            val viewModel = SettingsViewModel(settings, AppFonts(context), context, mockk(relaxed = true))
+            viewModel.load()
+            viewModel.enterSubCategory("display", R.string.settings_display)
+            viewModel.selectItem("animations")
+            assertEquals(R.string.animations_full, viewModel.getSelectedItem()?.valueRes)
+            viewModel.cycleSelected(1)
+            assertEquals(R.string.animations_touch_input, viewModel.getSelectedItem()?.valueRes)
+            assertEquals(dev.piannoli.ui.components.AnimationMode.TOUCH_INPUT, viewModel.appSettings.value.animations)
+            viewModel.cycleSelected(1)
+            assertEquals(R.string.value_off, viewModel.getSelectedItem()?.valueRes)
+            viewModel.cycleSelected(1)
+            assertEquals(R.string.animations_full, viewModel.getSelectedItem()?.valueRes)
+            viewModel.cycleSelected(-1)
+            assertEquals(dev.piannoli.ui.components.AnimationMode.OFF, settings.animations)
+            viewModel.cancel()
+            assertEquals(dev.piannoli.ui.components.AnimationMode.FULL, viewModel.appSettings.value.animations)
+            viewModel.refreshItemsAndSettings()
+            viewModel.cycleSelected(1)
+            viewModel.save()
+        } finally { settings.shutdown() }
+        val reopened = newRepo()
+        try {
+            reopened.sdCardRoot = tmp.root.absolutePath
+            assertEquals(dev.piannoli.ui.components.AnimationMode.TOUCH_INPUT, reopened.animations)
+        } finally { reopened.shutdown() }
+    }
+
+    @Test
+    @Config(sdk = [28])
     fun `legacy quit-save preference no longer appears in emulation settings`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         Shadows.shadowOf(context as android.app.Application)
