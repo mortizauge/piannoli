@@ -41,21 +41,34 @@ class ScanScheduler @Inject constructor(
     }
 
     fun runNow(platformTag: String): RomScanner.SyncCounts {
+        return runNow(platformTag, refresh = false)
+    }
+
+    fun runNowForRefresh(platformTag: String): RomScanner.SyncCounts =
+        runNow(platformTag, refresh = true)
+
+    private fun runNow(platformTag: String, refresh: Boolean): RomScanner.SyncCounts {
         val tag = PlatformFolders.canonicalTag(platformTag)
         synchronized(mutex) {
-            while (runningTag == tag || tag in queued) {
+            while (runningTag != null || tag in queued) {
                 (mutex as java.lang.Object).wait()
             }
             runningTag = tag
         }
-        val counts = try {
-            romScanner.scanPlatform(tag, isArcade = platformConfig.isArcade(tag))
-        } catch (t: Throwable) {
-            ScanLog.write("ScanScheduler runNow $tag failed: ${t.message}")
-            RomScanner.SyncCounts(0, 0, 0)
+        var counts = RomScanner.SyncCounts(0, 0, 0)
+        try {
+            counts = if (refresh) romScanner.scanPlatformForRefresh(tag, isArcade = platformConfig.isArcade(tag))
+                else romScanner.scanPlatform(tag, isArcade = platformConfig.isArcade(tag))
+            return counts
+        } catch (e: Exception) {
+            ScanLog.write("ScanScheduler runNow $tag failed: ${e.message}")
+            if (refresh) throw e
+            return counts
+        } finally {
+            finishScan(tag, counts) { result ->
+                if (!refresh) scope.launch { _results.tryEmit(result) }
+            }
         }
-        finishScan(tag, counts) { result -> scope.launch { _results.tryEmit(result) } }
-        return counts
     }
 
     private inline fun finishScan(tag: String, counts: RomScanner.SyncCounts, emit: (ScanResult) -> Unit) {
@@ -89,6 +102,9 @@ class ScanScheduler @Inject constructor(
     private suspend fun worker() {
         for (tag in requests) {
             synchronized(mutex) {
+                while (runningTag != null) {
+                    (mutex as java.lang.Object).wait()
+                }
                 queued.remove(tag)
                 runningTag = tag
             }

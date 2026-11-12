@@ -130,6 +130,25 @@ class SystemListScanTargetsTest {
         assertEquals(listOf("GB", "SNES"), scanned.sorted())
     }
 
+    @Test fun `a cached refresh preserves the selected platform when new categories and counts arrive`() {
+        val vm = viewModel(tmp.newFolder("Roms"), indexed = mapOf("GB" to 1, "SNES" to 4))
+        fun load() {
+            val ready = CountDownLatch(1)
+            vm.scan(scanDisk = false, onReady = { ready.countDown() })
+            assertTrue(ready.await(10, TimeUnit.SECONDS))
+        }
+        load()
+        vm.setSelectedIndex(1)
+        vm.firstVisibleIndex = 1
+        vm.savePosition()
+        every { romsRepository.knownPlatformTags() } returns listOf("GB", "NES", "SNES")
+        every { romsRepository.visiblePlatformCounts() } returns mapOf("GB" to 1, "NES" to 2, "SNES" to 6)
+        load()
+        assertEquals("SNES", requireNotNull(vm.getSelectedPlatformTag()))
+        assertEquals(2, vm.state.value.selectedIndex)
+        assertEquals(1, vm.state.value.scrollTarget)
+    }
+
     @Test fun `scan discovers alias folders and visits canonical system once`() {
         val romDir = tmp.newFolder("Roms")
         listOf("PS", "Ps1", "psx", "playstation", "PlayStation backup").forEach { File(romDir, it).mkdirs() }

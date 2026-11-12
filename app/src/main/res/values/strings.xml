@@ -1,4 +1,17 @@
 <resources>
+    <plurals name="library_refresh_new_games">
+        <item quantity="one">%1$d New Game Found</item>
+        <item quantity="other">%1$d New Games Found</item>
+    </plurals>
+    <plurals name="library_refresh_removed_games">
+        <item quantity="one">%1$d Game Removed</item>
+        <item quantity="other">%1$d Games Removed</item>
+    </plurals>
+    <string name="library_refresh_failed">Library Refresh Failed: %1$s</string>
+    <string name="library_refresh_unreadable">Cannot Read the ROM Directory</string>
+    <string name="library_refresh_platform_failed">Could Not Refresh %1$s</string>
+    <string name="library_refresh_error">Unexpected Refresh Error</string>
+    <string name="library_refresh_notification_save_failed">Cannot Save Pending Library Refresh Notification</string>
     <string name="setting_animations">Animations</string>
     <string name="animations_full">Full</string>
     <string name="animations_touch_input">Touch Input</string>

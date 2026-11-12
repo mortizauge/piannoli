@@ -19,6 +19,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
+import java.io.IOException
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ScanSchedulerTest {
@@ -27,6 +28,31 @@ class ScanSchedulerTest {
         val cfg = mockk<PlatformConfig>(relaxed = true)
         every { cfg.isArcade(any()) } returns false
         return cfg
+    }
+
+    @Test fun `automatic scans return their diff without triggering per-platform UI reloads or notices`() = runBlocking {
+        val scanner = mockk<RomScanner>()
+        every { scanner.scanPlatformForRefresh("NES", false) } returns RomScanner.SyncCounts(1, 0, 0)
+        every { scanner.consumeLauncherMutation(any()) } returns false
+        val scheduler = ScanScheduler(scanner, newPlatformConfig())
+        val observed = mutableListOf<ScanScheduler.ScanResult>()
+        val collector = launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+            scheduler.results.collect { observed += it }
+        }
+        assertEquals(RomScanner.SyncCounts(1, 0, 0), scheduler.runNowForRefresh("NES"))
+        collector.cancel()
+        collector.join()
+        assertTrue("the completed batch will refresh the UI once", observed.isEmpty())
+    }
+
+    @Test fun `refresh scan failures propagate and release the scanner for subsequent requests`() {
+        val scanner = mockk<RomScanner>()
+        every { scanner.scanPlatformForRefresh("NES", false) } throws IOException("Unreadable")
+        every { scanner.scanPlatformForRefresh("GB", false) } returns RomScanner.SyncCounts(0, 0, 0)
+        every { scanner.consumeLauncherMutation(any()) } returns false
+        val scheduler = ScanScheduler(scanner, newPlatformConfig())
+        org.junit.Assert.assertThrows(IOException::class.java) { scheduler.runNowForRefresh("NES") }
+        assertEquals(RomScanner.SyncCounts(0, 0, 0), scheduler.runNowForRefresh("GB"))
     }
 
     @Test

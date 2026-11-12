@@ -146,6 +146,7 @@ class LauncherActions @Inject constructor(
 
     fun refreshLauncherLists(scanDisk: Boolean = true) {
         if (systemListViewModel.state.value.isLoading) return
+        if (!scanDisk) systemListViewModel.savePosition()
         rescanSystemList(scanDisk = scanDisk)
         if (nav.currentScreen is LauncherScreen.GameList) {
             gameListViewModel.reload { scanResumableGames() }

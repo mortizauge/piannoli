@@ -63,6 +63,7 @@ class BootInitializer @Inject constructor(
     private val setupCoordinator: SetupCoordinator,
     private val browseSession: dev.piannoli.scorza.navigation.BrowseSession,
     private val processSession: ProcessSession,
+    private val libraryRefresh: LibraryRefresh,
 ) {
 
     suspend fun run(onPhase: (BootPhase, Float, String) -> Unit): BootResult =
@@ -153,7 +154,7 @@ class BootInitializer @Inject constructor(
 
         return suspendCancellableCoroutine { cont ->
             launcherActions.rescanSystemList(
-                scanDisk = scanDisk,
+                scanDisk = false,
                 onProgress = { tag, current, total ->
                     onPhase(BootPhase.LIBRARY_REFRESH, current.toFloat() / total.coerceAtLeast(1), tag)
                 },
@@ -164,6 +165,7 @@ class BootInitializer @Inject constructor(
                         if (!cont.isActive) return
                         prepared()
                         processSession.initialized(root.absolutePath, romDir.absolutePath)
+                        if (scanDisk) libraryRefresh.start(root, romDir, (result as? ImportResult.Success)?.romCount ?: 0)
                         cont.resume(BootResult.Success)
                     }
                     if (bookmark != null) {

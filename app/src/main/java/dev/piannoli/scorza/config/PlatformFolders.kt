@@ -65,6 +65,9 @@ object PlatformFolders {
     fun canonicalTag(name: String): String =
         aliases[normalize(name)] ?: name.uppercase(Locale.ROOT)
 
+    fun scanTags(directories: List<File>, isKnownTag: (String) -> Boolean, additionalTags: List<String> = emptyList()): List<String> =
+        (directories.map { canonicalTag(it.name) } + additionalTags.map(::canonicalTag)).distinct().filter(isKnownTag)
+
     fun directories(root: File, tag: String): List<File> {
         val canonical = canonicalTag(tag)
         return root.listFiles { file ->

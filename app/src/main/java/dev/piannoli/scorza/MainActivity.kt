@@ -31,6 +31,10 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import dagger.hilt.android.AndroidEntryPoint
 import dev.piannoli.scorza.boot.BootSequencer
 import dev.piannoli.scorza.boot.BootState
@@ -95,6 +99,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
     @Inject lateinit var launchState: dev.piannoli.scorza.launcher.LaunchState
     @Inject lateinit var browseSession: dev.piannoli.scorza.navigation.BrowseSession
     @Inject lateinit var processSession: dev.piannoli.scorza.navigation.ProcessSession
+    @Inject lateinit var libraryRefresh: dev.piannoli.scorza.boot.LibraryRefresh
     @Inject lateinit var romDirectoryWatcher: Provider<dev.piannoli.scorza.scanner.RomDirectoryWatcher>
     @Inject lateinit var installedCoreService: Provider<InstalledCoreService>
     @Inject lateinit var romsRepository: Provider<RomsRepository>
@@ -130,6 +135,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
     private val isTv: Boolean by lazy { dev.piannoli.scorza.util.DeviceType.isTv(this) }
 
     private val isReady: Boolean get() = bootSequencer.state.value is BootState.Ready
+    private var observedLibraryRefresh = 0L
     private val automaticBootScan: Boolean
         get() = settings.scanLibraryAutomatically && !processSession.isInitialized(
             java.io.File(settings.sdCardRoot).absolutePath,
@@ -470,6 +476,28 @@ class MainActivity : ComponentActivity(), ActivityActions {
         val activeMapping by activeMappingHolder.active.collectAsState()
         val syncStatus by saveSyncStatusHolder.state.collectAsState()
         LaunchedEffect(updateInfo) { svm.updateInfo = updateInfo }
+        LaunchedEffect(libraryRefresh) {
+            launcherUiActive.collectLatest { active ->
+                if (!active || !isReady) return@collectLatest
+                if (settings.scanLibraryAutomatically) libraryRefresh.retryIfFailed()
+                libraryRefresh.result.filterNotNull().collect { result ->
+                    if (result.id == observedLibraryRefresh ||
+                        result.root != piannoliPathsProvider.root.absolutePath ||
+                        result.romDirectory != piannoliPathsProvider.romDir.absolutePath) return@collect
+                    val message = result.message(this@MainActivity)
+                    if (message != null && libraryRefresh.claimNotification(result.id)) osdController.show(message)
+                    if (result.changed) {
+                        combine(slvm.state, glvm.state) { system, games ->
+                            system.reorderMode || games.reorderMode || games.multiSelectMode
+                        }.first { busy -> !busy }
+                        if (result.root != piannoliPathsProvider.root.absolutePath ||
+                            result.romDirectory != piannoliPathsProvider.romDir.absolutePath) return@collect
+                        launcherActions.get().refreshLauncherLists(scanDisk = false)
+                    }
+                    observedLibraryRefresh = result.id
+                }
+            }
+        }
         LaunchedEffect(navScreen) {
         }
         AppNavGraph(

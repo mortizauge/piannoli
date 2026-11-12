@@ -101,6 +101,7 @@ class SystemListViewModel @Inject constructor(
 
     private fun rebuildFromDb() {
         val config = lastScanConfig ?: return
+        savePosition()
         scan(
             showRecentlyPlayed = config.showRecentlyPlayed,
             showFavorites = config.showFavorites,
@@ -355,7 +356,9 @@ class SystemListViewModel @Inject constructor(
             val canRestore = (restored != null || items.size == prevItemCount) && prevItemCount > 0
             val (safeIndex, scrollTo) = if (canRestore && items.isNotEmpty()) {
                 val maxIdx = items.lastIndex
-                val remapped = prevSelectedItem?.let { items.indexOf(it).takeIf { idx -> idx >= 0 } }
+                val remapped = prevSelectedItem?.let { selected ->
+                    items.indexOfFirst { browseId(it) == browseId(selected) }.takeIf { idx -> idx >= 0 }
+                }
                 val idx = when {
                     remapped != null -> remapped
                     current.selectedIndex in items.indices -> current.selectedIndex
@@ -388,9 +391,8 @@ class SystemListViewModel @Inject constructor(
     ) {
         if (!romDirectory.exists()) return
         val tagDirs = romDirectory.listFiles { f -> f.isDirectory && !f.name.startsWith(".") } ?: return
-        val onDisk = tagDirs.map { PlatformFolders.canonicalTag(it.name) }
         val orphaned = if (reconcileOrphans) romsRepository.platformCounts().keys.map(PlatformFolders::canonicalTag) else emptyList()
-        val known = (onDisk + orphaned).distinct().filter { platformConfig.isKnownTag(it) }
+        val known = PlatformFolders.scanTags(tagDirs.toList(), platformConfig::isKnownTag, orphaned)
         known.forEachIndexed { i, tag ->
             onProgress?.invoke(tag, i, known.size)
             romScanner.scanPlatform(tag, isArcade = platformConfig.isArcade(tag))

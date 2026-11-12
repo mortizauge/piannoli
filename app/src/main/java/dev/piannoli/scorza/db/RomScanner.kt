@@ -6,6 +6,7 @@ import dev.piannoli.scorza.util.RomDirectoryWalker
 import dev.piannoli.scorza.util.ScanLog
 import dev.piannoli.scorza.util.TextNormalizer
 import dev.piannoli.scorza.config.PlatformFolders
+import java.io.IOException
 
 /**
  * Bridges the file-system view of a platform (via [RomDirectoryWalker]) into the roms table.
@@ -32,6 +33,13 @@ class RomScanner(
         launcherMutatedTags.remove(PlatformFolders.canonicalTag(platformTag))
 
     fun scanPlatform(platformTag: String, isArcade: Boolean = false): SyncCounts {
+        return scanPlatform(platformTag, isArcade, requireDirectory = false)
+    }
+
+    fun scanPlatformForRefresh(platformTag: String, isArcade: Boolean = false): SyncCounts =
+        scanPlatform(platformTag, isArcade, requireDirectory = true)
+
+    private fun scanPlatform(platformTag: String, isArcade: Boolean, requireDirectory: Boolean): SyncCounts {
         val tag = PlatformFolders.canonicalTag(platformTag)
         ensurePlatformRow(tag)
         val aliases = db.queryAll("SELECT DISTINCT platform_tag FROM roms") { it.getText(0) }
@@ -40,7 +48,9 @@ class RomScanner(
         // Every path that adds, moves or removes a folder ends up here, so this is the one place
         // that has to drop the cached folder list.
         walker.invalidateCategoryFolders(tag)
-        val result = walker.walk(tag, isArcade) ?: return clearPlatform(tag).also {
+        val result = walker.walk(tag, isArcade) ?: if (requireDirectory) {
+            throw IOException("Cannot read ROM directory for $tag")
+        } else return clearPlatform(tag).also {
             ScanLog.write("scanPlatform $tag: no rom dir, cleared ${it.removed}")
         }
         applyRekeys(tag, result.rekeys)

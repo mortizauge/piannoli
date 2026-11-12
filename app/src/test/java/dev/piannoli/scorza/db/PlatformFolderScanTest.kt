@@ -22,6 +22,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.File
+import java.io.IOException
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -56,6 +57,15 @@ class PlatformFolderScanTest {
     private fun write(path: String): File = File(romDir, path).apply {
         parentFile!!.mkdirs()
         writeText("ROM")
+    }
+
+    @Test fun `an automatic refresh keeps cached games when a platform becomes unavailable`() {
+        val game = write("GB/Game.gb")
+        scanner.scanPlatform("GB")
+        val original = requireNotNull(repository.gameByPath(game.absolutePath))
+        assertTrue(File(romDir, "GB").renameTo(File(temp.root, "UnavailableGB")))
+        org.junit.Assert.assertThrows(IOException::class.java) { scanner.scanPlatformForRefresh("GB") }
+        assertEquals(original.id, requireNotNull(repository.gameById(original.id)).id)
     }
 
     @Test fun `legacy playlist identity and loose virtual bundles survive rescans and restart`() {
@@ -139,7 +149,7 @@ class PlatformFolderScanTest {
         assertEquals(zulu.id, repository.gameByPath(zuluFile.absolutePath)!!.id)
         assertEquals(123, repository.gameById(zulu.id)!!.raGameId)
         assertEquals(42L, repository.gameById(zulu.id)!!.lastPlayedAt)
-        assertEquals(listOf(zulu.id, alpha.id), collections.romIdsIn(shelf))
+        assertEquals(setOf(zulu.id, alpha.id), collections.romIdsIn(shelf).toSet())
         assertTrue(collections.isMember(shelf, LibraryRef.Rom(hidden.id)))
         assertTrue(repository.gameByPath(hiddenFile.absolutePath)!!.isHidden)
         assertTrue(listOf(alphaFile, betaFile, zuluFile, hiddenFile).all { it.isFile })

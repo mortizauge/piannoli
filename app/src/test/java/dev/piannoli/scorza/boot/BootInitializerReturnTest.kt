@@ -60,13 +60,16 @@ class BootInitializerReturnTest {
     private val processSession = ProcessSession()
     private val paths = mockk<PiannoliPathsProvider>()
     private val settings = mockk<SettingsRepository>(relaxed = true)
+    private lateinit var romDirectory: File
+    private val refresh = mockk<LibraryRefresh>(relaxed = true)
     private val bookmark = GameListBookmark(platformTag = "GB", platformTags = listOf("GB"), position = BrowsePosition("rom:1"))
 
     @Before fun setup() {
         Dispatchers.setMain(Dispatchers.Unconfined)
         context.getSharedPreferences("browse_session", Context.MODE_PRIVATE).edit().clear().commit()
         every { paths.root } returns temporaryFolder.root
-        every { paths.romDir } returns File(temporaryFolder.root, "Roms").apply { mkdirs() }
+        romDirectory = File(temporaryFolder.root, "Roms").apply { mkdirs() }
+        every { paths.romDir } returns romDirectory
         db = PiannoliDatabase(paths)
         db.execute("INSERT INTO platforms (tag, display_name) VALUES (?, ?)", "GB", "Game Boy")
         db.execute(
@@ -89,7 +92,7 @@ class BootInitializerReturnTest {
             context, settings, mockk<PlatformConfig>(relaxed = true), db, mockk(relaxed = true),
             paths, scope, mockk(relaxed = true), games, mockk(relaxed = true), mockk(relaxed = true),
             mockk(relaxed = true), nav, mockk(relaxed = true), actions,
-            mockk(relaxed = true), browse, process,
+            mockk(relaxed = true), browse, process, refresh,
         )
 
     @After fun cleanup() {
@@ -107,8 +110,9 @@ class BootInitializerReturnTest {
         val recreated = newInitializer(processSession, BrowseSession(processSession, paths, nav, games, systems))
         assertEquals(BootResult.Success, recreated.run { _, _, _ -> })
         assertEquals(LauncherScreen.GameList, nav.currentScreen)
-        verify(exactly = 1) { actions.rescanSystemList(scanDisk = true, onProgress = any(), onComplete = any()) }
-        verify(exactly = 1) { actions.rescanSystemList(scanDisk = false, onProgress = any(), onComplete = any()) }
+        verify(exactly = 0) { actions.rescanSystemList(scanDisk = true, onProgress = any(), onComplete = any()) }
+        verify(exactly = 2) { actions.rescanSystemList(scanDisk = false, onProgress = any(), onComplete = any()) }
+        verify(exactly = 1) { refresh.start(temporaryFolder.root, romDirectory, 0) }
         verify(exactly = 1) { games.restoreBookmark(bookmark, any()) }
         assertNull(session.pending())
     }
@@ -121,9 +125,10 @@ class BootInitializerReturnTest {
         assertEquals(reported.sorted(), reported)
     }
 
-    @Test fun `ordinary cold startup still honors automatic library scanning`() = runBlocking {
+    @Test fun `cold startup opens cached lists and starts automatic scanning separately`() = runBlocking {
         assertEquals(BootResult.Success, initializer.run { _, _, _ -> })
-        verify(exactly = 1) { actions.rescanSystemList(scanDisk = true, onProgress = any(), onComplete = any()) }
+        verify(exactly = 1) { actions.rescanSystemList(scanDisk = false, onProgress = any(), onComplete = any()) }
+        verify(exactly = 1) { refresh.start(temporaryFolder.root, romDirectory, 0) }
         verify(exactly = 0) { games.restoreBookmark(any(), any()) }
         assertEquals(LauncherScreen.SystemList, nav.currentScreen)
     }
@@ -135,7 +140,7 @@ class BootInitializerReturnTest {
         val newProcess = ProcessSession()
         val cold = newInitializer(newProcess, BrowseSession(newProcess, paths, nav, games, systems))
         assertEquals(BootResult.Success, cold.run { _, _, _ -> })
-        verify(exactly = 2) { actions.rescanSystemList(scanDisk = true, onProgress = any(), onComplete = any()) }
+        verify(exactly = 2) { refresh.start(temporaryFolder.root, romDirectory, 0) }
         verify(exactly = 0) { games.restoreBookmark(any(), any()) }
         assertEquals(LauncherScreen.SystemList, nav.currentScreen)
     }
@@ -146,15 +151,19 @@ class BootInitializerReturnTest {
         assertEquals(BootResult.Success, initializer.run { _, _, _ -> })
         verify(exactly = 0) { actions.rescanSystemList(scanDisk = true, onProgress = any(), onComplete = any()) }
         verify(exactly = 2) { actions.rescanSystemList(scanDisk = false, onProgress = any(), onComplete = any()) }
+        verify(exactly = 0) { refresh.start(any(), any(), any()) }
     }
 
     @Test fun `changing ROM directories invalidates both scan and navigation reuse`() = runBlocking {
+        val original = paths.romDir
         assertEquals(BootResult.Success, initializer.run { _, _, _ -> })
         nav.push(LauncherScreen.GameList)
         session.save()
-        every { paths.romDir } returns File(temporaryFolder.root, "OtherRoms").apply { mkdirs() }
+        val other = File(temporaryFolder.root, "OtherRoms").apply { mkdirs() }
+        every { paths.romDir } returns other
         assertEquals(BootResult.Success, initializer.run { _, _, _ -> })
-        verify(exactly = 2) { actions.rescanSystemList(scanDisk = true, onProgress = any(), onComplete = any()) }
+        verify(exactly = 1) { refresh.start(temporaryFolder.root, original, 0) }
+        verify(exactly = 1) { refresh.start(temporaryFolder.root, other, 0) }
         verify(exactly = 0) { games.restoreBookmark(any(), any()) }
         assertEquals(LauncherScreen.SystemList, nav.currentScreen)
         assertNull(session.pending())
@@ -169,15 +178,15 @@ class BootInitializerReturnTest {
         val finishFirst = completions.receive()
         val recreated = newInitializer(processSession, session)
         val second = async(start = CoroutineStart.UNDISPATCHED) { recreated.run { _, _, _ -> } }
-        verify(exactly = 1) { actions.rescanSystemList(scanDisk = true, onProgress = any(), onComplete = any()) }
-        verify(exactly = 0) { actions.rescanSystemList(scanDisk = false, onProgress = any(), onComplete = any()) }
+        verify(exactly = 0) { refresh.start(any(), any(), any()) }
+        verify(exactly = 1) { actions.rescanSystemList(scanDisk = false, onProgress = any(), onComplete = any()) }
         finishFirst()
         assertEquals(BootResult.Success, first.await())
         completions.receive().invoke()
         assertEquals(BootResult.Success, second.await())
         completions.close()
-        verify(exactly = 1) { actions.rescanSystemList(scanDisk = true, onProgress = any(), onComplete = any()) }
-        verify(exactly = 1) { actions.rescanSystemList(scanDisk = false, onProgress = any(), onComplete = any()) }
+        verify(exactly = 1) { refresh.start(temporaryFolder.root, romDirectory, 0) }
+        verify(exactly = 2) { actions.rescanSystemList(scanDisk = false, onProgress = any(), onComplete = any()) }
     }
 
     @Test fun `cancelled initialization does not suppress scanning on retry`() = runBlocking {
@@ -195,6 +204,7 @@ class BootInitializerReturnTest {
             arg<(() -> Unit)?>(3)?.invoke()
         }
         assertEquals(BootResult.Success, initializer.run { _, _, _ -> })
-        verify(exactly = 2) { actions.rescanSystemList(scanDisk = true, onProgress = any(), onComplete = any()) }
+        verify(exactly = 1) { refresh.start(temporaryFolder.root, romDirectory, 0) }
+        verify(exactly = 2) { actions.rescanSystemList(scanDisk = false, onProgress = any(), onComplete = any()) }
     }
 }
