@@ -22,7 +22,8 @@
     <string name="order_alphabetical">A-Z</string>
     <string name="order_last_played">Last Played</string>
     <string name="order_manual">Manual</string>
-    <string name="order_default">Default</string>
+    <string name="order_default">Global</string>
+    <string name="order_default_with_value">%1$s (%2$s)</string>
     <string name="app_name" translatable="false">Piannoli</string>
     <string name="multidisc_loading">Reading Discs...</string>
     <string name="multidisc_choose">Choose Disc</string>

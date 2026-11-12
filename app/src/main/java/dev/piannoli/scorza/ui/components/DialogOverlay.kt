@@ -452,7 +452,11 @@ fun DialogOverlay(
                     if (row == dev.piannoli.scorza.ui.quickmenu.QuickMenuRow.ORDER_BY) {
                         PillRowKeyValue(
                             label = label,
-                            value = stringResource(dialogState.order.labelRes),
+                            value = if (dialogState.order == dev.piannoli.scorza.settings.LibraryOrder.DEFAULT) {
+                                stringResource(R.string.order_default_with_value,
+                                    stringResource(dialogState.order.labelRes),
+                                    stringResource(dialogState.defaultOrder.labelRes))
+                            } else stringResource(dialogState.order.labelRes),
                             touchCycle = true,
                             isSelected = isSelected,
                             fontSize = listFontSize,

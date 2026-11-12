@@ -166,6 +166,7 @@ sealed interface DialogState {
         val conflictCount: Int = 0,
         val syncErrorCount: Int = 0,
         val order: dev.piannoli.scorza.settings.LibraryOrder = dev.piannoli.scorza.settings.LibraryOrder.DEFAULT,
+        val defaultOrder: dev.piannoli.scorza.settings.LibraryOrder = dev.piannoli.scorza.settings.LibraryOrder.ALPHABETICAL,
         val scrapeListTitle: String? = null,
         val listTitle: String? = null,
     ) : DialogState

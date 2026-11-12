@@ -73,6 +73,22 @@ class GameListFooterTest {
         compose.onAllNodesWithText("CHANGE").assertCountEquals(0)
     }
 
+    @Test fun `quick menu default order displays the configured order without decorating explicit choices`() {
+        val dialog = mutableStateOf(DialogState.QuickMenu(rows = listOf(QuickMenuRow.ORDER_BY)))
+        compose.setContent { DialogOverlay(dialog.value, null, 0, 22.sp, 32.sp, 8.dp) }
+        compose.onNodeWithText("Global (A-Z)").assertIsDisplayed()
+        compose.runOnIdle {
+            dialog.value = dialog.value.copy(defaultOrder = dev.piannoli.scorza.settings.LibraryOrder.LAST_PLAYED)
+        }
+        compose.onNodeWithText("Global (Last Played)").assertIsDisplayed()
+        compose.onAllNodesWithText("Global (A-Z)").assertCountEquals(0)
+        compose.runOnIdle {
+            dialog.value = dialog.value.copy(order = dev.piannoli.scorza.settings.LibraryOrder.MANUAL)
+        }
+        compose.onNodeWithText("Manual").assertIsDisplayed()
+        compose.onAllNodesWithText("Global (Last Played)").assertCountEquals(0)
+    }
+
     @Test fun `quick menu scrape label reflects list title or whole library`() {
         val dialog = mutableStateOf(DialogState.QuickMenu(
             rows = listOf(QuickMenuRow.SCRAPING, QuickMenuRow.SCRAPE_SYSTEMS),

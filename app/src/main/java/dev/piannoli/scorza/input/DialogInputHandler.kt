@@ -229,6 +229,7 @@ class DialogInputHandler @Inject constructor(
                 nav.currentScreen == LauncherScreen.SystemList -> systemListViewModel.selectedOrder()
                 else -> gameListViewModel.selectedOrder()
             },
+            defaultOrder = settings.defaultLibraryOrder,
         )
     }
 
@@ -581,7 +582,7 @@ class DialogInputHandler @Inject constructor(
             LauncherScreen.SystemList -> systemListViewModel.cycleOrder(direction)
             else -> return
         }
-        nav.dialogState.value = ds.copy(order = order)
+        nav.dialogState.value = ds.copy(order = order, defaultOrder = settings.defaultLibraryOrder)
     }
 
     override fun onConfirm(): Boolean {
