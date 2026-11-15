@@ -43,7 +43,7 @@ import org.robolectric.annotation.Config
 class UiActivityTest {
     @get:Rule val compose = createAndroidComposeRule<androidx.activity.ComponentActivity>()
 
-    @Test fun `marquee subscribes only while selected overflowing and animations are enabled`() {
+    @Test fun `marquee subscribes only while selected and overflowing regardless of navigation animations`() {
         val activity = MutableStateFlow(true)
         val selected = mutableStateOf(true)
         val enabled = mutableStateOf(true)
@@ -70,6 +70,9 @@ class UiActivityTest {
         assertEquals(1, activity.subscriptionCount.value)
         compose.runOnIdle { enabled.value = false }
         compose.waitForIdle()
+        assertEquals(1, activity.subscriptionCount.value)
+        compose.runOnIdle { overflowing.value = false }
+        compose.waitForIdle()
         assertEquals(0, activity.subscriptionCount.value)
     }
 
@@ -93,12 +96,12 @@ class UiActivityTest {
         compose.runOnIdle { assertEquals(1, source.subscriptionCount.value) }
     }
 
-    @Test fun `marquee cancels on focus loss and resumes on return`() {
+    @Test fun `marquee scrolls with navigation animations disabled and pauses on focus loss`() {
         val active = MutableStateFlow(false)
         lateinit var scroll: ScrollState
         compose.mainClock.autoAdvance = false
         compose.setContent {
-            CompositionLocalProvider(LocalUiActive provides active) {
+            CompositionLocalProvider(LocalUiActive provides active, LocalAnimationsEnabled provides false) {
                 scroll = rememberScrollState()
                 Box(Modifier.size(80.dp, 20.dp).horizontalScroll(scroll)) {
                     Spacer(Modifier.width(500.dp))

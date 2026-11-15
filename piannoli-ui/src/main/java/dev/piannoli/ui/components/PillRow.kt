@@ -116,9 +116,8 @@ const val MarqueeInitialDelayMs = 800L
 @Composable
 fun MarqueeEffect(scrollState: ScrollState, active: Boolean, key: Any = active, initialDelayMs: Long = MarqueeInitialDelayMs) {
     val uiActive = LocalUiActive.current
-    val animationsEnabled = LocalAnimationsEnabled.current
     val overflow = scrollState.maxValue in 1 until Int.MAX_VALUE
-    if (!active || !animationsEnabled || !overflow) {
+    if (!active || !overflow) {
         if (scrollState.value != 0 && uiActive.value) {
             LaunchedEffect(key, scrollState) { scrollState.scrollTo(0) }
         }
