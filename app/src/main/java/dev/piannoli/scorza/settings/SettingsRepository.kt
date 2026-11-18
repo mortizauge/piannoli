@@ -324,6 +324,22 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         get() = ScrapeFailBehavior.fromString(jsonRead { optString(KEY_SCRAPE_FAIL_BEHAVIOR) })
         set(value) = jsonWrite { put(KEY_SCRAPE_FAIL_BEHAVIOR, value.name) }
 
+    var scraperSource: ScraperSource
+        get() = ScraperSource.fromString(jsonRead { optString("scraper_source") })
+        set(value) = jsonWrite { put("scraper_source", value.name) }
+
+    var screenScraperMedia: ScreenScraperMedia
+        get() = ScreenScraperMedia.fromString(jsonRead { optString("screenscraper_media") })
+        set(value) = jsonWrite { put("screenscraper_media", value.name) }
+
+    var screenScraperUsername: String
+        get() = credPrefs.getString("screenscraper_username", "").orEmpty()
+        set(value) { credPrefs.edit().putString("screenscraper_username", value).apply() }
+
+    var screenScraperPassword: String
+        get() = credPrefs.getString("screenscraper_password", "").orEmpty()
+        set(value) { credPrefs.edit().putString("screenscraper_password", value).apply() }
+
     var keyboardType: KeyboardType
         get() = KeyboardType.fromString(jsonRead { optString(KEY_KEYBOARD_TYPE) })
         set(value) = jsonWrite { put(KEY_KEYBOARD_TYPE, value.name) }

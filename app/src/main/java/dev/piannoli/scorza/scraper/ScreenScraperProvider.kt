@@ -1,16 +1,19 @@
 package dev.piannoli.scorza.scraper
 
 import dev.piannoli.scorza.BuildConfig
+import dev.piannoli.scorza.settings.ScreenScraperMedia
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
 import java.time.Instant
 import java.time.ZoneId
 import java.util.concurrent.TimeUnit
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -35,6 +38,18 @@ class ScreenScraperProvider internal constructor(
     private val quotas = mutableMapOf<String, Quota>()
     private fun quota(account: ScraperAccount): Quota = quotas.getOrPut(account.username) { Quota() }
 
+    @Synchronized
+    override fun requestDelayMillis(account: ScraperAccount): Long =
+        (quota(account).nextRequestAt - now()).coerceAtLeast(0L)
+
+    override fun authenticate(account: ScraperAccount) {
+        val user = json(account, "ssuserInfos.php").optJSONObject("ssuser")
+            ?: throw ScraperException(ScraperError.AUTHENTICATION)
+        if (user.optString("numid").toLongOrNull()?.let { it > 0 } != true) {
+            throw ScraperException(ScraperError.ACCOUNT_AUTHENTICATION)
+        }
+    }
+
     override fun systems(account: ScraperAccount): List<ScraperSystem> {
         try {
             val response = json(account, "systemesListe.php")
@@ -46,6 +61,7 @@ class ScreenScraperProvider internal constructor(
                 ScraperSystem(
                     system.getInt("id"),
                     names.optString("nom_eu").ifBlank { names.getString("nom_us") },
+                    names.keys().asSequence().map { names.optString(it) }.filter { it.isNotBlank() }.toList(),
                 )
             }.sortedBy { it.name.lowercase() }
         } catch (e: JSONException) {
@@ -53,17 +69,26 @@ class ScreenScraperProvider internal constructor(
         }
     }
 
-    override fun search(account: ScraperAccount, system: ScraperSystem, query: String): List<ScraperMatch> {
+    override fun search(account: ScraperAccount, system: ScraperSystem, query: String): List<ScraperMatch> =
+        search(account, system, query, ScreenScraperMedia.COVER)
+
+    override fun search(
+        account: ScraperAccount, system: ScraperSystem, query: String, media: ScreenScraperMedia,
+    ): List<ScraperMatch> {
         require(query.isNotBlank())
         val response = try {
             json(account, "jeuRecherche.php", mapOf("systemeid" to system.id.toString(), "recherche" to query))
         } catch (e: NoMatchesException) {
             return emptyList()
         }
-        return parseMatches(response, system)
+        return parseMatches(response, system, media)
     }
 
-    override fun download(account: ScraperAccount, match: ScraperMatch): ByteArray {
+    override fun download(account: ScraperAccount, match: ScraperMatch): ByteArray = media(account, match, 1024)
+
+    override fun preview(account: ScraperAccount, match: ScraperMatch): ByteArray = media(account, match, 320)
+
+    private fun media(account: ScraperAccount, match: ScraperMatch, maxSize: Int): ByteArray {
         val art = match.artwork ?: throw ScraperException(ScraperError.NO_ARTWORK)
         val media = if (art.region.isBlank()) art.type else "${art.type}(${art.region})"
         return request(account, "mediaJeu.php", mapOf(
@@ -71,8 +96,8 @@ class ScreenScraperProvider internal constructor(
             "systemeid" to match.system.id.toString(),
             "media" to media,
             "outputformat" to "png",
-            "maxwidth" to "1024",
-            "maxheight" to "1024",
+            "maxwidth" to maxSize.toString(),
+            "maxheight" to maxSize.toString(),
         ), image = true)
     }
 
@@ -117,18 +142,24 @@ class ScreenScraperProvider internal constructor(
                         if (endpoint == "jeuRecherche.php") throw NoMatchesException()
                         throw ScraperException(if (image) ScraperError.NO_ARTWORK else ScraperError.UNAVAILABLE)
                     }
-                    401, 403 -> throw ScraperException(ScraperError.AUTHENTICATION)
+                    401, 403 -> throw ScraperException(authenticationError(response))
                     429 -> {
                         quota.nextRequestAt = now() + 60_000
                         throw ScraperException(ScraperError.RATE_LIMIT)
                     }
+
                     430, 431 -> {
                         quota.dailyLimitUntil = nextDay()
                         throw ScraperException(ScraperError.DAILY_LIMIT)
                     }
                 }
                 if (!response.isSuccessful) throw ScraperException(ScraperError.UNAVAILABLE)
-                val limit = if (image) 10 * 1024 * 1024 else 4 * 1024 * 1024
+                val limit = when {
+                    image -> 10 * 1024 * 1024
+                    // The system catalogue includes media URLs and exceeds 4 MiB.
+                    endpoint == "systemesListe.php" -> 8 * 1024 * 1024
+                    else -> 4 * 1024 * 1024
+                }
                 return response.readScraperBytes(limit)
             }
         } catch (e: ScraperException) {
@@ -138,6 +169,15 @@ class ScreenScraperProvider internal constructor(
         } catch (e: IOException) {
             // OkHttp exception messages can contain credential-bearing URLs.
             throw ScraperException(ScraperError.NETWORK)
+        }
+    }
+
+    private fun authenticationError(response: Response): ScraperError {
+        val reason = response.readScraperBytes(8192).toString(Charsets.UTF_8).lowercase(Locale.ROOT)
+        return when {
+            "veloppeur" in reason || "developer" in reason -> ScraperError.DEVELOPER_AUTHENTICATION
+            "utilisateur" in reason || "user credentials" in reason -> ScraperError.ACCOUNT_AUTHENTICATION
+            else -> ScraperError.AUTHENTICATION
         }
     }
 
@@ -160,7 +200,9 @@ class ScreenScraperProvider internal constructor(
     private class NoMatchesException : IOException()
 
     companion object {
-        internal fun parseMatches(response: JSONObject, system: ScraperSystem): List<ScraperMatch> {
+        internal fun parseMatches(
+            response: JSONObject, system: ScraperSystem, mediaType: ScreenScraperMedia = ScreenScraperMedia.COVER,
+        ): List<ScraperMatch> {
             try {
                 val games = response.getJSONArray("jeux")
                 return List(games.length()) { index ->
@@ -174,7 +216,7 @@ class ScreenScraperProvider internal constructor(
                         ?: throw ScraperException(ScraperError.INVALID_RESPONSE)
                     val media = game.optJSONArray("medias")
                     val covers = if (media == null) emptyList() else
-                        List(media.length()) { media.getJSONObject(it) }.filter { it.optString("type") == "box-2D" }
+                        List(media.length()) { media.getJSONObject(it) }.filter { it.optString("type") == mediaType.apiType }
                     val cover = listOf("wor", "us", "eu", "jp").firstNotNullOfOrNull { region ->
                         covers.firstOrNull { it.optString("region") == region }
                     } ?: covers.firstOrNull()

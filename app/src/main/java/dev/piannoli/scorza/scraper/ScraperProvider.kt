@@ -4,18 +4,24 @@ import okhttp3.Response
 import java.io.ByteArrayOutputStream
 
 data class ScraperAccount(val username: String, val password: String)
-data class ScraperSystem(val id: Int, val name: String)
+data class ScraperSystem(val id: Int, val name: String, val aliases: List<String> = emptyList())
+interface ScrapeCandidate {
+    val id: Int
+    val name: String
+}
 data class ScraperArtwork(val type: String, val region: String)
 data class ScraperMatch(
-    val id: Int,
-    val name: String,
+    override val id: Int,
+    override val name: String,
     val system: ScraperSystem,
     val artwork: ScraperArtwork?,
-)
+) : ScrapeCandidate
 
 enum class ScraperError {
     NOT_CONFIGURED, ACCOUNT_REQUIRED, AUTHENTICATION, RATE_LIMIT, DAILY_LIMIT,
     UNAVAILABLE, INVALID_RESPONSE, NETWORK, NO_ARTWORK, EXISTING_ARTWORK, STORAGE,
+    SYSTEM_UNSUPPORTED, PLATFORM_UNSUPPORTED,
+    ACCOUNT_AUTHENTICATION, DEVELOPER_AUTHENTICATION,
 }
 
 class ScraperException(val error: ScraperError) : java.io.IOException(error.name)
@@ -25,6 +31,13 @@ interface ScraperProvider {
     fun systems(account: ScraperAccount): List<ScraperSystem>
     fun search(account: ScraperAccount, system: ScraperSystem, query: String): List<ScraperMatch>
     fun download(account: ScraperAccount, match: ScraperMatch): ByteArray
+    fun preview(account: ScraperAccount, match: ScraperMatch): ByteArray
+    fun authenticate(account: ScraperAccount)
+    fun requestDelayMillis(account: ScraperAccount): Long = 0L
+    fun search(
+        account: ScraperAccount, system: ScraperSystem, query: String,
+        media: dev.piannoli.scorza.settings.ScreenScraperMedia,
+    ): List<ScraperMatch>
 }
 
 internal fun Response.readScraperBytes(limit: Int): ByteArray {

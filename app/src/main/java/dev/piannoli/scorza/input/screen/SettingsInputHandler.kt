@@ -112,6 +112,7 @@ class SettingsInputHandler @Inject constructor(
             "system_artwork" -> settingsViewModel.enterSubCategory("system_artwork", dev.piannoli.scorza.R.string.setting_system_artwork)
             "setup_scrapers" -> settingsViewModel.enterSubCategory("setup_scrapers", dev.piannoli.scorza.R.string.settings_setup_scrapers)
             "steamgrid_setup" -> scraper.openSteamGridSetup()
+            "screenscraper_setup" -> scraper.openScreenScraperSetup()
             "integrations_ra" -> {
                 if (settings.raToken.isNotEmpty()) nav.dialogState.value = DialogState.RAAccount(username = settings.raUsername)
                 else settingsViewModel.enterSubCategory("retroachievements", dev.piannoli.scorza.R.string.settings_retroachievements)

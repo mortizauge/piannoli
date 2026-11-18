@@ -14,6 +14,7 @@ import dev.piannoli.scorza.model.Platform
 import dev.piannoli.scorza.navigation.NavigationController
 import dev.piannoli.scorza.settings.SettingsRepository
 import dev.piannoli.scorza.settings.ScrapeFailBehavior
+import dev.piannoli.scorza.settings.ScraperSource
 import dev.piannoli.scorza.ui.screens.DialogState
 import dev.piannoli.scorza.ui.viewmodel.GameListViewModel
 import kotlinx.coroutines.CancellationException
@@ -44,6 +45,7 @@ class BulkScraperController @Inject constructor(
     private val artwork: ScrapedArtworkStore,
     private val games: GameListViewModel,
     private val apps: AppsRepository,
+    private val screenScraper: ScraperProvider,
 ) {
     private enum class Page { CONFIG, RUNNING, FINISHED }
     private var page = Page.CONFIG
@@ -61,6 +63,8 @@ class BulkScraperController @Inject constructor(
     private var skipped = 0
     private var failed = 0
     private var key = ""
+    private var useSteamGrid = true
+    private var screenSession: ScreenScraperSession? = null
     private var failBehavior = ScrapeFailBehavior.DEFAULT
     private var actions: List<() -> Unit> = emptyList()
     private var job: Job? = null
@@ -176,10 +180,27 @@ class BulkScraperController @Inject constructor(
             nav.dialogState.value = DialogState.ScraperStatus(context.getString(R.string.bulk_no_platforms), bulk = true)
             return
         }
-        key = settings.steamGridApiKey
-        if (key.isBlank()) {
-            nav.dialogState.value = DialogState.ScraperStatus(context.getString(R.string.steamgrid_key_required), bulk = true)
-            return
+        useSteamGrid = settings.scraperSource == ScraperSource.STEAMGRIDDB
+        screenSession = null
+        if (useSteamGrid) {
+            key = settings.steamGridApiKey
+            if (key.isBlank()) {
+                nav.dialogState.value = DialogState.ScraperStatus(context.getString(R.string.steamgrid_key_required), bulk = true)
+                return
+            }
+        } else {
+            if (systemPlatforms != null) {
+                nav.dialogState.value = DialogState.ScraperStatus(context.getString(R.string.screenscraper_system_unsupported), bulk = true)
+                return
+            }
+            val session = ScreenScraperSession(screenScraper, settings)
+            try {
+                session.validate()
+            } catch (e: ScraperException) {
+                nav.dialogState.value = DialogState.ScraperStatus(context.getString(errorString(e.error)), bulk = true)
+                return
+            }
+            screenSession = session
         }
         queue = emptyList()
         failBehavior = settings.scrapeFailBehavior
@@ -225,6 +246,11 @@ class BulkScraperController @Inject constructor(
                 continue
             }
             progress(game)
+            if (!useSteamGrid) {
+                if (!advanceScreenGame(game)) return
+                index++
+                continue
+            }
             var matches = withContext(ioContext) { steam.search(key, game.displayName) }
             coroutineContext.ensureActive()
             if (!automatic) {
@@ -246,6 +272,44 @@ class BulkScraperController @Inject constructor(
         }
 
         finish(context.getString(R.string.bulk_complete), autoDismiss = true)
+    }
+
+    private suspend fun advanceScreenGame(game: ScrapeGame): Boolean {
+        val session = requireNotNull(screenSession)
+        var matches = withContext(ioContext) { session.search(game.platformTag, game.displayName) }
+        coroutineContext.ensureActive()
+        val cleaned = ScrapeTitleMatcher.cleanedQuery(game.displayName)
+        val exact = ScrapeTitleMatcher.exact(game.displayName, matches)?.takeIf { it.artwork != null }
+        if (failBehavior.retry && cleaned.isNotBlank() && cleaned != game.displayName &&
+            (if (automatic) exact == null else matches.isEmpty())
+        ) {
+            val retried = withContext(ioContext) { session.search(game.platformTag, cleaned) }
+            coroutineContext.ensureActive()
+            matches = (matches + retried).distinctBy { it.id }
+        }
+        if (!automatic) {
+            menu(context.getString(R.string.bulk_game, index + 1, queue.size, game.displayName),
+                matches.filter { it.artwork != null }.map { match ->
+                    "${match.name}\t${match.system.name}" to {
+                        request {
+                            installScreen(game, match)
+                            index++
+                            clearGameHistory()
+                            advance()
+                        }
+                    }
+                } + skipRow())
+            return false
+        }
+        val chosen = exact ?: ScrapeTitleMatcher.exact(game.displayName, matches)?.takeIf { it.artwork != null }
+            ?: if (failBehavior.bestMatch) ScrapeTitleMatcher.closest(game.displayName, matches.filter { it.artwork != null }) else null
+        if (chosen == null) skipped++ else installScreen(game, chosen)
+        return true
+    }
+
+    private suspend fun installScreen(game: ScrapeGame, match: ScraperMatch) {
+        val bytes = withContext(ioContext) { requireNotNull(screenSession).download(match) }
+        saveArtwork(game, bytes)
     }
 
     private suspend fun automaticCover(game: ScrapeGame, initial: List<SteamGridGame>): SteamGridCover? {
@@ -321,6 +385,10 @@ class BulkScraperController @Inject constructor(
 
     private suspend fun install(game: ScrapeGame, cover: SteamGridCover) {
         val bytes = withContext(ioContext) { steam.download(cover) }
+        saveArtwork(game, bytes)
+    }
+
+    private suspend fun saveArtwork(game: ScrapeGame, bytes: ByteArray) {
         coroutineContext.ensureActive()
         withContext(ioContext) {
             coroutineContext.ensureActive()
@@ -379,16 +447,35 @@ class BulkScraperController @Inject constructor(
         }
     }
 
-    private fun errorString(error: ScraperError): Int = when (error) {
-        ScraperError.ACCOUNT_REQUIRED -> R.string.steamgrid_key_required
-        ScraperError.AUTHENTICATION -> R.string.steamgrid_authentication
-        ScraperError.RATE_LIMIT -> R.string.steamgrid_rate_limit
-        ScraperError.NETWORK -> R.string.steamgrid_network
-        ScraperError.UNAVAILABLE -> R.string.steamgrid_unavailable
-        ScraperError.STORAGE -> R.string.scraper_storage
-        ScraperError.EXISTING_ARTWORK -> R.string.scraper_existing_artwork
-        ScraperError.NO_ARTWORK -> R.string.scraper_no_artwork
-        else -> R.string.scraper_invalid_response
+    private fun errorString(error: ScraperError): Int = when {
+        !useSteamGrid -> when (error) {
+            ScraperError.NOT_CONFIGURED -> R.string.scraper_not_configured
+            ScraperError.ACCOUNT_REQUIRED -> R.string.scraper_account_required
+            ScraperError.AUTHENTICATION -> R.string.scraper_authentication
+            ScraperError.ACCOUNT_AUTHENTICATION -> R.string.screenscraper_incorrect_credentials
+            ScraperError.DEVELOPER_AUTHENTICATION -> R.string.screenscraper_developer_authentication
+            ScraperError.RATE_LIMIT -> R.string.scraper_rate_limit
+            ScraperError.DAILY_LIMIT -> R.string.scraper_daily_limit
+            ScraperError.NETWORK -> R.string.scraper_network
+            ScraperError.UNAVAILABLE -> R.string.scraper_unavailable
+            ScraperError.SYSTEM_UNSUPPORTED -> R.string.screenscraper_system_unsupported
+            ScraperError.PLATFORM_UNSUPPORTED -> R.string.screenscraper_platform_unsupported
+            ScraperError.NO_ARTWORK -> R.string.scraper_no_artwork
+            ScraperError.STORAGE -> R.string.scraper_storage
+            ScraperError.EXISTING_ARTWORK -> R.string.scraper_existing_artwork
+            ScraperError.INVALID_RESPONSE -> R.string.scraper_invalid_response
+        }
+        else -> when (error) {
+            ScraperError.ACCOUNT_REQUIRED -> R.string.steamgrid_key_required
+            ScraperError.AUTHENTICATION -> R.string.steamgrid_authentication
+            ScraperError.RATE_LIMIT -> R.string.steamgrid_rate_limit
+            ScraperError.NETWORK -> R.string.steamgrid_network
+            ScraperError.UNAVAILABLE -> R.string.steamgrid_unavailable
+            ScraperError.STORAGE -> R.string.scraper_storage
+            ScraperError.EXISTING_ARTWORK -> R.string.scraper_existing_artwork
+            ScraperError.NO_ARTWORK -> R.string.scraper_no_artwork
+            else -> R.string.scraper_invalid_response
+        }
     }
 
     internal fun exactMatch(title: String, matches: List<SteamGridGame>): SteamGridGame? {

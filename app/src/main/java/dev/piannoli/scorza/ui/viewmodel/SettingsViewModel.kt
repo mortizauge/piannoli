@@ -252,6 +252,7 @@ class SettingsViewModel @Inject constructor(
         val keyboardType: KeyboardType,
         val piannoliBindings: Map<dev.piannoli.ui.MenuAction, dev.piannoli.ui.MenuAction>,
         val scrapeFailBehavior: ScrapeFailBehavior,
+        val scraperSource: dev.piannoli.scorza.settings.ScraperSource,
         val navigationSound: Boolean,
         val hapticFeedback: Boolean,
         val controllerNotifications: Boolean,
@@ -512,6 +513,10 @@ class SettingsViewModel @Inject constructor(
                 val entries = ScrapeFailBehavior.entries
                 val index = entries.indexOf(settings.scrapeFailBehavior)
                 settings.scrapeFailBehavior = entries[Math.floorMod(index + direction, entries.size)]
+            }
+            "scraper_source" -> {
+                val entries = dev.piannoli.scorza.settings.ScraperSource.entries
+                settings.scraperSource = entries[Math.floorMod(entries.indexOf(settings.scraperSource) + direction, entries.size)]
             }
             "navigation_sound" -> settings.navigationSound = !settings.navigationSound
             "animations" -> {
@@ -787,6 +792,7 @@ class SettingsViewModel @Inject constructor(
         keyboardType = settings.keyboardType,
         piannoliBindings = settings.piannoliBindings,
         scrapeFailBehavior = settings.scrapeFailBehavior,
+        scraperSource = settings.scraperSource,
         navigationSound = settings.navigationSound,
         hapticFeedback = settings.hapticFeedback,
         controllerNotifications = settings.controllerNotifications,
@@ -841,6 +847,7 @@ class SettingsViewModel @Inject constructor(
         settings.keyboardType = snap.keyboardType
         settings.piannoliBindings = snap.piannoliBindings
         settings.scrapeFailBehavior = snap.scrapeFailBehavior
+        settings.scraperSource = snap.scraperSource
         settings.navigationSound = snap.navigationSound
         settings.hapticFeedback = snap.hapticFeedback
         settings.controllerNotifications = snap.controllerNotifications
@@ -1065,6 +1072,7 @@ class SettingsViewModel @Inject constructor(
             }
         }
         "artwork" -> buildList {
+            add(SettingsItem("scraper_source", R.string.setting_scraper, valueText = settings.scraperSource.label))
             add(SettingsItem("game_artwork", R.string.settings_game_artwork, isEditable = true))
             add(SettingsItem("system_artwork", R.string.setting_system_artwork, isEditable = true))
             val failBehaviorRes = when (settings.scrapeFailBehavior) {
@@ -1102,6 +1110,7 @@ class SettingsViewModel @Inject constructor(
         }
         "setup_scrapers" -> listOf(
             SettingsItem("steamgrid_setup", R.string.steamgrid_setup, isEditable = true),
+            SettingsItem("screenscraper_setup", R.string.screenscraper_setup, isEditable = true),
         )
         "romm" -> buildList {
             if (rommStore.token.isNullOrEmpty()) {

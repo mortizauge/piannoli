@@ -6,8 +6,16 @@ import dev.piannoli.scorza.di.AppFonts
 import javax.inject.Inject
 
 @HiltAndroidApp
-class PiannoliApp : Application() {
+class PiannoliApp : Application(), coil.ImageLoaderFactory {
     @Inject lateinit var appFonts: AppFonts
+    @Inject lateinit var scraperProvider: dev.piannoli.scorza.scraper.ScraperProvider
+    @Inject lateinit var settings: dev.piannoli.scorza.settings.SettingsRepository
+
+    override fun newImageLoader(): coil.ImageLoader = coil.ImageLoader.Builder(this)
+        .components {
+            add(dev.piannoli.scorza.scraper.ScreenScraperPreviewFetcher.Factory(scraperProvider, settings))
+        }
+        .build()
 
     override fun attachBaseContext(base: android.content.Context) {
         super.attachBaseContext(dev.piannoli.scorza.i18n.LocaleOverride.wrap(base))

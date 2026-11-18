@@ -52,6 +52,7 @@ class BulkScraperControllerTest {
     private val artwork = mockk<ScrapedArtworkStore>()
     private val games = mockk<GameListViewModel>(relaxed = true)
     private val apps = mockk<dev.piannoli.scorza.db.AppsRepository>()
+    private val screen = mockk<ScraperProvider>()
     private lateinit var context: Context
     private lateinit var controller: BulkScraperController
     private val game = Rom(1, File("SNES/Game.sfc"), "SNES", "Game")
@@ -64,6 +65,7 @@ class BulkScraperControllerTest {
         Dispatchers.setMain(dispatcher)
         context = ApplicationProvider.getApplicationContext()
         every { settings.steamGridApiKey } returns "key"
+        every { settings.scraperSource } returns dev.piannoli.scorza.settings.ScraperSource.STEAMGRIDDB
         every { settings.scrapeFailBehavior } returns ScrapeFailBehavior.DEFAULT
         every { roms.platformCounts() } returns linkedMapOf("SNES" to 1, "NES" to 1)
         every { roms.visiblePlatformCounts() } returns linkedMapOf("SNES" to 1, "NES" to 1)
@@ -75,7 +77,7 @@ class BulkScraperControllerTest {
         every { steam.covers("key", 10, 0) } returns SteamGridCovers(listOf(cover), false)
         every { steam.download(cover) } returns bytes
         every { artwork.install(any(), bytes) } returns File("Game.png")
-        controller = BulkScraperController(context, scope, nav, settings, roms, platforms, steam, artwork, games, apps)
+        controller = BulkScraperController(context, scope, nav, settings, roms, platforms, steam, artwork, games, apps, screen)
         controller.open {}
     }
 
@@ -94,6 +96,59 @@ class BulkScraperControllerTest {
     }
 
     private fun selectFirst() = controller.confirm(nav.dialogState.value as DialogState.ScraperMenu)
+
+    private fun useScreenScraper() {
+        every { settings.scraperSource } returns dev.piannoli.scorza.settings.ScraperSource.SCREENSCRAPER
+        every { settings.screenScraperUsername } returns "user"
+        every { settings.screenScraperPassword } returns "password"
+        every { settings.screenScraperMedia } returns dev.piannoli.scorza.settings.ScreenScraperMedia.TITLE_SCREEN
+        every { screen.configured } returns true
+        every { screen.requestDelayMillis(any()) } returns 0L
+        val system = ScraperSystem(4, "Super Nintendo")
+        val result = ScraperMatch(10, "Game", system, ScraperArtwork("sstitle", "wor"))
+        every { screen.systems(any()) } returns listOf(system)
+        every { screen.search(any(), system, "Game", dev.piannoli.scorza.settings.ScreenScraperMedia.TITLE_SCREEN) } returns listOf(result)
+        every { screen.download(any(), result) } returns bytes
+    }
+
+    @Test fun `selected ScreenScraper handles library platform and list scopes without SteamGridDB fallback`() = scope.runTest {
+        useScreenScraper()
+        controller.open {}
+        click(R.string.bulk_start)
+        advanceUntilIdle()
+        controller.open("SNES") {}
+        click(R.string.bulk_start)
+        advanceUntilIdle()
+        controller.openList("Favorites", listOf(dev.piannoli.scorza.model.ListItem.RomItem(game))) {}
+        click(R.string.bulk_start)
+        advanceUntilIdle()
+        verify(exactly = 3) { screen.search(any(), any(), "Game", dev.piannoli.scorza.settings.ScreenScraperMedia.TITLE_SCREEN) }
+        verify(exactly = 3) { artwork.install(game, bytes, false) }
+        verify(exactly = 0) { steam.search(any(), any()) }
+    }
+
+    @Test fun `interactive ScreenScraper waits for match confirmation before downloading`() = scope.runTest {
+        useScreenScraper()
+        controller.open("SNES") {}
+        click(R.string.bulk_mode)
+        click(R.string.bulk_start)
+        runCurrent()
+        verify(exactly = 0) { screen.download(any(), any()) }
+        selectFirst()
+        advanceUntilIdle()
+        verify(exactly = 1) { screen.download(any(), any()) }
+        verify(exactly = 1) { artwork.install(game, bytes, false) }
+    }
+
+    @Test fun `ScreenScraper system scope is explicitly unsupported with no fallback`() {
+        useScreenScraper()
+        controller.openSystems(listOf(Platform("SNES", "Super Nintendo", null))) {}
+        click(R.string.bulk_start)
+        assertEquals(context.getString(R.string.screenscraper_system_unsupported),
+            (nav.dialogState.value as DialogState.ScraperStatus).message)
+        verify(exactly = 0) { steam.search(any(), any()) }
+        verify(exactly = 0) { screen.systems(any()) }
+    }
 
     @Test fun `list scraping uses only supplied ROMs and ports without expanding folders or the library`() = scope.runTest {
         val port = dev.piannoli.scorza.model.App(2, dev.piannoli.scorza.model.AppType.PORT, "Game", "dev.port")

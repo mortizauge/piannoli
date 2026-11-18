@@ -74,6 +74,7 @@ sealed interface DialogState {
         val selectedIndex: Int = 0,
         val previews: List<String?> = emptyList(),
         val bulk: Boolean = false,
+        val cycleIndices: Set<Int> = emptySet(),
     ) : DialogState
     data class ScraperStatus(val message: String, val busy: Boolean = false, val bulk: Boolean = false) : DialogState
     data class ScraperInput(

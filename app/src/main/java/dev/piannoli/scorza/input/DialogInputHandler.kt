@@ -516,7 +516,7 @@ class DialogInputHandler @Inject constructor(
         if (ds == DialogState.None) return false
         when (ds) {
             is DialogState.QuickMenu -> cycleQuickOrder(ds, -1)
-            is DialogState.ScraperMenu -> if (ds.bulk) bulkScraper.cycle(ds)
+            is DialogState.ScraperMenu -> if (ds.bulk) bulkScraper.cycle(ds) else scraper.cycle(ds, -1)
             is DialogState.QuickInfo -> {
                 if (ds.addresses.size > 1) {
                     val newIdx = ListNavigation.move(ds.selectedIndex, -1, ds.addresses.size)
@@ -548,7 +548,7 @@ class DialogInputHandler @Inject constructor(
         if (ds == DialogState.None) return false
         when (ds) {
             is DialogState.QuickMenu -> cycleQuickOrder(ds, 1)
-            is DialogState.ScraperMenu -> if (ds.bulk) bulkScraper.cycle(ds)
+            is DialogState.ScraperMenu -> if (ds.bulk) bulkScraper.cycle(ds) else scraper.cycle(ds, 1)
             is DialogState.QuickInfo -> {
                 if (ds.addresses.size > 1) {
                     val newIdx = ListNavigation.move(ds.selectedIndex, 1, ds.addresses.size)

@@ -33,6 +33,45 @@ class SettingsRepositoryTest {
 
     @Test
     @Config(sdk = [28])
+    fun `scraper selection supports preview cancel and save while account stays out of settings JSON`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        Shadows.shadowOf(context as android.app.Application)
+            .grantPermissions(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+        val settings = newRepo()
+        try {
+            settings.sdCardRoot = tmp.root.absolutePath
+            settings.setupCompleted = true
+            val viewModel = SettingsViewModel(settings, AppFonts(context), context, mockk(relaxed = true))
+            viewModel.load()
+            viewModel.enterSubCategory("artwork", R.string.settings_artwork)
+            viewModel.selectItem("scraper_source")
+            assertEquals("SteamGridDB", viewModel.getSelectedItem()?.valueText)
+            viewModel.cycleSelected(1)
+            assertEquals("ScreenScraper", viewModel.getSelectedItem()?.valueText)
+            viewModel.cancel()
+            assertEquals(ScraperSource.STEAMGRIDDB, settings.scraperSource)
+            viewModel.refreshItemsAndSettings()
+            viewModel.cycleSelected(-1)
+            viewModel.save()
+            settings.screenScraperMedia = ScreenScraperMedia.TITLE_SCREEN
+            settings.screenScraperUsername = "test-user"
+            settings.screenScraperPassword = "test-password"
+        } finally { settings.shutdown() }
+        val reopened = newRepo()
+        try {
+            reopened.sdCardRoot = tmp.root.absolutePath
+            assertEquals(ScraperSource.SCREENSCRAPER, reopened.scraperSource)
+            assertEquals(ScreenScraperMedia.TITLE_SCREEN, reopened.screenScraperMedia)
+            assertEquals("test-user", reopened.screenScraperUsername)
+            assertEquals("test-password", reopened.screenScraperPassword)
+            val json = File(tmp.root, "Config/settings.json").readText()
+            assertFalse(json.contains("test-password"))
+            assertFalse(json.contains("test-user"))
+        } finally { reopened.shutdown() }
+    }
+
+    @Test
+    @Config(sdk = [28])
     fun `appearance animations preview all modes support cancel and persist saved changes`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         Shadows.shadowOf(context as android.app.Application)
@@ -595,7 +634,7 @@ class SettingsRepositoryTest {
             viewModel.setCategoryIndex(viewModel.state.value.categories.indexOfFirst { it.key == "library" })
             viewModel.enterCategory()
             viewModel.enterSubCategory("artwork", R.string.settings_artwork)
-            assertEquals(listOf("game_artwork", "system_artwork", "scrape_fail_behavior", "setup_scrapers"),
+            assertEquals(listOf("scraper_source", "game_artwork", "system_artwork", "scrape_fail_behavior", "setup_scrapers"),
                 viewModel.state.value.items.map { it.key })
             viewModel.enterSubCategory("system_artwork", R.string.setting_system_artwork)
             viewModel.selectItem("system_art_scale")

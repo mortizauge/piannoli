@@ -8,15 +8,15 @@ internal object ScrapeTitleMatcher {
 
     private fun normalized(title: String) = TextNormalizer.normalize(title).filter { it.isLetterOrDigit() }
 
-    fun exact(title: String, matches: List<SteamGridGame>): SteamGridGame? {
+    fun <T : ScrapeCandidate> exact(title: String, matches: List<T>): T? {
         val name = normalized(title)
         return matches.distinctBy { it.id }.filter { name.isNotEmpty() && normalized(it.name) == name }.singleOrNull()
     }
 
-    fun closest(title: String, matches: List<SteamGridGame>): SteamGridGame? {
+    fun <T : ScrapeCandidate> closest(title: String, matches: List<T>): T? {
         if (normalized(title).isEmpty()) return null
         return matches.distinctBy { it.id }.filter { normalized(it.name).isNotEmpty() }
-            .sortedWith(compareByDescending<SteamGridGame> { similarity(title, it.name) }.thenBy { it.id })
+            .sortedWith(compareByDescending<T> { similarity(title, it.name) }.thenBy { it.id })
             .firstOrNull()
     }
 

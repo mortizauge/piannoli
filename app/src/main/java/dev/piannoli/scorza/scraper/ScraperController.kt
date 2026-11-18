@@ -12,6 +12,8 @@ import dev.piannoli.scorza.di.IoScope
 import dev.piannoli.scorza.model.Rom
 import dev.piannoli.scorza.navigation.NavigationController
 import dev.piannoli.scorza.settings.SettingsRepository
+import dev.piannoli.scorza.settings.ScraperSource
+import dev.piannoli.scorza.settings.ScreenScraperMedia
 import dev.piannoli.scorza.ui.screens.DialogState
 import dev.piannoli.scorza.ui.viewmodel.GameListViewModel
 import dev.piannoli.ui.components.KeyboardState
@@ -46,11 +48,14 @@ class ScraperController @Inject constructor(
         set(value) { settings.steamGridApiKey = value }
     private var rom: ScrapeGame? = null
     private var query = ""
-    private var username = ""
-    private var password = ""
-    private var systems: List<ScraperSystem> = emptyList()
-    private val selectedSystems = mutableMapOf<String, ScraperSystem>()
+    private var username: String
+        get() = settings.screenScraperUsername
+        set(value) { settings.screenScraperUsername = value }
+    private var password: String
+        get() = settings.screenScraperPassword
+        set(value) { settings.screenScraperPassword = value }
     private var matches: List<ScraperMatch> = emptyList()
+    private val selectedSystems = mutableMapOf<String, ScraperSystem>()
     private var actions: List<() -> Unit> = emptyList()
     private var job: Job? = null
     private var overwriteArtwork = false
@@ -91,29 +96,33 @@ class ScraperController @Inject constructor(
         nav.dialogState.value = dialog
     }
 
-    fun open(game: Rom, useSteamGrid: Boolean = true) {
-        open(ScrapeGame.RomGame(game), useSteamGrid)
+    fun open(game: Rom) {
+        open(ScrapeGame.RomGame(game))
     }
 
     fun openPort(app: dev.piannoli.scorza.model.App) {
-        open(ScrapeGame.PortGame(app), true)
+        open(ScrapeGame.PortGame(app))
     }
 
-    private fun open(game: ScrapeGame, useSteamGrid: Boolean) {
+    private fun open(game: ScrapeGame) {
         begin()
-        this.useSteamGrid = useSteamGrid
+        useSteamGrid = settings.scraperSource == ScraperSource.STEAMGRIDDB
         configuring = false
         rom = game
         query = game.displayName
         matches = emptyList()
         overwriteArtwork = false
         when {
+            !useSteamGrid && game is ScrapeGame.SystemGame -> message(R.string.screenscraper_system_unsupported)
             !useSteamGrid && !provider.configured -> message(R.string.scraper_not_configured)
             game.embeddedArtwork -> message(R.string.scraper_embedded_artwork)
             game.artFile != null -> show(DialogState.ScraperOverwriteConfirm)
             useSteamGrid && apiKey.isBlank() -> message(R.string.steamgrid_key_required)
             useSteamGrid -> search()
-            else -> home()
+            else -> {
+                home()
+                search()
+            }
         }
     }
 
@@ -122,13 +131,12 @@ class ScraperController @Inject constructor(
         overwriteArtwork = true
         when {
             useSteamGrid && apiKey.isBlank() -> message(R.string.steamgrid_key_required)
-            useSteamGrid -> search()
-            else -> home()
+            else -> search()
         }
     }
 
     fun openSystem(tag: String, displayName: String = tag) {
-        open(ScrapeGame.SystemGame(tag, displayName, settings.systemArtworkType), true)
+        open(ScrapeGame.SystemGame(tag, displayName, settings.systemArtworkType))
     }
 
     fun openSteamGridSetup() {
@@ -140,6 +148,24 @@ class ScraperController @Inject constructor(
         home()
     }
 
+    fun openScreenScraperSetup() {
+        begin()
+        useSteamGrid = false
+        configuring = true
+        rom = null
+        matches = emptyList()
+        home()
+    }
+
+    fun cycle(menu: DialogState.ScraperMenu, direction: Int) {
+        if (!configuring || useSteamGrid || menu.selectedIndex !in menu.cycleIndices) return
+        val entries = ScreenScraperMedia.entries
+        settings.screenScraperMedia = entries[Math.floorMod(entries.indexOf(settings.screenScraperMedia) + direction, entries.size)]
+        home(replace = true)
+        val updated = nav.dialogState.value as? DialogState.ScraperMenu ?: return
+        nav.dialogState.value = updated.copy(selectedIndex = menu.selectedIndex)
+    }
+
     private fun text(id: Int): String = context.getString(id)
 
     private fun menu(
@@ -148,12 +174,34 @@ class ScraperController @Inject constructor(
         previews: List<String?> = emptyList(),
         replace: Boolean = false,
         retainInHistory: Boolean = true,
+        cycleIndices: Set<Int> = emptySet(),
     ) {
-        show(DialogState.ScraperMenu(title, rows.map { it.first }, previews = previews),
+        show(DialogState.ScraperMenu(title, rows.map { it.first }, previews = previews, cycleIndices = cycleIndices),
             rows.map { it.second }, replace, retainInHistory)
     }
 
     private fun home(replace: Boolean = false) {
+        if (configuring && !useSteamGrid) {
+            menu(text(R.string.screenscraper_setup), listOf(
+                "${text(R.string.screenscraper_media)}\t${text(settings.screenScraperMedia.labelRes)}" to {},
+                "${text(R.string.scraper_username)}\t$username" to { edit(ScraperField.USERNAME) },
+                "${text(R.string.scraper_password)}\t${text(if (password.isEmpty()) R.string.scraper_not_set else R.string.scraper_set)}" to { edit(ScraperField.PASSWORD) },
+                text(R.string.screenscraper_login) to {
+                    runRequest {
+                        ScreenScraperSession(provider, settings).authenticate()
+                        withContext(Dispatchers.Main) { message(R.string.screenscraper_logged_in) }
+                    }
+                },
+                text(R.string.scraper_forget_account) to {
+                    username = ""
+                    password = ""
+                    selectedSystems.clear()
+                    home(replace = true)
+                },
+                text(R.string.scraper_close) to { close() },
+            ), replace = replace, cycleIndices = setOf(0))
+            return
+        }
         if (configuring) {
             menu(text(R.string.steamgrid_setup), listOf(
                 "${text(R.string.steamgrid_api_key)}\t${text(if (apiKey.isEmpty()) R.string.scraper_not_set else R.string.scraper_set)}" to { edit(ScraperField.API_KEY) },
@@ -168,27 +216,14 @@ class ScraperController @Inject constructor(
             return
         }
         val game = rom ?: return
-        if (useSteamGrid) {
-            menu(context.getString(R.string.scraper_title, game.displayName), listOf(
-                "${text(R.string.scraper_query)}\t$query" to { edit(ScraperField.QUERY) },
-                text(R.string.scraper_search) to { search() },
-                text(R.string.scraper_close) to { close() },
-            ), replace = replace)
-            return
-        }
-        menu(context.getString(R.string.scraper_title, game.displayName), listOf(
-            "${text(R.string.scraper_query)}\t$query" to { edit(ScraperField.QUERY) },
-            "${text(R.string.scraper_system)}\t${selectedSystems[game.platformTag]?.name ?: text(R.string.scraper_choose)}" to { chooseSystem() },
-            "${text(R.string.scraper_username)}\t$username" to { edit(ScraperField.USERNAME) },
-            "${text(R.string.scraper_password)}\t${if (password.isEmpty()) text(R.string.scraper_not_set) else text(R.string.scraper_set)}" to { edit(ScraperField.PASSWORD) },
-            text(R.string.scraper_search) to { search() },
-            text(R.string.scraper_forget_account) to {
-                username = ""
-                password = ""
-                home(replace = true)
-            },
-            text(R.string.scraper_close) to { close() },
-        ), replace = replace)
+        menu(context.getString(R.string.scraper_title, game.displayName), buildList {
+            add("${text(R.string.scraper_query)}\t$query" to { edit(ScraperField.QUERY) })
+            if (!useSteamGrid) add(
+                "${text(R.string.scraper_system)}\t${selectedSystems[game.platformTag]?.name ?: text(R.string.scraper_choose)}" to { chooseSystem() },
+            )
+            add(text(R.string.scraper_search) to { search() })
+            add(text(R.string.scraper_close) to { close() })
+        }, replace = replace)
     }
 
     private fun edit(field: ScraperField) {
@@ -237,6 +272,7 @@ class ScraperController @Inject constructor(
     }
 
     fun confirm(menu: DialogState.ScraperMenu) {
+        if (menu.selectedIndex in menu.cycleIndices) return
         nav.dialogState.value = menu
         actions.getOrNull(menu.selectedIndex)?.invoke()
     }
@@ -264,17 +300,10 @@ class ScraperController @Inject constructor(
         nav.dialogState.value = origin
     }
 
-    private fun account(): ScraperAccount {
-        if (username.isBlank() || password.isEmpty()) throw ScraperException(ScraperError.ACCOUNT_REQUIRED)
-        return ScraperAccount(username, password)
-    }
-
     private fun chooseSystem() {
         runRequest {
-            val account = account()
-            val available = systems.ifEmpty { provider.systems(account) }
+            val available = ScreenScraperSession(provider, settings).systems()
             withContext(Dispatchers.Main) {
-                systems = available
                 menu(text(R.string.scraper_system), available.map { system ->
                     system.name to {
                         rom?.let { selectedSystems[it.platformTag] = system }
@@ -319,17 +348,17 @@ class ScraperController @Inject constructor(
             return
         }
         val game = rom ?: return
-        val system = selectedSystems[game.platformTag]
-        if (system == null) {
-            chooseSystem()
-            return
-        }
         val searchQuery = query
         runRequest {
-            val found = provider.search(account(), system, searchQuery)
+            val session = ScreenScraperSession(provider, settings)
+            val found = session.search(game.platformTag, searchQuery, selectedSystems[game.platformTag])
             withContext(Dispatchers.Main) {
+                found.firstOrNull()?.let { selectedSystems[game.platformTag] = it.system }
                 matches = found
-                if (found.isEmpty()) message(R.string.scraper_no_matches) else results()
+                if (found.isEmpty()) {
+                    home(replace = true)
+                    message(R.string.scraper_no_matches)
+                } else results()
             }
         }
     }
@@ -374,26 +403,21 @@ class ScraperController @Inject constructor(
 
     private fun results() {
         menu(text(R.string.scraper_results), matches.map { match ->
-            "${match.name}\t${match.system.name}" to { confirmMatch(match) }
-        } + listOf(text(R.string.scraper_edit_search) to { home() }))
+            "${match.name}\t${match.system.name}" to { downloadMatch(match) }
+        } + listOf(text(R.string.scraper_edit_search) to { home() }),
+            previews = matches.map { ScreenScraperPreviewFetcher.uri(it) } + listOf(null))
     }
 
-    private fun confirmMatch(match: ScraperMatch) {
+    private fun downloadMatch(match: ScraperMatch) {
         if (match.artwork == null) {
             message(R.string.scraper_no_artwork)
             return
         }
         val game = rom ?: return
-        menu("${match.name} (${match.system.name})", listOf(
-            text(R.string.scraper_download) to {
-                runRequest {
-                    val bytes = provider.download(account(), match)
-                    save(game, bytes)
-                }
-            },
-            text(R.string.scraper_results) to { results() },
-            text(R.string.scraper_close) to { close() },
-        ), retainInHistory = false)
+        runRequest {
+            val bytes = ScreenScraperSession(provider, settings).download(match)
+            save(game, bytes)
+        }
     }
 
     private suspend fun CoroutineScope.save(game: ScrapeGame, bytes: ByteArray) {
@@ -432,7 +456,10 @@ class ScraperController @Inject constructor(
                 throw e
             } catch (e: ScraperException) {
                 withContext(Dispatchers.Main) {
-                    if (nav.dialogState.value === busy) message(errorString(e.error))
+                    if (nav.dialogState.value === busy) {
+                        if (!configuring && !useSteamGrid && rom != null && history.isEmpty()) home(replace = true)
+                        message(errorString(e.error))
+                    }
                 }
             }
         }
@@ -453,6 +480,8 @@ class ScraperController @Inject constructor(
             ScraperError.NOT_CONFIGURED -> R.string.scraper_not_configured
             ScraperError.ACCOUNT_REQUIRED -> R.string.scraper_account_required
             ScraperError.AUTHENTICATION -> R.string.scraper_authentication
+            ScraperError.ACCOUNT_AUTHENTICATION -> R.string.screenscraper_incorrect_credentials
+            ScraperError.DEVELOPER_AUTHENTICATION -> R.string.screenscraper_developer_authentication
             ScraperError.RATE_LIMIT -> R.string.scraper_rate_limit
             ScraperError.DAILY_LIMIT -> R.string.scraper_daily_limit
             ScraperError.UNAVAILABLE -> R.string.scraper_unavailable
@@ -461,6 +490,8 @@ class ScraperController @Inject constructor(
             ScraperError.NO_ARTWORK -> R.string.scraper_no_artwork
             ScraperError.EXISTING_ARTWORK -> R.string.scraper_existing_artwork
             ScraperError.STORAGE -> R.string.scraper_storage
+            ScraperError.SYSTEM_UNSUPPORTED -> R.string.screenscraper_system_unsupported
+            ScraperError.PLATFORM_UNSUPPORTED -> R.string.screenscraper_platform_unsupported
         }
     }
 }

@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
-data class SteamGridGame(val id: Int, val name: String)
+data class SteamGridGame(override val id: Int, override val name: String) : ScrapeCandidate
 data class SteamGridCover(
     val id: Int,
     val author: String,
