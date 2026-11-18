@@ -5,6 +5,8 @@ import androidx.test.core.app.ApplicationProvider
 import dev.piannoli.scorza.R
 import dev.piannoli.scorza.model.Platform
 import dev.piannoli.scorza.navigation.NavigationController
+import dev.piannoli.scorza.settings.ScraperSource
+import dev.piannoli.scorza.settings.SettingsRepository
 import dev.piannoli.scorza.ui.screens.DialogState
 import dev.piannoli.scorza.ui.viewmodel.SystemListViewModel
 import dev.piannoli.scorza.ui.viewmodel.SystemListViewModel.ListItem
@@ -15,6 +17,7 @@ import io.mockk.verify
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -23,6 +26,35 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class SystemListInputHandlerTest {
+    @Test fun `platform options hide system scraping for ScreenScraper but preserve game scraping and artwork picking`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val nav = NavigationController()
+        val systems = mockk<SystemListViewModel>(relaxed = true)
+        val settings = mockk<SettingsRepository>(relaxed = true)
+        val handler = SystemListInputHandler(
+            context, nav, CoroutineScope(Dispatchers.Unconfined), settings,
+            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
+            systems, mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
+            mockk(relaxed = true), mockk(relaxed = true),
+        )
+        val items = listOf(
+            ListItem.PlatformItem(Platform("GB", "Game Boy", null)),
+            ListItem.PortsFolder("Ports", 1),
+        )
+        for (source in listOf(ScraperSource.STEAMGRIDDB, ScraperSource.SCREENSCRAPER, ScraperSource.STEAMGRIDDB)) {
+            every { settings.scraperSource } returns source
+            items.forEach { item ->
+                every { systems.getSelectedItem() } returns item
+                handler.onStart()
+                val options = (nav.dialogState.value as DialogState.ContextMenu).options
+                assertEquals(source != ScraperSource.SCREENSCRAPER, context.getString(R.string.scrape_system) in options)
+                val name = if (item is ListItem.PlatformItem) item.platform.displayName else "Ports"
+                assertTrue(context.getString(R.string.bulk_platform_games, name) in options)
+                assertTrue(context.getString(R.string.choose_artwork) in options)
+            }
+        }
+    }
+
     @Test fun `global keyboard captures menu origin before submitting or cancelling`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val nav = NavigationController()
