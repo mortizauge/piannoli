@@ -186,4 +186,26 @@ class ListScrollEffectTest {
         compose.waitForIdle()
         assertSelectionOnScreen(0)
     }
+
+    @Test fun `restored scroll target never hides an unchanged selection`() {
+        val target = mutableIntStateOf(-1)
+        selected.intValue = 15
+        compose.setContent {
+            listState = rememberLazyListState()
+            Box(modifier = Modifier.height(viewportHeight)) {
+                List(
+                    items = (0 until 30).toList(),
+                    selectedIndex = selected.intValue,
+                    itemHeight = rowHeight,
+                    listState = listState,
+                    scrollTarget = target.intValue,
+                ) { _, _, _ -> Box(Modifier.height(rowHeight).fillMaxWidth()) }
+            }
+        }
+        compose.waitForIdle()
+        assertSelectionOnScreen(15)
+        compose.runOnIdle { target.intValue = 0 }
+        compose.waitForIdle()
+        assertSelectionOnScreen(15)
+    }
 }

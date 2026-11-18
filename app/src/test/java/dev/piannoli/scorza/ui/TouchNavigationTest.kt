@@ -153,6 +153,66 @@ class TouchNavigationTest {
         compose.waitForIdle()
     }
 
+    @Test fun `touch navigation starts on finger down before scrolling or selection`() {
+        renderAnimationModes()
+        compose.onNodeWithText("Game 1").performTouchInput { down(center) }
+        compose.runOnIdle {
+            assertTrue(touchInputActive.value)
+            assertEquals(0, selected.intValue)
+            assertTrue(actions.isEmpty())
+        }
+        compose.onNodeWithText("Game 1").performTouchInput { cancel() }
+    }
+
+    @Test fun `restoring a scroll position keeps the pill on the selected row`() {
+        renderAnimationModes()
+        compose.runOnIdle { selected.intValue = 6 }
+        compose.waitForIdle()
+        compose.runOnIdle { listState.requestScrollToItem(5) }
+        compose.waitForIdle()
+        val label = compose.onNodeWithText("Game 6").fetchSemanticsNode().boundsInRoot
+        val pill = compose.onNodeWithTag("listSelectionHighlight").fetchSemanticsNode().boundsInRoot
+        assertEquals("restored scroll must not pin the pill to a different row", label.center.y, pill.center.y, 1f)
+    }
+
+    @Test fun `returning to a list restores its selected row and highlight in each animation mode`() {
+        val showList = mutableStateOf(true)
+        selected.intValue = 8
+        compose.setContent {
+            CompositionLocalProvider(
+                LocalTouchInput provides touch,
+                LocalAnimationsEnabled provides (animationMode.value != AnimationMode.OFF),
+                dev.piannoli.ui.components.LocalAnimationMode provides animationMode.value,
+            ) {
+                if (showList.value) {
+                    ScreenBackground {
+                        listState = rememberLazyListState()
+                        List(
+                            items = (0 until 30).map { "Game $it" },
+                            selectedIndex = selected.intValue,
+                            listState = listState,
+                            scrollTarget = 0,
+                            modifier = Modifier.width(220.dp).height(200.dp),
+                        ) { _, item, isSelected ->
+                            PillRowText(item, isSelected, 16.sp, 24.sp, 8.dp)
+                        }
+                    }
+                }
+            }
+        }
+        for (mode in AnimationMode.entries) {
+            compose.runOnIdle { showList.value = false; animationMode.value = mode }
+            compose.waitForIdle()
+            compose.runOnIdle { showList.value = true }
+            compose.waitForIdle()
+            val label = compose.onNodeWithText("Game 8").fetchSemanticsNode().boundsInRoot
+            val tag = if (mode == AnimationMode.OFF) "listStaticSelectionHighlight" else "listSelectionHighlight"
+            val pill = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+            assertEquals("$mode must restore the selected row", label.center.y, pill.center.y, 1f)
+            assertEquals(8, selected.intValue)
+        }
+    }
+
     @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun `backgrounding removes animation rendering and restores it without losing selection`() {
@@ -203,9 +263,81 @@ class TouchNavigationTest {
     }
 
     @Test
+    fun `Touch Input flings retain Full weighted motion and release from either edge as they slow`() {
+        assertWeightedTouchFlings(AnimationMode.TOUCH_INPUT)
+    }
+
+    @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    fun `Touch Input scrolling keeps the animated pill locked at either edge as the fling slows`() {
-        assertTouchEdgesStayPinned(AnimationMode.TOUCH_INPUT, "listSelectionHighlight")
+    fun `controller handoff at a touch scroll edge does not jump to the opposite edge`() {
+        assertControllerHandoffAtTouchEdge(AnimationMode.FULL)
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `touch only animations keep controller handoff at the same edge`() {
+        assertControllerHandoffAtTouchEdge(AnimationMode.TOUCH_INPUT)
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `disabled animations keep controller handoff at the same edge`() {
+        assertControllerHandoffAtTouchEdge(AnimationMode.OFF)
+    }
+
+    private fun assertControllerHandoffAtTouchEdge(mode: AnimationMode) {
+        animationMode.value = mode
+        selected.intValue = 42
+        renderAnimationModes(initialIndex = 40, disablePrefetch = true)
+        compose.mainClock.autoAdvance = false
+        val viewport = compose.onNodeWithTag("modeList").fetchSemanticsNode().boundsInRoot
+        for (towardTop in listOf(true, false)) {
+            compose.runOnIdle {
+                selected.intValue = 42
+                listState.requestScrollToItem(40)
+            }
+            compose.mainClock.advanceTimeBy(300)
+            compose.waitForIdle()
+            compose.onNodeWithTag("surface").performTouchInput {
+                swipe(
+                    start = Offset(width * 0.9f, height * if (towardTop) 0.65f else 0.2f),
+                    end = Offset(width * 0.9f, height * if (towardTop) 0.2f else 0.65f),
+                    durationMillis = 160,
+                )
+            }
+            var reachedEdge = false
+            val touchTag = if (mode == AnimationMode.OFF) "listStaticSelectionHighlight" else "listSelectionHighlight"
+            val controllerTag = if (mode == AnimationMode.FULL) "listSelectionHighlight" else "listStaticSelectionHighlight"
+            for (frame in 0 until 90) {
+                compose.mainClock.advanceTimeByFrame()
+                compose.waitForIdle()
+                val pill = compose.onNodeWithTag(touchTag).fetchSemanticsNode().boundsInRoot
+                if (listState.isScrollInProgress &&
+                    abs(if (towardTop) pill.top - viewport.top else pill.bottom - viewport.bottom) <= 1f) {
+                    reachedEdge = true
+                    break
+                }
+            }
+            assertTrue("touch scrolling must reach the edge", reachedEdge)
+            val before = selected.intValue
+            compose.runOnIdle {
+                controllerInputEvents.tryEmit(Unit)
+                selected.intValue = before + if (towardTop) -1 else 1
+            }
+            repeat(8) {
+                compose.mainClock.advanceTimeByFrame()
+                compose.waitForIdle()
+                val pill = compose.onNodeWithTag(controllerTag).fetchSemanticsNode().boundsInRoot
+                assertTrue("controller handoff must not jump to the opposite edge: $pill",
+                    if (towardTop) pill.center.y < viewport.center.y else pill.center.y > viewport.center.y)
+            }
+            compose.mainClock.advanceTimeBy(300)
+            compose.waitForIdle()
+            val label = compose.onNodeWithText("Game ${selected.intValue}").fetchSemanticsNode().boundsInRoot
+            val pill = compose.onNodeWithTag(controllerTag).fetchSemanticsNode().boundsInRoot
+            assertEquals("the pill must settle on the controller selection", label.center.y, pill.center.y, 1f)
+        }
+        compose.mainClock.autoAdvance = true
     }
 
     private fun assertTouchEdgesStayPinned(mode: AnimationMode, tag: String) {
@@ -712,9 +844,17 @@ class TouchNavigationTest {
     }
 
     @Test fun `fast touch flings are carried to the leading edge and release as they slow in both directions`() {
+        assertWeightedTouchFlings(AnimationMode.FULL)
+    }
+
+    private fun assertWeightedTouchFlings(mode: AnimationMode) {
         selected.intValue = 42
         compose.setContent {
-            CompositionLocalProvider(LocalTouchInput provides touch) {
+            CompositionLocalProvider(
+                LocalTouchInput provides touch,
+                LocalAnimationsEnabled provides mode.enabled(touchInputActive.value),
+                dev.piannoli.ui.components.LocalAnimationMode provides mode,
+            ) {
                 ScreenBackground(modifier = Modifier.testTag("weightedSurface")) {
                     listState = rememberLazyListState(initialFirstVisibleItemIndex = 40)
                     List(
@@ -733,7 +873,10 @@ class TouchNavigationTest {
         compose.mainClock.autoAdvance = false
         val viewport = compose.onNodeWithTag("weightedList").fetchSemanticsNode().boundsInRoot
         fun centerSelection() {
-            compose.runOnIdle { selected.intValue = listState.firstVisibleItemIndex + 2 }
+            compose.runOnIdle {
+                touch.beginNavigation()
+                selected.intValue = listState.firstVisibleItemIndex + 2
+            }
             repeat(2) {
                 compose.mainClock.advanceTimeByFrame()
                 compose.waitForIdle()

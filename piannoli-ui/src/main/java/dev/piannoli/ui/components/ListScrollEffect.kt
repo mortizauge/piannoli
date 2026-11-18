@@ -17,21 +17,23 @@ fun ListScrollEffect(
     reorderMode: Boolean = false,
     touchScrolling: Boolean = false,
 ) {
-    LaunchedEffect(itemCount, scrollTarget) {
-        if (!touchScrolling && itemCount > 0 && scrollTarget >= 0) {
-            val target = scrollTarget.coerceIn(0, itemCount - 1)
-            if (listState.firstVisibleItemIndex != target) {
-                listState.scrollToItem(target)
-            }
-        }
-    }
-
-    val prevIndex = remember { mutableIntStateOf(selectedIndex) }
-    LaunchedEffect(selectedIndex, itemCount, touchScrolling) {
+    val lastRestore = remember(listState) { intArrayOf(-1, -1) }
+    val prevIndex = remember(listState) { mutableIntStateOf(selectedIndex) }
+    LaunchedEffect(selectedIndex, itemCount, scrollTarget, touchScrolling) {
         val previous = prevIndex.intValue
         prevIndex.intValue = selectedIndex
         if (touchScrolling) return@LaunchedEffect
         if (itemCount == 0) return@LaunchedEffect
+        if (lastRestore[0] != itemCount || lastRestore[1] != scrollTarget) {
+            lastRestore[0] = itemCount
+            lastRestore[1] = scrollTarget
+            if (scrollTarget >= 0) {
+                val target = scrollTarget.coerceIn(0, itemCount - 1)
+                if (listState.firstVisibleItemIndex != target) {
+                    listState.scrollToItem(target)
+                }
+            }
+        }
         val index = selectedIndex.coerceAtLeast(0).coerceAtMost(itemCount - 1)
         // visibleItemsInfo can be empty mid-recomposition; under fast auto-repeat (80ms)
         // the empty window arrives often enough to leave the selected row off-screen.

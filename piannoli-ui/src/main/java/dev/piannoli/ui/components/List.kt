@@ -76,7 +76,6 @@ fun <T> List(
     val surface = LocalTouchSurface.current
     val uiActive = LocalUiActive.current
     val animationsEnabled = LocalAnimationsEnabled.current
-    val pinTouchEdges = LocalAnimationMode.current == AnimationMode.TOUCH_INPUT
     val currentIndex = rememberUpdatedState(selectedIndex)
     val currentItems = rememberUpdatedState(items)
     val selectable = rememberUpdatedState(isItemSelectable)
@@ -102,7 +101,7 @@ fun <T> List(
                 }
             }
         }
-        LaunchedEffect(surface, listState, touch, items.size, uiActive, highlight, animationsEnabled, pinTouchEdges) {
+        LaunchedEffect(surface, listState, touch, items.size, uiActive, highlight, animationsEnabled) {
             uiActive.collectLatest { active ->
                 renderingActive = active
                 if (!active) {
@@ -169,7 +168,7 @@ fun <T> List(
                         return@collectLatest
                     }
                     if (highlight == null) return@collectLatest
-                    val motion = TouchHighlightMotion(initialCenter, pinTouchEdges)
+                    val motion = TouchHighlightMotion(initialCenter)
                     try {
                         while (true) {
                             val frameTime = withFrameNanos { it }
@@ -256,6 +255,9 @@ fun <T> List(
                 listState = listState,
                 touchScrolling = surface?.touchNavigation == true,
                 touchMotion = surface?.scrolling == true && surface.touchNavigation,
+                selectedRowVisible = selectedItem != null &&
+                    selectedItem.offset >= layout.viewportStartOffset &&
+                    selectedItem.offset + selectedItem.size <= layout.viewportEndOffset,
             )
         }
         LazyColumn(
@@ -317,7 +319,7 @@ fun <T> List(
     }
 }
 
-private class TouchHighlightMotion(private val anchor: Float, private val pinEdges: Boolean) {
+private class TouchHighlightMotion(private val anchor: Float) {
     private var previousFirstIndex = -1
     private var previousFirstOffset = 0
     private var previousLastIndex = -1
@@ -327,8 +329,6 @@ private class TouchHighlightMotion(private val anchor: Float, private val pinEdg
     private var position = anchor
     private var positionVelocity = 0f
     private var carriedDirection = 0
-    private var pinnedDirection = 0
-    private var reverseDistance = 0f
 
     fun step(layout: LazyListLayoutInfo, time: Long, rowHeight: Float): Float {
         val height = (layout.viewportEndOffset - layout.viewportStartOffset).coerceAtLeast(1).toFloat()
@@ -370,24 +370,7 @@ private class TouchHighlightMotion(private val anchor: Float, private val pinEdg
         if (speed >= height * 2.4f) carriedDirection = direction
         // Content carries the pill until it physically meets an edge; speed never teleports it.
         position = (position - distance).coerceIn(start, end)
-        if (pinEdges) {
-            if (position <= start + 1.5f && distance > 0f) pinnedDirection = 1
-            if (position >= end - 1.5f && distance < 0f) pinnedDirection = -1
-            if ((pinnedDirection > 0 && distance < 0f) || (pinnedDirection < 0 && distance > 0f)) {
-                // Row settling can briefly reverse the content; only a full-row reversal releases the edge.
-                reverseDistance += abs(distance)
-                if (reverseDistance >= rowHeight) {
-                    pinnedDirection = 0
-                    reverseDistance = 0f
-                }
-            } else if (distance != 0f) {
-                reverseDistance = 0f
-            }
-        }
-        if (pinnedDirection != 0) {
-            position = if (pinnedDirection > 0) start else end
-            positionVelocity = 0f
-        } else if (carriedDirection != 0) {
+        if (carriedDirection != 0) {
             positionVelocity = 0f
         } else {
             // Critically damped motion retains momentum without overshoot or per-row restarts.
@@ -413,9 +396,14 @@ private class DisplayedHighlight {
     var touchCenter by mutableStateOf<Float?>(null)
     var snapToIndex by mutableStateOf<Int?>(null)
     var scrollPosition: Pair<Int, Int>? = null
-    var pinnedIndex: Int? = null
+    var pinnedIndex by mutableStateOf<Int?>(null)
+    var pinnedDirection = 0
     var direction = 0
 }
+
+private fun scrollDirection(previous: Pair<Int, Int>, current: Pair<Int, Int>): Int =
+    if (previous.first != current.first) current.first.compareTo(previous.first)
+    else current.second.compareTo(previous.second)
 
 @Composable
 private fun SelectionHighlight(
@@ -428,7 +416,15 @@ private fun SelectionHighlight(
     listState: LazyListState,
     touchScrolling: Boolean,
     touchMotion: Boolean,
+    selectedRowVisible: Boolean,
 ) {
+    LaunchedEffect(selectedIndex, selectedRowVisible, controllerScrollPosition, displayed.pinnedIndex, touchMotion) {
+        if (selectedRowVisible && controllerScrollPosition != null && displayed.pinnedIndex == selectedIndex) {
+            withFrameNanos { }
+            withFrameNanos { }
+            displayed.pinnedIndex = null
+        }
+    }
     if (!LocalAnimationsEnabled.current) {
         var previousIndex by remember { mutableIntStateOf(selectedIndex) }
         val direction = when {
@@ -461,9 +457,12 @@ private fun SelectionHighlight(
         else -> displayed.direction
     }
     val pinned = controllerScrollPosition != null && (controllerScrolled || displayed.pinnedIndex == selectedIndex)
+    val pinDirection = if (controllerScrolled) {
+        scrollDirection(requireNotNull(displayed.scrollPosition), requireNotNull(controllerScrollPosition))
+    } else displayed.pinnedDirection
     val targetBounds = bounds?.let {
-        if (!pinned || direction == 0) it else {
-            val top = if (direction > 0) viewportEnd - it.height else viewportStart.toFloat()
+        if (!pinned || pinDirection == 0) it else {
+            val top = if (pinDirection > 0) viewportEnd - it.height else viewportStart.toFloat()
             Rect(it.left, top, it.right, top + it.height)
         }
     }
@@ -476,7 +475,10 @@ private fun SelectionHighlight(
         val target = targetBounds ?: return@LaunchedEffect
         val previous = displayed.bounds
         displayed.direction = direction
-        if (controllerScrolled) displayed.pinnedIndex = selectedIndex
+        if (controllerScrolled) {
+            displayed.pinnedDirection = pinDirection
+            displayed.pinnedIndex = selectedIndex
+        }
         if (controllerScrollPosition == null) displayed.pinnedIndex = null
         translation =
             if (previous == null || snapSelection) Rect.Zero else Rect(
@@ -542,6 +544,7 @@ private fun HighlightBox(
                         else listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
                     val moved = scroll != null && displayed.scrollPosition != null && scroll != displayed.scrollPosition
                     if (moved) {
+                        displayed.pinnedDirection = scrollDirection(requireNotNull(displayed.scrollPosition), scroll)
                         displayed.pinnedIndex = selectedIndex
                     }
                     displayed.direction = direction
@@ -554,8 +557,8 @@ private fun HighlightBox(
                     val touchTop = if (touchMotion) displayed.touchCenter?.let { (it - height / 2f).roundToInt() } else null
                     val top = when {
                         touchTop != null -> touchTop.coerceIn(layout.viewportStartOffset, layout.viewportEndOffset - height)
-                        atEdge && direction > 0 -> layout.viewportEndOffset - height
-                        atEdge && direction < 0 -> layout.viewportStartOffset
+                        atEdge && displayed.pinnedDirection > 0 -> layout.viewportEndOffset - height
+                        atEdge && displayed.pinnedDirection < 0 -> layout.viewportStartOffset
                         else -> position.top.roundToInt().coerceIn(
                             layout.viewportStartOffset, layout.viewportEndOffset - height,
                         )
