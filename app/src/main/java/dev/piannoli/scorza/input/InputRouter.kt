@@ -82,6 +82,12 @@ class InputRouter @Inject constructor(
 
     fun beginTouchNavigation() {
         touchInputActive = true
+        if (nav.dialogState.value != DialogState.None) return
+        when (nav.currentScreen) {
+            LauncherScreen.SystemList -> systemListHandler.cancelTouchReorder()
+            is LauncherScreen.GameList -> gameListHandler.cancelTouchReorder()
+            else -> Unit
+        }
     }
 
     fun wire(dispatcher: InputDispatcher) {

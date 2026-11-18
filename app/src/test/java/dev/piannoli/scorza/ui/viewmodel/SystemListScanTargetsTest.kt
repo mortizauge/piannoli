@@ -20,9 +20,6 @@ import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -169,9 +166,12 @@ class SystemListScanTargetsTest {
         vm.enterReorderMode()
         vm.reorderMoveDown()
         vm.cancelReorder()
-        runBlocking { withTimeout(10_000) { vm.state.first { !it.reorderMode } } }
+        assertEquals(false, vm.isReorderMode())
+        assertEquals(0, vm.state.value.selectedIndex)
         assertEquals(listOf("recent", "favorites", "collections"), homeOrder)
         assertEquals(SystemListViewModel.ListItem.RecentlyPlayedItem, vm.state.value.items.first())
+        vm.setSelectedIndex(1)
+        assertEquals(SystemListViewModel.ListItem.FavoritesItem, vm.state.value.items[vm.state.value.selectedIndex])
         verify(exactly = 0) { settings.homeCategoryOrder = any() }
     }
 

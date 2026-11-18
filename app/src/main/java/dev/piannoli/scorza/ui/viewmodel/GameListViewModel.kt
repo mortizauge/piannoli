@@ -911,16 +911,12 @@ class GameListViewModel @Inject constructor(
     fun cancelReorder() {
         val current = _state.value
         if (!current.reorderMode) return
-        if (current.isCollectionsList) {
-            loadCollectionsList()
-        } else if (current.platformTag == "tools" || current.platformTag == "ports") {
-            loadApkList(current.platformTag, current.breadcrumb)
-        } else if (current.isCollection && current.collectionId != null) {
-            val id = current.collectionId
-            scope.launch(Dispatchers.IO) { loadCollectionByIdInternal(id) {} }
-        } else {
-            _state.value = current.copy(items = current.allItems, reorderMode = false, reorderOriginalIndex = -1)
-        }
+        _state.value = current.copy(
+            items = current.allItems,
+            selectedIndex = current.reorderOriginalIndex,
+            reorderMode = false,
+            reorderOriginalIndex = -1,
+        )
         pendingRescan?.let { pending ->
             pendingRescan = null
             handleRescanResult(pending)

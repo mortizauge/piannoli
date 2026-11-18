@@ -164,6 +164,10 @@ class GameListInputHandler @Inject constructor(
         }
     }
 
+    fun cancelTouchReorder() {
+        if (gameListViewModel.isReorderMode()) gameListViewModel.cancelReorder()
+    }
+
     override fun onStart() {
         cancelResumeHoldTimer()
         val glState = gameListViewModel.state.value

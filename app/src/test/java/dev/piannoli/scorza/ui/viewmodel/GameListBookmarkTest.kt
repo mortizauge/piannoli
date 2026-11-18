@@ -23,6 +23,7 @@ import dev.piannoli.scorza.settings.LibraryOrder
 import dev.piannoli.scorza.settings.SettingsRepository
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -459,6 +460,7 @@ class GameListBookmarkTest {
         suspendCancellableCoroutine<Unit> { continuation ->
             model.loadApkList("tools", "Apps") { continuation.resume(Unit) }
         }
+
         assertEquals(listOf(pinned, other, ordinary), model.state.value.items)
         assertTrue(model.state.value.favoriteAppIds.isEmpty())
         model.enterReorderMode()
@@ -469,6 +471,45 @@ class GameListBookmarkTest {
         model.reorderMoveDown()
         assertEquals(listOf(pinned, other, ordinary), model.state.value.items)
         assertEquals(1, model.state.value.selectedIndex)
+    }
+
+    @Test fun `cancelling reorder restores list order synchronously without saving`() = runBlocking {
+        useRealOrdering()
+        val first = dev.piannoli.scorza.model.App(
+            1, dev.piannoli.scorza.model.AppType.TOOL, "Alpha", "dev.alpha")
+        val second = dev.piannoli.scorza.model.App(
+            2, dev.piannoli.scorza.model.AppType.TOOL, "Beta", "dev.beta")
+        every { apps.all(dev.piannoli.scorza.model.AppType.TOOL) } returns listOf(first, second)
+        every { collections.topLevel() } returns listOf(
+            CollectionsRepository.CollectionRow(1, "First", null, 0, CollectionType.STANDARD),
+            CollectionsRepository.CollectionRow(2, "Second", null, 1, CollectionType.STANDARD),
+        )
+        every { collections.byId(7) } returns
+            CollectionsRepository.CollectionRow(7, "Games", null, 0, CollectionType.STANDARD)
+        every { collections.membersIn(7) } returns listOf(LibraryRef.Rom(2), LibraryRef.Rom(3))
+        every { roms.gameById(2) } returns mario.rom
+        every { roms.gameById(3) } returns metroid.rom
+        for (load in listOf<suspend () -> Unit>(
+            { suspendCancellableCoroutine<Unit> { model.loadApkList("tools", "Apps") { it.resume(Unit) } } },
+            { suspendCancellableCoroutine<Unit> { model.loadCollectionsList { it.resume(Unit) } } },
+            { suspendCancellableCoroutine<Unit> { model.loadCollectionById(7) { it.resume(Unit) } } },
+            { restore(GameListBookmark(platformTag = "GB", platformTags = listOf("GB"))) },
+        )) {
+            load()
+            val original = model.state.value.items
+            model.enterReorderMode()
+            model.reorderMoveDown()
+            assertEquals(original.reversed(), model.state.value.items)
+            model.cancelReorder()
+            assertEquals(false, model.isReorderMode())
+            assertEquals(original, model.state.value.items)
+            assertEquals(0, model.state.value.selectedIndex)
+            model.setSelectedIndex(1)
+            assertEquals(1, model.state.value.selectedIndex)
+        }
+        verify(exactly = 0) { apps.setOrder(any()) }
+        verify(exactly = 0) { collections.setCollectionOrder(any()) }
+        verify(exactly = 0) { collections.setMemberOrder(any(), any()) }
     }
 
     @Test fun `search preserves exact submitted keyboard text caret and selection`() {

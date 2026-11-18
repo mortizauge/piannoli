@@ -190,6 +190,7 @@ class SystemListViewModel @Inject constructor(
     private data class Saved(val item: ListItem?, val index: Int, val scroll: Int)
     private var savedPosition: Saved? = null
     private var currentFghCollectionId: Long? = null
+    private var reorderOriginalItems: List<ListItem> = emptyList()
 
     private data class ScanConfig(
         val showRecentlyPlayed: Boolean,
@@ -442,7 +443,8 @@ class SystemListViewModel @Inject constructor(
     fun enterReorderMode() {
         _state.update { current ->
             val item = current.items.getOrNull(current.selectedIndex) ?: return@update current
-            if (!item.isReorderable()) return@update current
+            if (current.reorderMode || !item.isReorderable()) return@update current
+            reorderOriginalItems = current.items
             current.copy(reorderMode = true, reorderOriginalIndex = current.selectedIndex)
         }
     }
@@ -518,6 +520,7 @@ class SystemListViewModel @Inject constructor(
                 }
             }
         }
+        reorderOriginalItems = emptyList()
         _state.update { it.copy(reorderMode = false, reorderOriginalIndex = -1) }
     }
 
@@ -534,10 +537,16 @@ class SystemListViewModel @Inject constructor(
         romScanner.ensureReservedPlatformTag(tag)
     }
 
-    fun cancelReorder(showRecentlyPlayed: Boolean = true, showFavorites: Boolean = true, contentMode: ContentMode = ContentMode.PLATFORMS, fghCollectionId: Long? = null, toolsName: String = "Apps", portsName: String = "Ports") {
+    fun cancelReorder() {
         val current = _state.value
         if (!current.reorderMode) return
-        scan(showRecentlyPlayed, showFavorites, contentMode, fghCollectionId, toolsName, portsName)
+        _state.value = current.copy(
+            items = reorderOriginalItems,
+            selectedIndex = current.reorderOriginalIndex,
+            reorderMode = false,
+            reorderOriginalIndex = -1,
+        )
+        reorderOriginalItems = emptyList()
     }
 
     private fun ListItem.isHomeCategory(): Boolean = this == ListItem.RecentlyPlayedItem ||

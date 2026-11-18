@@ -10,6 +10,7 @@ import io.mockk.verify
 import dev.piannoli.scorza.navigation.LauncherScreen
 import dev.piannoli.scorza.navigation.NavigationController
 import dev.piannoli.scorza.input.screen.SystemListInputHandler
+import dev.piannoli.scorza.input.screen.GameListInputHandler
 import dev.piannoli.scorza.ui.screens.DialogState
 import dev.piannoli.scorza.util.MenuSound
 import dev.piannoli.scorza.util.MenuSounds
@@ -22,6 +23,32 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class LauncherTouchInputTest {
+    @Test fun `touch start cancels reorder on active list before touch selection`() {
+        val nav = mockk<NavigationController>(relaxed = true)
+        val dialogs = MutableStateFlow<DialogState>(DialogState.None)
+        every { nav.dialogState } returns dialogs
+        every { nav.currentScreen } returns LauncherScreen.SystemList
+        val system = mockk<SystemListInputHandler>(relaxed = true)
+        val game = mockk<GameListInputHandler>(relaxed = true)
+        val router = testRouter(nav, system, mockk(relaxed = true), mockk(relaxed = true), game)
+
+        router.touchSelect(1, 0)
+        verifySequence {
+            system.cancelTouchReorder()
+            system.navigationContext
+            system.selectTouchItem(1)
+            system.navigationContext
+        }
+        verify(exactly = 0) { game.cancelTouchReorder() }
+
+        every { nav.currentScreen } returns mockk<LauncherScreen.GameList>(relaxed = true)
+        router.beginTouchNavigation()
+        verify(exactly = 1) { game.cancelTouchReorder() }
+        dialogs.value = DialogState.QuitConfirm
+        router.beginTouchNavigation()
+        verify(exactly = 1) { game.cancelTouchReorder() }
+    }
+
     @Test fun `input mode switches before controller actions and switches back on touch even without movement`() {
         val nav = mockk<NavigationController>(relaxed = true)
         every { nav.dialogState } returns MutableStateFlow<DialogState>(DialogState.None)
@@ -68,17 +95,22 @@ class LauncherTouchInputTest {
         router.touchAction(null)
         router.touchAction(MenuAction.CONFIRM)
         verifySequence {
+            handler.cancelTouchReorder()
             handler.navigationContext
             handler.selectTouchItem(2)
             handler.navigationContext
             sounds.play(MenuSound.TICK)
             haptics.play(MenuSound.TICK)
+            handler.cancelTouchReorder()
+            handler.cancelTouchReorder()
             handler.navigationContext
             handler.selectTouchItem(99)
             handler.navigationContext
+            handler.cancelTouchReorder()
             handler.navigationContext
             handler.onRight()
             handler.navigationContext
+            handler.cancelTouchReorder()
             handler.navigationContext
             handler.onConfirm()
             handler.onConfirmUp()
@@ -95,11 +127,12 @@ class LauncherTouchInputTest {
         handler: SystemListInputHandler,
         sounds: MenuSounds,
         haptics: MenuHaptics,
+        gameHandler: GameListInputHandler = mockk(relaxed = true),
     ) = InputRouter(
         nav = nav,
         dialogHandler = mockk(relaxed = true),
         systemListHandler = handler,
-        gameListHandler = mockk(relaxed = true),
+        gameListHandler = gameHandler,
         settingsHandler = mockk(relaxed = true),
         onboardingHandler = mockk(relaxed = true),
         inputTesterHandler = mockk(relaxed = true),
