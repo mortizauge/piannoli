@@ -612,6 +612,7 @@ class PlatformConfig(
         "com.izzy2lost.x1box" to "X1 BOX",
         "com.rfandango.haku_x" to "hakuX",
         "com.rfandango.haku_x.debug" to "HakuX-Mali",
+        "com.rfandango.haku_x.themes" to "HakuX-Advanced",
         "org.dolphinemu.dolphinemu" to "Dolphin",
         "org.dolphinemu.mmjr" to "Dolphin MMJR2",
         "dev.piannoli.delfino" to "Delfino",

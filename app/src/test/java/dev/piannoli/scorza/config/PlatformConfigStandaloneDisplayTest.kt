@@ -25,8 +25,9 @@ class PlatformConfigStandaloneDisplayTest {
         assertEquals("", pc.getCoreMapping("XBOX"))
         assertEquals(listOf(EmulatorSource.Standalone), pc.availableSources("XBOX"))
         val options = pc.emulatorOptionsForSource("XBOX", EmulatorSource.Standalone, includeAll = true)
-        assertEquals(listOf("X1 BOX", "hakuX", "HakuX-Mali"), options.map { it.displayName })
-        assertEquals(listOf("com.izzy2lost.x1box", "com.rfandango.haku_x", "com.rfandango.haku_x.debug"),
+        assertEquals(listOf("X1 BOX", "hakuX", "HakuX-Mali", "HakuX-Advanced"), options.map { it.displayName })
+        assertEquals(listOf("com.izzy2lost.x1box", "com.rfandango.haku_x", "com.rfandango.haku_x.debug",
+            "com.rfandango.haku_x.themes"),
             options.map { it.appPackage })
     }
 

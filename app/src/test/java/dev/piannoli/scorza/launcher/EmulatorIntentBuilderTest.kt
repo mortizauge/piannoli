@@ -95,11 +95,12 @@ class EmulatorIntentBuilderTest {
         assertEquals(setOf("AutoStartFile"), intent.extras?.keySet())
     }
 
-    @Test fun `bundled hakuX and Mali variant launch their own packages with readable content URI data`() {
+    @Test fun `bundled hakuX variants launch their own packages with readable content URI data`() {
         val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
         val platforms = PlatformConfig(tmp.root, ctx.assets)
         val file = tmp.newFile("Game.XISO").apply { writeBytes(byteArrayOf(0)) }
-        for (packageName in listOf("com.rfandango.haku_x", "com.rfandango.haku_x.debug")) {
+        for (packageName in listOf("com.rfandango.haku_x", "com.rfandango.haku_x.debug",
+            "com.rfandango.haku_x.themes")) {
             val config = platforms.getAppConfig("XBOX", packageName)
             val resolved = EmulatorIntentBuilder.resolve(ctx, config, file)
             val intent = EmulatorIntentBuilder.toAndroidIntent(ctx, resolved, config)
