@@ -51,8 +51,6 @@ android {
 
         buildConfigField("String", "BUILD_DATE", "\"${buildDate()}\"")
         buildConfigField("String", "GIT_HASH", "\"${gitCommitHash()}\"")
-        buildConfigField("String", "SCREENSCRAPER_DEV_ID", "\"${screenScraperProperty("screenscraper.devid")}\"")
-        buildConfigField("String", "SCREENSCRAPER_DEV_PASSWORD", "\"${screenScraperProperty("screenscraper.devpassword")}\"")
         buildConfigField("String", "SCREENSCRAPER_DEV_ID", "\"${System.getenv("SS_DEV_ID") ?: ""}\"")
         buildConfigField("String", "SCREENSCRAPER_DEV_PASSWORD", "\"${System.getenv("SS_DEV_PD") ?: ""}\"")
     }
@@ -83,6 +81,8 @@ android {
 
     buildTypes {
         debug {
+            buildConfigField("String", "SCREENSCRAPER_DEV_ID", "\"${screenScraperProperty("screenscraper.devid")}\"")
+            buildConfigField("String", "SCREENSCRAPER_DEV_PASSWORD", "\"${screenScraperProperty("screenscraper.devpassword")}\"")
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
             }
