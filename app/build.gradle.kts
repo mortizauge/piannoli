@@ -53,6 +53,8 @@ android {
         buildConfigField("String", "GIT_HASH", "\"${gitCommitHash()}\"")
         buildConfigField("String", "SCREENSCRAPER_DEV_ID", "\"${screenScraperProperty("screenscraper.devid")}\"")
         buildConfigField("String", "SCREENSCRAPER_DEV_PASSWORD", "\"${screenScraperProperty("screenscraper.devpassword")}\"")
+        buildConfigField("String", "SCREENSCRAPER_DEV_ID", "\"${System.getenv("SS_DEV_ID") ?: ""}\"")
+        buildConfigField("String", "SCREENSCRAPER_DEV_PASSWORD", "\"${System.getenv("SS_DEV_PD") ?: ""}\"")
     }
 
     buildFeatures {

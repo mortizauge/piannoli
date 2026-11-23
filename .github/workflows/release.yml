@@ -66,6 +66,8 @@ jobs:
           STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          SS_DEV_ID: ${{ secrets.SS_DEV_ID }}
+          SS_DEV_PD: ${{ secrets.SS_DEV_PD }}
         run: |
           ./gradlew :app:assembleRelease \
             "-Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/app/release.keystore" \
